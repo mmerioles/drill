@@ -9,35 +9,31 @@ struct SettingsView: View {
         @Bindable var model = model
 
         Form {
-            Section("look") {
-                Picker("theme", selection: $model.theme) {
-                    ForEach(Theme.allCases) { Text($0.label).tag($0) }
+            Section {
+                Picker("", selection: $model.theme) {
+                    ForEach(Theme.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                Text("teto is light: off-white and greys with her red. ink is dark and pure black and white.")
-                    .font(Ink.text(12))
-                    .foregroundStyle(Ink.faint)
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
             }
-            Section("lengths") {
+            Section {
                 minutes("focus", \.focus, 5...120, step: 5)
                 minutes("short break", \.shortBreak, 1...30)
                 minutes("long break", \.longBreak, 5...60, step: 5)
                 Stepper(value: $model.config.longBreakEvery, in: 2...8) {
-                    row("long break every", "\(model.config.longBreakEvery) focus blocks")
+                    row("long break every", "\(model.config.longBreakEvery)")
                 }
             }
-            Section("flow") {
-                Toggle("start breaks automatically", isOn: $model.config.autoStartBreaks)
-                Toggle("start focus after a break automatically", isOn: $model.config.autoStartFocus)
-                Toggle("play a sound when a phase ends", isOn: $model.soundOn)
-            }
             Section {
-                Text("changes apply from the next phase. sessions are kept on this mac for now — sync to your own server is on the way.")
-                    .font(Ink.text(12))
-                    .foregroundStyle(Ink.faint)
+                Toggle("auto-start breaks", isOn: $model.config.autoStartBreaks)
+                Toggle("auto-start focus", isOn: $model.config.autoStartFocus)
+                Toggle("sound", isOn: $model.soundOn)
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .background(Ink.paper)
         .tint(Ink.ink)
         .frame(width: 420)
         .fixedSize(horizontal: false, vertical: true)

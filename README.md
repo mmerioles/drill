@@ -41,8 +41,7 @@ are kept.
   filter by tag in the top right.
 - The drill in the menu bar shows the countdown and has its own
   start/pause/skip panel, so you can close the window while you work.
-- **Settings** (⌘,): theme (**teto** light, **ink** dark, or match system),
-  phase lengths, auto-start, sound.
+- **Settings** (⌘,): light/dark, phase lengths, auto-start, sound.
 
 Shortcuts: `space` or `⌘↩` start/pause · `⌘→` skip · `⌘R` reset.
 
@@ -60,7 +59,7 @@ open Package.swift          # or work in Xcode (scheme: Tetodoro)
 | --- | --- |
 | `TETODORO_FAST=1` | focus 20s, short break 5s, long break 10s |
 | `TETODORO_DB=/path/x.sqlite` | use another database file instead of your real one |
-| `TETODORO_THEME=light\|dark\|system` | override the saved theme |
+| `TETODORO_THEME=light\|dark` | override the saved theme |
 
 ### Layout
 

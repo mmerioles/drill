@@ -15,15 +15,8 @@ enum Copy {
         }
     }
 
-    static func finished(_ phase: Phase, next: Phase, minutes: Int) -> (title: String, body: String) {
-        switch phase {
-        case .focus where next == .longBreak:
-            ("focus done.", "\(minutes) minutes in the book. take a long one.")
-        case .focus:
-            ("focus done.", "\(minutes) minutes in the book. breathe.")
-        case .shortBreak, .longBreak:
-            ("break's over.", "back to it.")
-        }
+    static func finished(_ phase: Phase) -> (title: String, body: String) {
+        phase == .focus ? ("focus done", "time for a break") : ("break over", "back to focus")
     }
 
     static func clock(_ seconds: TimeInterval) -> String {

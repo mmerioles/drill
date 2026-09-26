@@ -3,17 +3,10 @@ import Foundation
 import Observation
 import TetodoroCore
 
+/// light is the teto palette, dark is pure ink. See Ink.swift.
 enum Theme: String, CaseIterable, Identifiable {
-    case system, light, dark
+    case light, dark
     var id: String { rawValue }
-
-    var label: String {
-        switch self {
-        case .system: "match system"
-        case .light: "teto"
-        case .dark: "ink"
-        }
-    }
 }
 
 /// The app's single source of truth: owns the engine, drives its clock,
@@ -81,7 +74,7 @@ final class AppModel {
         self.engine = PomodoroEngine(config: configOverride ?? saved ?? .standard)
         self.tag = defaults.string(forKey: Keys.tag) ?? ""
         self.soundOn = defaults.object(forKey: Keys.sound) as? Bool ?? true
-        self.theme = defaults.string(forKey: Keys.theme).flatMap(Theme.init) ?? .system
+        self.theme = defaults.string(forKey: Keys.theme).flatMap(Theme.init) ?? .dark
 
         reload()
         NotificationCenter.default.addObserver(
@@ -93,7 +86,7 @@ final class AppModel {
 
     /// Production wiring. `TETODORO_DB` points at another database file,
     /// `TETODORO_FAST=1` shrinks minutes to seconds, and `TETODORO_THEME`
-    /// (system|light|dark) overrides the saved theme — all for trying things out.
+    /// (light|dark) overrides the saved theme — all for trying things out.
     static func live() -> AppModel {
         let env = ProcessInfo.processInfo.environment
         let url = env["TETODORO_DB"].map { URL(filePath: $0) } ?? SQLiteSessionStore.defaultURL
@@ -148,7 +141,6 @@ final class AppModel {
     /// pinning NSApp's appearance re-themes every window at once.
     func applyTheme() {
         NSApp?.appearance = switch theme {
-        case .system: nil
         case .light: NSAppearance(named: .aqua)
         case .dark: NSAppearance(named: .darkAqua)
         }
@@ -184,7 +176,7 @@ final class AppModel {
         if t.next == .focus && engine.isRunning { captureTag() }
         guard t.natural else { return }
 
-        let copy = Copy.finished(t.finished, next: t.next, minutes: Int(config.focus / 60))
+        let copy = Copy.finished(t.finished)
         notifier.post(title: copy.title, body: copy.body)
         if soundOn { NSSound(named: t.finished == .focus ? "Glass" : "Tink")?.play() }
     }
