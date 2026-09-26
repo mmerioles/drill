@@ -17,7 +17,10 @@
 
 ## install
 
-needs macOS 15+ and the command line tools (`xcode-select --install`).
+**[download the latest .dmg](https://mmerioles.github.io/tetodoro/)**, open it, and drag tetodoro into Applications.
+needs macOS 15+. on first open, if macOS can't verify the app: system settings → privacy & security → open anyway.
+
+or build it yourself (needs `xcode-select --install`):
 
 ```sh
 git clone https://github.com/mmerioles/tetodoro.git && cd tetodoro && ./scripts/install.sh

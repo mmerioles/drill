@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>tetodoro</title>
+  <meta name="description" content="a quiet pomodoro timer for mac.">
+  <link rel="icon" href="icon.png">
+  <style>
+    :root {
+      --paper: #F2F0ED;
+      --ink: #2B2A2F;
+      --faint: rgba(43, 42, 47, .5);
+      --ghost: rgba(43, 42, 47, .12);
+      --accent: #CF3A4F;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #121211;
+        --ink: #F1F0EB;
+        --faint: rgba(241, 240, 235, .5);
+        --ghost: rgba(241, 240, 235, .12);
+        --accent: #F1F0EB;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; }
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    main {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 72px 16px 56px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .icon { width: 96px; height: 96px; }
+    h1 { font-size: 34px; font-weight: 700; letter-spacing: -.01em; margin-top: 18px; }
+    .tagline { color: var(--faint); margin-top: 4px; }
+    .download {
+      display: inline-block;
+      margin-top: 32px;
+      padding: 14px 40px;
+      border-radius: 999px;
+      background: var(--ink);
+      color: var(--paper);
+      font-weight: 600;
+      text-decoration: none;
+      transition: transform .15s ease;
+    }
+    .download:active { transform: scale(.97); }
+    .meta { color: var(--faint); font-size: 13px; margin-top: 12px; }
+    .shot {
+      width: 100%;
+      max-width: 780px;
+      margin-top: 56px;
+      filter: drop-shadow(0 20px 40px rgba(0, 0, 0, .14));
+    }
+    .note { color: var(--faint); font-size: 13px; margin-top: 40px; max-width: 460px; }
+    footer { margin-top: 28px; font-size: 13px; }
+    a.link { color: var(--faint); }
+  </style>
+</head>
+<body>
+  <main>
+    <img class="icon" src="icon.png" alt="">
+    <h1>tetodoro</h1>
+    <p class="tagline">a quiet pomodoro timer for mac.</p>
+
+    <a class="download" id="download" href="https://github.com/mmerioles/tetodoro/releases/latest">download</a>
+    <p class="meta" id="meta">macOS 15 or later</p>
+
+    <picture>
+      <source srcset="dark.png" media="(prefers-color-scheme: dark)">
+      <img class="shot" src="light-running.png" alt="tetodoro">
+    </picture>
+
+    <p class="note">
+      first open: if macOS says it can't verify the app, go to
+      system settings → privacy &amp; security and click open anyway.
+    </p>
+    <footer><a class="link" href="https://github.com/mmerioles/tetodoro">github</a></footer>
+  </main>
+
+  <script>
+    // Point the button straight at the newest release's dmg. If the API is
+    // unreachable, it still links to the latest release page.
+    fetch("https://api.github.com/repos/mmerioles/tetodoro/releases/latest")
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(release => {
+        const dmg = release.assets.find(a => a.name.endsWith(".dmg"));
+        if (!dmg) return;
+        document.getElementById("download").href = dmg.browser_download_url;
+        document.getElementById("meta").textContent =
+          `${release.tag_name} · macOS 15 or later`;
+      })
+      .catch(() => {});
+  </script>
+</body>
+</html>

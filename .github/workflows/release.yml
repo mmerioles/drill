@@ -1,0 +1,59 @@
+# On every push to main: test, pick the next semantic version from commit
+# messages (scripts/next-version.sh), build a universal app, and publish
+# Tetodoro-<version>.dmg as GitHub release v<version>.
+name: release
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "README.md"
+      - "docs/**"
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags and history, for versioning
+
+      - name: Version
+        id: version
+        run: echo "value=$(scripts/next-version.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        if: steps.version.outputs.value != ''
+        run: swift test
+
+      - name: Build app
+        if: steps.version.outputs.value != ''
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          UNIVERSAL: "1"
+        run: scripts/bundle.sh
+
+      - name: Build dmg
+        if: steps.version.outputs.value != ''
+        id: dmg
+        run: echo "path=$(scripts/dmg.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        if: steps.version.outputs.value != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          gh release create "v$VERSION" "${{ steps.dmg.outputs.path }}" \
+            --target "$GITHUB_SHA" --title "v$VERSION" --generate-notes
