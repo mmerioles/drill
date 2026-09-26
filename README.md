@@ -2,6 +2,12 @@
 
 <h1 align="center">tetodoro</h1>
 
+<p align="center">
+  <a href="https://github.com/mmerioles/tetodoro/releases/latest"><img src="https://img.shields.io/github/v/release/mmerioles/tetodoro?style=flat-square&color=2B2A2F&label=version" alt="version"></a>
+  <a href="https://github.com/mmerioles/tetodoro/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/mmerioles/tetodoro/release.yml?style=flat-square&label=build" alt="build"></a>
+  <img src="https://img.shields.io/badge/macOS-15%2B-2B2A2F?style=flat-square&logo=apple" alt="macOS 15+">
+</p>
+
 <p align="center">a quiet pomodoro timer for mac.</p>
 
 <p align="center">
