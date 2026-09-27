@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>tetodoro</title>
+  <meta name="description" content="a quiet pomodoro timer.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="icon.png">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <main class="app">
+    <header class="top">
+      <svg class="mark" id="mark" viewBox="0 0 22 22" aria-hidden="true"><path/></svg>
+      <span class="word">tetodoro</span>
+      <span class="spacer"></span>
+      <span class="sync" id="sync" hidden></span>
+      <button class="link" id="open-settings" type="button">settings</button>
+    </header>
+
+    <section class="timer" aria-label="timer">
+      <div class="face">
+        <svg class="ring" id="ring" viewBox="0 0 270 270" aria-hidden="true">
+          <path class="track"/><path class="arc"/><circle class="tip" r="3.1"/>
+        </svg>
+        <div class="readout">
+          <p class="status" id="status">&nbsp;</p>
+          <p class="clock" id="clock" role="timer" aria-live="off">25:00</p>
+          <div class="dots" id="dots" aria-hidden="true"></div>
+        </div>
+      </div>
+
+      <div class="tag">
+        <label class="tag-field">
+          <span>studying</span>
+          <input id="tag" type="text" placeholder="anything" autocomplete="off" spellcheck="false" maxlength="40">
+        </label>
+        <div class="suggest" id="suggest"></div>
+      </div>
+
+      <div class="controls">
+        <button class="link" id="reset" type="button">reset</button>
+        <button class="capsule" id="toggle" type="button">start</button>
+        <button class="link" id="skip" type="button">skip</button>
+      </div>
+    </section>
+
+    <section class="year" aria-label="your year">
+      <div class="year-head">
+        <h2>your year</h2>
+        <div class="filter" id="filter"></div>
+      </div>
+      <svg class="grid" id="grid" role="img" aria-label="focus time per day"></svg>
+      <div class="caption" id="caption"></div>
+    </section>
+  </main>
+
+  <dialog class="settings" id="settings">
+    <form method="dialog">
+      <div class="group">
+        <div class="row">
+          <span>appearance</span>
+          <div class="segmented" id="theme" role="radiogroup">
+            <button type="button" value="auto">auto</button>
+            <button type="button" value="light">light</button>
+            <button type="button" value="dark">dark</button>
+          </div>
+        </div>
+      </div>
+      <div class="group">
+        <label class="row"><span>focus</span><span class="num"><input type="number" id="focus" min="5" max="120" step="5"> min</span></label>
+        <label class="row"><span>short break</span><span class="num"><input type="number" id="shortBreak" min="1" max="30"> min</span></label>
+        <label class="row"><span>long break</span><span class="num"><input type="number" id="longBreak" min="5" max="60" step="5"> min</span></label>
+        <label class="row"><span>long break every</span><span class="num"><input type="number" id="longBreakEvery" min="2" max="8"></span></label>
+      </div>
+      <div class="group">
+        <label class="row"><span>auto-start breaks</span><input type="checkbox" class="switch" id="autoStartBreaks"></label>
+        <label class="row"><span>auto-start focus</span><input type="checkbox" class="switch" id="autoStartFocus"></label>
+        <label class="row"><span>sound</span><input type="checkbox" class="switch" id="sound"></label>
+      </div>
+      <div class="group">
+        <label class="row"><span>sync token</span><input type="password" id="token" placeholder="none" autocomplete="off"></label>
+        <p class="row note" id="sync-note"></p>
+      </div>
+      <div class="done"><button class="capsule small" value="done">done</button></div>
+    </form>
+  </dialog>
+</body>
+</html>

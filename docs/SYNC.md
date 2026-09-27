@@ -1,4 +1,7 @@
-# sync contract (draft)
+# sync contract
+
+The server is `web/server.py` (see the README to run it). The web app in
+`web/static` is its first client; the mac app's `HTTPSync` is the next.
 
 The home server's job is small: keep the union of every device's sessions and
 hand back what each device hasn't seen yet. Devices do all merging themselves
@@ -14,7 +17,8 @@ pulled row is the whole merge.
 
 ## Endpoints
 
-Auth for all endpoints: `Authorization: Bearer <token>`, one token per device.
+Auth for `/v1`: `Authorization: Bearer <TETODORO_TOKEN>`. One shared token
+for all your devices — it's your server. `401` means a missing or wrong token.
 
 ```
 POST /v1/sessions/push
@@ -23,7 +27,14 @@ POST /v1/sessions/push
 
 GET  /v1/sessions/pull?cursor=<opaque>
   → 200 { "sessions": [FocusSession, …], "cursor": "<opaque>", "more": false }
+
+GET  /healthz
+  → 200 ok
 ```
+
+`accepted` counts rows that won the merge; older or equal rows are ignored.
+A bad row fails the whole push with `400 { "error": "…" }`. Pulls come in
+pages of 500; start with `cursor=0` and repeat while `more` is true.
 
 `cursor` is a server-assigned sequence number, not a device timestamp, so a
 device with a wrong clock can't make other devices skip rows. The server
@@ -46,10 +57,14 @@ stamps each row with a sequence number as it arrives.
 }
 ```
 
-Dates are ISO-8601 UTC. Each client buckets sessions into days in its own time
-zone.
+Dates are ISO-8601 with a zone; the server returns whole-second UTC (`Z`),
+which Swift's `.iso8601` strategy decodes. IDs come back uppercase. Each
+client buckets sessions into days in its own time zone.
 
-## Client loop (`HTTPSync`, to be written)
+## Client loop
+
+`web/static/store.js` is the reference client. For the mac app (`HTTPSync`,
+to be written):
 
 1. `store.changes(since: lastPushedAt)` → push → on success, save `lastPushedAt`.
 2. Pull with the saved cursor → `store.save` each row → save the new cursor.

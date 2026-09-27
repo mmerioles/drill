@@ -1,0 +1,219 @@
+/* tetodoro's ink look (see Sources/InkKit/Ink.swift): paper, one ink, lots
+   of air, lowercase words. Light is "teto" with her crimson for progress
+   only; dark is pure monochrome. */
+
+:root {
+  --paper: #F2F0ED;
+  --ink: #2B2A2F;
+  --accent: #CF3A4F;
+  --faint: rgb(43 42 47 / .45);
+  --ghost: rgb(43 42 47 / .12);
+  --wash: rgb(43 42 47 / .055);
+  --raised: rgb(43 42 47 / .045);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #121211;
+    --ink: #F1F0EB;
+    --accent: #F1F0EB;
+    --faint: rgb(241 240 235 / .45);
+    --ghost: rgb(241 240 235 / .12);
+    --wash: rgb(241 240 235 / .055);
+    --raised: rgb(241 240 235 / .05);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #121211;
+  --ink: #F1F0EB;
+  --accent: #F1F0EB;
+  --faint: rgb(241 240 235 / .45);
+  --ghost: rgb(241 240 235 / .12);
+  --wash: rgb(241 240 235 / .055);
+  --raised: rgb(241 240 235 / .05);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; margin: 0; }
+html { background: var(--paper); }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 4px; }
+
+.app {
+  max-width: 780px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: max(28px, env(safe-area-inset-top)) 40px 32px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+
+.top { display: flex; align-items: center; gap: 8px; }
+.mark { width: 22px; height: 22px; }
+.mark path { fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.word { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+.spacer { flex: 1; }
+.sync { color: var(--faint); font-size: 13px; margin-right: 14px; }
+
+/* Buttons: one ink capsule per screen; everything else is a faint word. */
+
+.link {
+  background: none; border: 0; padding: 2px 0; cursor: pointer;
+  color: var(--faint); font-size: 14px;
+  transition: color .12s ease-out, opacity .12s;
+}
+.link:hover, .link[aria-pressed="true"] { color: var(--ink); }
+.link[aria-pressed="true"] { font-weight: 600; }
+.link:active { opacity: .5; }
+
+.capsule {
+  min-width: 128px;
+  padding: 13px 42px;
+  border: 0; border-radius: 999px; cursor: pointer;
+  background: var(--ink); color: var(--paper);
+  font-size: 16px; font-weight: 600;
+  transition: opacity .12s ease-out, transform .2s cubic-bezier(.3, .7, .4, 1);
+}
+.capsule:hover { opacity: .86; }
+.capsule:active { transform: scale(.96); }
+.capsule.small { min-width: 0; padding: 9px 28px; font-size: 14px; }
+
+/* Timer */
+
+.timer {
+  /* Grows to fill short windows, but stops growing on tall ones so the
+     year stays close to the timer instead of sinking to the bottom. */
+  flex: 1 0 auto;
+  max-height: 600px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px 0 36px;
+}
+.face { position: relative; width: 270px; height: 270px; }
+.ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.ring .track { fill: none; stroke: var(--ghost); stroke-width: 1.4; stroke-linecap: round; stroke-dasharray: 1.5 6; }
+.ring .arc { fill: none; stroke: var(--accent); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.ring .tip { fill: var(--accent); }
+.readout {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+}
+.status { color: var(--faint); font-size: 13px; height: 18px; }
+.clock {
+  font-size: 58px; font-weight: 700; line-height: 1;
+  font-variant-numeric: tabular-nums; letter-spacing: -.01em;
+}
+.dots { display: flex; gap: 7px; height: 6px; }
+.dots i { width: 6px; height: 6px; border-radius: 50%; border: 1px solid var(--faint); transition: background .5s; }
+.dots i.on { background: var(--ink); border-color: var(--ink); }
+
+.tag { margin-top: 30px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.tag-field { display: flex; align-items: baseline; gap: 8px; font-size: 15px; }
+.tag-field span { color: var(--faint); }
+.tag-field input {
+  width: 150px; padding: 0 0 3px;
+  background: none; border: 0; border-bottom: 1px solid var(--ghost); border-radius: 0;
+  font-weight: 500; outline: none;
+  transition: border-color .15s;
+}
+.tag-field input:focus { border-bottom-color: var(--faint); }
+.tag-field input::placeholder { color: var(--ink); opacity: .28; font-weight: 400; }
+.suggest { display: flex; gap: 14px; min-height: 18px; }
+.suggest .link { font-size: 12px; }
+
+.controls { margin-top: 28px; display: flex; align-items: center; gap: 28px; }
+.controls .link { width: 40px; }
+#reset { text-align: right; }
+#skip { text-align: left; }
+#reset[hidden] { display: block; visibility: hidden; }
+
+/* Year */
+
+.year-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.year-head h2 { font-size: 18px; font-weight: 700; }
+.filter { display: flex; gap: 12px; overflow-x: auto; scrollbar-width: none; }
+.filter .link { font-size: 13px; white-space: nowrap; }
+.grid { display: block; width: 100%; overflow: visible; touch-action: pan-y; }
+.grid .month { fill: var(--faint); font-size: 10px; }
+.grid .cell { fill: var(--wash); }
+.grid .today { fill: none; stroke: var(--ink); stroke-width: 1.1; }
+.grid .hover { fill: none; stroke: var(--faint); stroke-width: 1.1; }
+
+.caption {
+  display: flex; align-items: center; gap: 22px;
+  margin-top: 14px; height: 18px;
+  color: var(--faint); font-size: 13px; white-space: nowrap;
+}
+.caption b { color: var(--ink); font-weight: 500; margin-left: 5px; }
+.caption .date { color: var(--ink); }
+.legend { margin-left: auto; display: flex; align-items: center; gap: 4px; font-size: 11px; }
+.legend i { width: 9px; height: 9px; border-radius: 1.5px; background: var(--wash); }
+
+/* Settings */
+
+.settings {
+  margin: auto; width: min(420px, calc(100vw - 32px));
+  padding: 20px; border: 0; border-radius: 14px;
+  background: var(--paper); color: var(--ink);
+  box-shadow: 0 0 0 1px var(--ghost), 0 24px 60px rgb(0 0 0 / .22);
+}
+.settings::backdrop { background: rgb(0 0 0 / .28); }
+.settings[open] { animation: rise .18s ease-out; }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+.group { background: var(--raised); border-radius: 10px; padding: 0 14px; margin-bottom: 12px; }
+.row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 42px; font-size: 14px;
+}
+.row + .row { border-top: 1px solid var(--ghost); }
+.row.note { color: var(--faint); font-size: 12px; min-height: 36px; }
+.num { color: var(--faint); font-variant-numeric: tabular-nums; }
+.num input, #token {
+  background: none; border: 0; text-align: right; outline: none;
+  font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.num input { width: 44px; }
+#token { width: 160px; }
+#token::placeholder { color: var(--faint); }
+.segmented { display: flex; background: var(--ghost); border-radius: 7px; padding: 2px; }
+.segmented button {
+  border: 0; background: none; padding: 3px 12px; border-radius: 5px;
+  font-size: 13px; color: var(--faint); cursor: pointer;
+}
+.segmented button[aria-checked="true"] { background: var(--paper); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+.switch {
+  appearance: none; width: 34px; height: 20px; border-radius: 10px; cursor: pointer;
+  background: var(--ghost); position: relative; transition: background .15s;
+}
+.switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+  border-radius: 50%; background: var(--paper); box-shadow: 0 1px 2px rgb(0 0 0 / .2);
+  transition: transform .15s;
+}
+.switch:checked { background: var(--ink); }
+.switch:checked::after { transform: translateX(14px); }
+.done { display: flex; justify-content: flex-end; margin-top: 4px; }
+
+/* Phones */
+
+@media (max-width: 560px) {
+  .app { padding-left: 16px; padding-right: 16px; }
+  .face { width: 240px; height: 240px; }
+  .clock { font-size: 50px; }
+  .controls { gap: 20px; }
+  .caption { gap: 14px; font-size: 12px; }
+  .legend { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

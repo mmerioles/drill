@@ -1,0 +1,10 @@
+{
+  "name": "tetodoro",
+  "short_name": "tetodoro",
+  "description": "a quiet pomodoro timer.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F2F0ED",
+  "theme_color": "#F2F0ED",
+  "icons": [{ "src": "icon.png", "sizes": "1024x1024", "type": "image/png" }]
+}

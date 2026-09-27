@@ -23,6 +23,7 @@
 - a year heatmap of your focus time
 - menu bar countdown
 - light and dark themes
+- a self-hosted web app that syncs through your own server
 
 ## install
 
@@ -36,6 +37,26 @@ git clone https://github.com/mmerioles/tetodoro.git && cd tetodoro && ./scripts/
 ```
 
 update with `git pull && ./scripts/install.sh`.
+
+## web app and sync server
+
+tetodoro also runs in the browser, served by a small self-hosted server that
+keeps every device's sessions in one SQLite file. it's one container:
+
+```sh
+docker run -d --name tetodoro -p 8080:8080 \
+  -e TETODORO_TOKEN=pick-something-long \
+  -v tetodoro-data:/data --restart unless-stopped \
+  ghcr.io/mmerioles/tetodoro:latest
+```
+
+or `cd web && docker compose up -d` with `TETODORO_TOKEN` in `web/.env`.
+open `http://<server>:8080` and paste the token in settings. every browser
+with the token shares one history, and the mac app will join over the same
+[sync protocol](docs/SYNC.md).
+
+the server is plain Python with no dependencies, so `python3 web/server.py`
+works too (data goes to `web/data`).
 
 ## shortcuts
 
