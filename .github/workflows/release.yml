@@ -10,7 +10,9 @@ on:
       - "README.md"
       - "docs/**"
       - "site/**"
+      - "web/**"
       - ".github/workflows/pages.yml"
+      - ".github/workflows/web.yml"
   workflow_dispatch:
 
 concurrency:
