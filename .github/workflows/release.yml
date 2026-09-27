@@ -1,6 +1,6 @@
 # On every push to main: test, pick the next semantic version from commit
 # messages (scripts/next-version.sh), build a universal app, and publish
-# Tetodoro-<version>.dmg as GitHub release v<version>.
+# tetodoro_<version>.dmg as GitHub release v<version>.
 name: release
 
 on:
