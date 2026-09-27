@@ -58,7 +58,7 @@ struct MenuBarPanel: View {
 
             HStack(spacing: 16) {
                 Button(model.isRunning ? "pause" : (model.isActive ? "resume" : "start"), action: model.toggle)
-                    .buttonStyle(InkCapsuleStyle(size: 13))
+                    .buttonStyle(InkCapsuleStyle(size: 13, minWidth: 64))
                 Button("skip", action: model.skip).buttonStyle(.inkLink(selected: false, size: 13))
                 if model.isActive {
                     Button("reset", action: model.reset).buttonStyle(.inkLink(selected: false, size: 13))
@@ -71,13 +71,14 @@ struct MenuBarPanel: View {
                 Text("today").foregroundStyle(Ink.faint)
                 Text(Copy.amount(model.heatmap.today)).foregroundStyle(Ink.ink).fontWeight(.medium)
                 Spacer()
-                Button("open") {
-                    openWindow(id: "main")
-                    NSApp.activate()
+                HStack(spacing: 14) {
+                    Button("open") {
+                        openWindow(id: "main")
+                        NSApp.activate()
+                    }
+                    Button("quit") { NSApp.terminate(nil) }
                 }
                 .buttonStyle(.inkLink(selected: false, size: 13))
-                Button("quit") { NSApp.terminate(nil) }
-                    .buttonStyle(.inkLink(selected: false, size: 13))
             }
             .font(Ink.text(13))
         }

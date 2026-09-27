@@ -8,7 +8,10 @@
   <img src="https://img.shields.io/badge/macOS-15%2B-2B2A2F?style=flat-square&logo=apple" alt="macOS 15+">
 </p>
 
-<p align="center">a quiet pomodoro timer for mac.</p>
+<p align="center">
+  a quiet pomodoro timer for mac.<br>
+  <a href="https://mmerioles.github.io/tetodoro/"><b>mmerioles.github.io/tetodoro</b></a>
+</p>
 
 <p align="center">
   <img src="docs/screenshots/light-running.png" width="49%" alt="light">

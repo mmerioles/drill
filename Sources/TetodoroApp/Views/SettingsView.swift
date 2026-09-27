@@ -10,12 +10,10 @@ struct SettingsView: View {
 
         Form {
             Section {
-                Picker("", selection: $model.theme) {
+                Picker("appearance", selection: $model.theme) {
                     ForEach(Theme.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(maxWidth: .infinity)
             }
             Section {
                 minutes("focus", \.focus, 5...120, step: 5)
@@ -37,6 +35,10 @@ struct SettingsView: View {
         .tint(Ink.ink)
         .frame(width: 420)
         .fixedSize(horizontal: false, vertical: true)
+        // The system titles this window "Tetodoro Settings"; the app speaks
+        // in lowercase, so the title goes and the paper runs to the top.
+        .toolbar(removing: .title)
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
     }
 
     private func minutes(_ label: String, _ key: WritableKeyPath<TimerConfig, TimeInterval>,

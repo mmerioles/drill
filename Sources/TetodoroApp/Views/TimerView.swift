@@ -40,9 +40,8 @@ struct TimerView: View {
                     .opacity(model.isActive ? 1 : 0)
                     .disabled(!model.isActive)
                 Button(model.isRunning ? "pause" : (model.isActive ? "resume" : "start"), action: model.toggle)
-                    .buttonStyle(.inkCapsule)
+                    .buttonStyle(InkCapsuleStyle(minWidth: 128))
                     .keyboardShortcut(.defaultAction)
-                    .frame(minWidth: 150)
                 Button("skip", action: model.skip)
                     .buttonStyle(.inkLink)
             }
@@ -59,7 +58,9 @@ struct TimerView: View {
                     .font(Ink.text(15))
                     .foregroundStyle(Ink.faint)
                 VStack(spacing: 3) {
-                    TextField("", text: $model.tag, prompt: Text("anything").foregroundStyle(Ink.ghost))
+                    // AppKit draws `prompt` in its own grey and weight; an
+                    // overlay keeps the placeholder in the ink palette.
+                    TextField("", text: $model.tag)
                         .textFieldStyle(.plain)
                         .font(Ink.text(15, .medium))
                         .foregroundStyle(Ink.ink)
@@ -67,6 +68,12 @@ struct TimerView: View {
                         .onSubmit { tagFocused = false }
                         .tint(Ink.ink)
                         .frame(width: 150)
+                        .background(alignment: .leading) {
+                            if model.tag.isEmpty {
+                                Text("anything").font(Ink.text(15)).foregroundStyle(Ink.ink.opacity(0.28))
+                                    .allowsHitTesting(false)
+                            }
+                        }
                     Rectangle().fill(tagFocused ? Ink.faint : Ink.ghost).frame(height: 1)
                 }
                 .frame(width: 150)

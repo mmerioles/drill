@@ -6,6 +6,15 @@
   <title>tetodoro</title>
   <meta name="description" content="a quiet pomodoro timer for mac.">
   <link rel="icon" href="icon.png">
+  <link rel="apple-touch-icon" href="icon.png">
+  <meta name="theme-color" content="#F2F0ED" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121211" media="(prefers-color-scheme: dark)">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mmerioles.github.io/tetodoro/">
+  <meta property="og:title" content="tetodoro">
+  <meta property="og:description" content="a quiet pomodoro timer for mac.">
+  <meta property="og:image" content="https://mmerioles.github.io/tetodoro/light-running.png">
+  <meta name="twitter:card" content="summary_large_image">
   <style>
     :root {
       --paper: #F2F0ED;
@@ -53,6 +62,7 @@
       text-decoration: none;
       transition: transform .15s ease;
     }
+    .download:hover { opacity: .86; }
     .download:active { transform: scale(.97); }
     .meta { color: var(--faint); font-size: 13px; margin-top: 12px; }
     .shot {
@@ -61,9 +71,27 @@
       margin-top: 56px;
       filter: drop-shadow(0 20px 40px rgba(0, 0, 0, .14));
     }
-    .note { color: var(--faint); font-size: 13px; margin-top: 40px; max-width: 460px; }
-    footer { margin-top: 28px; font-size: 13px; }
-    a.link { color: var(--faint); }
+    .features {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+      width: 100%;
+      max-width: 720px;
+      margin-top: 64px;
+      list-style: none;
+      padding: 0;
+      text-align: left;
+    }
+    .features b { display: block; font-weight: 600; }
+    .features span { color: var(--faint); font-size: 14px; }
+    @media (max-width: 600px) {
+      .features { grid-template-columns: 1fr; gap: 20px; }
+    }
+    .note { color: var(--faint); font-size: 13px; margin-top: 56px; max-width: 460px; }
+    footer { margin-top: 28px; font-size: 13px; display: flex; gap: 20px; }
+    a.link { color: var(--faint); text-decoration: none; }
+    a.link:hover { color: var(--ink); }
+    :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
   </style>
 </head>
 <body>
@@ -80,11 +108,20 @@
       <img class="shot" src="light-running.png" alt="tetodoro">
     </picture>
 
+    <ul class="features">
+      <li><b>focus, then rest</b><span>a pomodoro timer that starts your breaks for you.</span></li>
+      <li><b>tag what you study</b><span>see a year of focus time, per subject.</span></li>
+      <li><b>always in reach</b><span>the countdown lives in your menu bar.</span></li>
+    </ul>
+
     <p class="note">
       first open: if macOS says it can't verify the app, go to
       system settings → privacy &amp; security and click open anyway.
     </p>
-    <footer><a class="link" href="https://github.com/mmerioles/tetodoro">github</a></footer>
+    <footer>
+      <a class="link" href="https://github.com/mmerioles/tetodoro">github</a>
+      <a class="link" href="https://github.com/mmerioles/tetodoro/releases">releases</a>
+    </footer>
   </main>
 
   <script>

@@ -74,49 +74,65 @@ private struct TagFilter: View {
 }
 
 private enum Cell {
-    static let size: CGFloat = 10
-    static let gap: CGFloat = 3
-    static let pitch = size + gap
+    /// Gap as a fraction of the pitch; the cell size follows from the width.
+    static let gapRatio: CGFloat = 0.24
     static let monthRow: CGFloat = 16
     static let margin: CGFloat = 3
     static let ink: [Double] = [0, 0.16, 0.36, 0.62, 0.92]
+    /// Empty days: a faint wash, quieter than an outline at 365 cells.
+    static let empty = Ink.ink.opacity(0.055)
+}
+
+/// Cell geometry for a grid of `columns` weeks stretched across `width`.
+private struct GridMetrics {
+    let pitch: CGFloat
+    var size: CGFloat { pitch * (1 - Cell.gapRatio) }
+    var height: CGFloat { Cell.monthRow + 7 * pitch - (pitch - size) + Cell.margin }
+
+    init(width: CGFloat, columns: Int) {
+        let usable = width - Cell.margin * 2
+        let n = CGFloat(max(columns, 1))
+        pitch = usable / (n - Cell.gapRatio)
+    }
 }
 
 private struct HeatGrid: View {
     let heatmap: Heatmap
     @Binding var hovered: HeatmapDay?
+    @State private var width: CGFloat = 706
 
     var body: some View {
-        let columns = heatmap.weeks.count
+        let m = GridMetrics(width: width, columns: heatmap.weeks.count)
         Canvas { ctx, _ in
             // Inset so the today/hover outline has room at the grid's edges.
             ctx.translateBy(x: Cell.margin, y: 0)
-            drawMonths(ctx)
+            drawMonths(ctx, m)
             for (w, week) in heatmap.weeks.enumerated() {
                 for (d, day) in week.enumerated() {
                     guard let day else { continue }
-                    draw(day, in: rect(w, d), seed: UInt64(w * 7 + d), ctx: ctx)
+                    draw(day, in: rect(w, d, m), seed: UInt64(w * 7 + d), ctx: ctx)
                 }
             }
         }
-        .frame(width: CGFloat(columns) * Cell.pitch - Cell.gap + Cell.margin * 2,
-               height: Cell.monthRow + 7 * Cell.pitch - Cell.gap + Cell.margin)
+        .frame(maxWidth: .infinity)
+        .frame(height: m.height)
+        .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
         .padding(.horizontal, -Cell.margin)
         .onContinuousHover { phase in
             switch phase {
-            case .active(let p): hovered = day(at: p)
+            case .active(let p): hovered = day(at: p, m)
             case .ended: hovered = nil
             }
         }
     }
 
-    private func rect(_ w: Int, _ d: Int) -> CGRect {
-        CGRect(x: CGFloat(w) * Cell.pitch, y: Cell.monthRow + CGFloat(d) * Cell.pitch,
-               width: Cell.size, height: Cell.size)
+    private func rect(_ w: Int, _ d: Int, _ m: GridMetrics) -> CGRect {
+        CGRect(x: CGFloat(w) * m.pitch, y: Cell.monthRow + CGFloat(d) * m.pitch,
+               width: m.size, height: m.size)
     }
 
-    private func day(at p: CGPoint) -> HeatmapDay? {
-        let w = Int((p.x - Cell.margin) / Cell.pitch), d = Int((p.y - Cell.monthRow) / Cell.pitch)
+    private func day(at p: CGPoint, _ m: GridMetrics) -> HeatmapDay? {
+        let w = Int((p.x - Cell.margin) / m.pitch), d = Int((p.y - Cell.monthRow) / m.pitch)
         guard p.y >= Cell.monthRow, heatmap.weeks.indices.contains(w), (0..<7).contains(d) else { return nil }
         return heatmap.weeks[w][d]
     }
@@ -125,20 +141,16 @@ private struct HeatGrid: View {
         let square = Doodle.polygon(
             [CGPoint(x: r.minX, y: r.minY), CGPoint(x: r.maxX, y: r.minY),
              CGPoint(x: r.maxX, y: r.maxY), CGPoint(x: r.minX, y: r.maxY)],
-            seed: seed &* 31 &+ 7, amp: 0.45)
-        if day.level > 0 {
-            ctx.fill(square, with: .color(Ink.accent.opacity(Cell.ink[day.level])))
-        } else {
-            ctx.stroke(square, with: .color(Ink.ghost), lineWidth: 0.8)
-        }
+            seed: seed &* 31 &+ 7, amp: 0.35)
+        ctx.fill(square, with: .color(day.level > 0 ? Ink.accent.opacity(Cell.ink[day.level]) : Cell.empty))
         let isToday = Calendar.current.isDateInToday(day.date)
         if isToday || day == hovered {
-            ctx.stroke(Path(roundedRect: r.insetBy(dx: -2, dy: -2), cornerRadius: 3),
-                       with: .color(Ink.ink), lineWidth: isToday ? 1.2 : 1)
+            ctx.stroke(Path(roundedRect: r.insetBy(dx: -1.75, dy: -1.75), cornerRadius: 3),
+                       with: .color(isToday ? Ink.ink : Ink.faint), lineWidth: 1.1)
         }
     }
 
-    private func drawMonths(_ ctx: GraphicsContext) {
+    private func drawMonths(_ ctx: GraphicsContext, _ m: GridMetrics) {
         let calendar = Calendar.current
         var lastMonth = -1
         for (w, week) in heatmap.weeks.enumerated() {
@@ -151,7 +163,7 @@ private struct HeatGrid: View {
                     ctx.draw(
                         Text(first.date.formatted(.dateTime.month(.abbreviated)).lowercased())
                             .font(Ink.text(10)).foregroundStyle(Ink.faint),
-                        at: CGPoint(x: CGFloat(w) * Cell.pitch, y: 0), anchor: .topLeading)
+                        at: CGPoint(x: CGFloat(w) * m.pitch, y: 0), anchor: .topLeading)
                 }
                 lastMonth = month
             }
@@ -165,8 +177,7 @@ private struct Legend: View {
             Text("less")
             ForEach(0..<5, id: \.self) { level in
                 RoundedRectangle(cornerRadius: 1.5)
-                    .fill(level == 0 ? Color.clear : Ink.accent.opacity(Cell.ink[level]))
-                    .overlay(RoundedRectangle(cornerRadius: 1.5).strokeBorder(level == 0 ? Ink.ghost : .clear))
+                    .fill(level == 0 ? Cell.empty : Ink.accent.opacity(Cell.ink[level]))
                     .frame(width: 9, height: 9)
             }
             Text("more")
