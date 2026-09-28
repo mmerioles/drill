@@ -12,7 +12,10 @@ final class Notifier {
     func prepare() {
         guard available, !prepared else { return }
         prepared = true
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        // The async form, not the completion handler: a closure written here is
+        // main-actor isolated, and the system calls it on a background queue,
+        // which Swift 6 traps on at runtime.
+        Task { _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) }
     }
 
     func post(title: String, body: String) {
