@@ -41,26 +41,26 @@ private struct AllVideos: View {
     @Environment(Watched.self) private var watched
     @Environment(\.openURL) private var openURL
 
-    private let columns = Array(repeating: GridItem(.fixed(22), spacing: 6), count: 13)
+    private let columns = Array(repeating: GridItem(.fixed(11), spacing: 3.5), count: 25)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 10) {
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 3.5) {
                     ForEach(Inspo.videos) { video in
                         Button {
                             watched.mark(video)
                             openURL(video.url)
                         } label: {
-                            RoundedRectangle(cornerRadius: 3)
+                            RoundedRectangle(cornerRadius: 2)
                                 .fill(watched.contains(video) ? Ink.accent : Ink.ink.opacity(0.055))
-                                .frame(width: 22, height: 22)
+                                .frame(width: 11, height: 11)
                         }
                         .buttonStyle(.plain)
                         .help("\(video.number). \(video.title)")
                     }
                 }
-                Text("\(watched.numbers.count) of \(Inspo.videos.count) watched")
+                Text("\(watched.count) of \(Inspo.videos.count) watched")
                     .font(Ink.text(13)).foregroundStyle(Ink.faint)
             }
             ScrollView {
@@ -71,7 +71,7 @@ private struct AllVideos: View {
             .scrollIndicators(.never)
             .frame(height: 360)
         }
-        .animation(Ink.ease, value: watched.numbers)
+        .animation(Ink.ease, value: watched.count)
     }
 }
 
@@ -89,7 +89,7 @@ private struct InspoRow: View {
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 if numbered {
-                    Text(String(format: "%02d", video.number))
+                    Text(String(format: "%03d", video.number))
                         .font(Ink.text(12).monospacedDigit()).foregroundStyle(Ink.faint)
                 }
                 VStack(alignment: .leading, spacing: 2) {
@@ -99,7 +99,7 @@ private struct InspoRow: View {
                             Circle().fill(Ink.accent).frame(width: 5, height: 5)
                         }
                     }
-                    Text(video.summary).font(Ink.text(13))
+                    Text(video.japanese).font(Ink.text(13))
                         .foregroundStyle(hovered ? Ink.ink : Ink.faint)
                         .fixedSize(horizontal: false, vertical: true)
                 }

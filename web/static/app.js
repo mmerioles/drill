@@ -363,11 +363,11 @@ function watchLink(video) {
 function inspoRow(video, seen) {
   const a = watchLink(video);
   if (inspoPage === "all") {
-    a.append(Object.assign(document.createElement("i"), { textContent: String(video.number).padStart(2, "0") }));
+    a.append(Object.assign(document.createElement("i"), { textContent: String(video.number).padStart(3, "0") }));
   }
   const text = document.createElement("div");
-  text.append(Object.assign(document.createElement("b"), { textContent: video.title, className: seen.has(video.number) ? "on" : "" }),
-    Object.assign(document.createElement("span"), { textContent: video.summary }));
+  text.append(Object.assign(document.createElement("b"), { textContent: video.title, className: seen.has(video.id) ? "on" : "" }),
+    Object.assign(document.createElement("span"), { textContent: video.japanese }));
   a.append(text);
   const li = document.createElement("li");
   li.append(a);
@@ -387,7 +387,7 @@ function renderInspo() {
     $("inspo-squares").replaceChildren(...VIDEOS.map((v) => {
       const a = watchLink(v);
       a.title = `${v.number}. ${v.title}`;
-      a.classList.toggle("on", seen.has(v.number));
+      a.classList.toggle("on", seen.has(v.id));
       return a;
     }));
     $("inspo-count").textContent = `${seen.size} of ${VIDEOS.length} watched`;

@@ -208,8 +208,8 @@ button, input { font: inherit; color: inherit; }
 .top .link + .link { margin-left: 8px; }
 .inspo-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 16px; }
 .inspo h2 { flex: 1; font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
-.squares { display: grid; grid-template-columns: repeat(13, 1fr); gap: 6px; }
-.squares a { aspect-ratio: 1; border-radius: 3px; background: var(--wash); }
+.squares { display: grid; grid-template-columns: repeat(25, 1fr); gap: 3px; }
+.squares a { aspect-ratio: 1; border-radius: 2px; background: var(--wash); }
 .squares a.on { background: var(--accent); }
 .watched { color: var(--faint); font-size: 13px; margin: 10px 0 18px; }
 .inspo ul { list-style: none; padding: 0; margin-bottom: 12px; }
