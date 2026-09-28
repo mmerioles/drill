@@ -132,8 +132,10 @@ export class Engine {
 
     if (finished === Phase.focus) {
       record = this.#record(endedAt, natural);
-      if (natural) this.focusCount += 1;
-      const longDue = natural && this.focusCount % this.config.longBreakEvery === 0;
+      // A skipped focus block still counts as a round, so skipping keeps
+      // building towards the long break like any pomodoro timer.
+      this.focusCount += 1;
+      const longDue = this.focusCount % this.config.longBreakEvery === 0;
       this.phase = longDue ? Phase.longBreak : Phase.shortBreak;
     } else {
       this.phase = Phase.focus;

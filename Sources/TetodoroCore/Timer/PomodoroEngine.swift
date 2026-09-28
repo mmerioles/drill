@@ -33,7 +33,7 @@ public struct PomodoroEngine: Equatable, Sendable {
     public var config: TimerConfig
     public private(set) var phase: Phase = .focus
     public private(set) var status: Status = .idle
-    /// Focus blocks completed since launch; drives the long-break cadence.
+    /// Focus blocks finished or skipped since launch; drives the long-break cadence.
     public private(set) var focusCount = 0
     /// Cut-short focus blocks shorter than this are not worth logging.
     public var minimumLoggable: TimeInterval = 60
@@ -150,8 +150,10 @@ public struct PomodoroEngine: Equatable, Sendable {
 
         if finished == .focus {
             record = focusRecord(endedAt: endedAt, completed: natural)
-            if natural { focusCount += 1 }
-            let longDue = natural && focusCount % config.longBreakEvery == 0
+            // A skipped focus block still counts as a round, so skipping
+            // keeps building towards the long break like any pomodoro timer.
+            focusCount += 1
+            let longDue = focusCount % config.longBreakEvery == 0
             phase = longDue ? .longBreak : .shortBreak
         } else {
             phase = .focus

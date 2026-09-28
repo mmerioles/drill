@@ -62,7 +62,16 @@ import Testing
         #expect(t.record?.completed == false)
         #expect(t.next == .shortBreak)
         #expect(f.isIdle) // skipped phases never auto-start
-        #expect(f.focusCount == 0)
+        #expect(f.focusCount == 1)
+    }
+
+    @Test func skippingFocusBuildsTowardsTheLongBreak() {
+        var e = PomodoroEngine(config: TimerConfig(longBreakEvery: 4))
+        var phases: [Phase] = []
+        for _ in 0..<8 { phases.append(e.skip(at: t0).next) }
+        #expect(phases == [.shortBreak, .focus, .shortBreak, .focus,
+                           .shortBreak, .focus, .longBreak, .focus])
+        #expect(e.cyclePosition == 0)
     }
 
     @Test func resetKeepsStudiedTimeAndRewinds() {
