@@ -93,8 +93,15 @@
 
   <dialog class="settings inspo" id="inspo">
     <form method="dialog">
-      <h2>inspo</h2>
-      <p class="by">shuzo matsuoka, never give up · in japanese</p>
+      <div class="inspo-head">
+        <h2>inspo</h2>
+        <button class="link" type="button" data-page="today" aria-pressed="true">today</button>
+        <button class="link" type="button" data-page="all" aria-pressed="false">all</button>
+      </div>
+      <div id="inspo-all" hidden>
+        <div class="squares" id="inspo-squares"></div>
+        <p class="watched" id="inspo-count"></p>
+      </div>
       <ul id="inspo-list"></ul>
       <div class="done"><button class="capsule small" value="done">done</button></div>
     </form>

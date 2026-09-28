@@ -206,14 +206,24 @@ button, input { font: inherit; color: inherit; }
 /* Inspo */
 
 .top .link + .link { margin-left: 8px; }
-.inspo h2 { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
-.inspo .by { color: var(--faint); font-size: 13px; margin-bottom: 16px; }
+.inspo-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 16px; }
+.inspo h2 { flex: 1; font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+.squares { display: grid; grid-template-columns: repeat(13, 1fr); gap: 6px; }
+.squares a { aspect-ratio: 1; border-radius: 3px; background: var(--wash); }
+.squares a.on { background: var(--accent); }
+.watched { color: var(--faint); font-size: 13px; margin: 10px 0 18px; }
 .inspo ul { list-style: none; padding: 0; margin-bottom: 12px; }
 .inspo li + li { margin-top: 12px; }
-.inspo a { display: block; color: inherit; text-decoration: none; }
+.inspo li a { display: flex; gap: 12px; align-items: baseline; color: inherit; text-decoration: none; }
+.inspo li i { font-style: normal; color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
 .inspo b { display: block; font-size: 14px; font-weight: 500; }
-.inspo span { display: block; color: var(--faint); font-size: 13px; transition: color .12s ease-out; }
-.inspo a:hover span { color: var(--ink); }
+.inspo b.on::after {
+  content: ""; display: inline-block; width: 5px; height: 5px; margin-left: 6px;
+  border-radius: 50%; background: var(--accent); vertical-align: middle;
+}
+.inspo li span { display: block; color: var(--faint); font-size: 13px; transition: color .12s ease-out; }
+.inspo li a:hover span { color: var(--ink); }
+#inspo[data-page="all"] ul { max-height: 360px; overflow-y: auto; scrollbar-width: none; }
 
 /* Phones */
 

@@ -1,7 +1,7 @@
 import { Engine, Phase, defaultConfig, isBreak } from "./engine.js";
 import { buildHeatmap } from "./heatmap.js";
 import { BOIL_MS, drill, ring, square } from "./ink.js";
-import { today as inspoToday } from "./inspo.js";
+import { VIDEOS, markWatched, today as inspoToday, watched } from "./inspo.js";
 import { Store } from "./store.js";
 
 const $ = (id) => document.getElementById(id);
@@ -352,13 +352,47 @@ function notify(title, body) {
 
 // MARK: Inspo dialog
 
-function renderInspo({ title, summary, url }) {
-  const a = Object.assign(document.createElement("a"), { href: url, target: "_blank", rel: "noopener" });
-  a.append(Object.assign(document.createElement("b"), { textContent: title }),
-    Object.assign(document.createElement("span"), { textContent: summary }));
+let inspoPage = "today";
+
+function watchLink(video) {
+  const a = Object.assign(document.createElement("a"), { href: video.url, target: "_blank", rel: "noopener" });
+  a.addEventListener("click", () => { markWatched(video); renderInspo(); });
+  return a;
+}
+
+function inspoRow(video, seen) {
+  const a = watchLink(video);
+  if (inspoPage === "all") {
+    a.append(Object.assign(document.createElement("i"), { textContent: String(video.number).padStart(2, "0") }));
+  }
+  const text = document.createElement("div");
+  text.append(Object.assign(document.createElement("b"), { textContent: video.title, className: seen.has(video.number) ? "on" : "" }),
+    Object.assign(document.createElement("span"), { textContent: video.summary }));
+  a.append(text);
   const li = document.createElement("li");
   li.append(a);
   return li;
+}
+
+/** Today's handful, or every video with the watched ones filled in. */
+function renderInspo() {
+  const seen = watched();
+  const all = inspoPage === "all";
+  $("inspo").dataset.page = inspoPage;
+  for (const b of document.querySelectorAll(".inspo-head .link")) {
+    b.setAttribute("aria-pressed", String(b.dataset.page === inspoPage));
+  }
+  $("inspo-all").hidden = !all;
+  if (all) {
+    $("inspo-squares").replaceChildren(...VIDEOS.map((v) => {
+      const a = watchLink(v);
+      a.title = `${v.number}. ${v.title}`;
+      a.classList.toggle("on", seen.has(v.number));
+      return a;
+    }));
+    $("inspo-count").textContent = `${seen.size} of ${VIDEOS.length} watched`;
+  }
+  $("inspo-list").replaceChildren(...(all ? VIDEOS : inspoToday()).map((v) => inspoRow(v, seen)));
 }
 
 // MARK: Settings dialog
@@ -409,11 +443,17 @@ $("skip").addEventListener("click", skip);
 $("reset").addEventListener("click", reset);
 $("open-settings").addEventListener("click", openSettings);
 $("open-inspo").addEventListener("click", () => {
-  $("inspo-list").replaceChildren(...inspoToday().map(renderInspo));
+  inspoPage = "today";
+  renderInspo();
   $("inspo").showModal();
   document.activeElement.blur(); // open quietly, without a ring on the first video
 });
-$("inspo").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+$("inspo").addEventListener("click", (e) => {
+  if (e.target === e.currentTarget) return e.currentTarget.close();
+  if (!e.target.dataset.page) return;
+  inspoPage = e.target.dataset.page;
+  renderInspo();
+});
 
 const tagInput = $("tag");
 tagInput.value = load(KEY.tag, "");
