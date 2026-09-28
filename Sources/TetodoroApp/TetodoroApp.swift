@@ -17,6 +17,12 @@ struct TetodoroApp: App {
         .windowResizability(.contentSize)
         .commands { TimerCommands(model: model) }
 
+        Window("inspo", id: "inspo") {
+            InspoView()
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+
         MenuBarExtra {
             MenuBarPanel().environment(model)
         } label: {

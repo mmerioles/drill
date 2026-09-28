@@ -1,6 +1,7 @@
 import { Engine, Phase, defaultConfig, isBreak } from "./engine.js";
 import { buildHeatmap } from "./heatmap.js";
 import { BOIL_MS, drill, ring, square } from "./ink.js";
+import { today as inspoToday } from "./inspo.js";
 import { Store } from "./store.js";
 
 const $ = (id) => document.getElementById(id);
@@ -349,6 +350,17 @@ function notify(title, body) {
   try { new Notification(title, { body, icon: "icon.png", tag: "tetodoro" }); } catch {}
 }
 
+// MARK: Inspo dialog
+
+function renderInspo({ title, summary, url }) {
+  const a = Object.assign(document.createElement("a"), { href: url, target: "_blank", rel: "noopener" });
+  a.append(Object.assign(document.createElement("b"), { textContent: title }),
+    Object.assign(document.createElement("span"), { textContent: summary }));
+  const li = document.createElement("li");
+  li.append(a);
+  return li;
+}
+
 // MARK: Settings dialog
 
 function openSettings() {
@@ -396,6 +408,12 @@ $("toggle").addEventListener("click", toggle);
 $("skip").addEventListener("click", skip);
 $("reset").addEventListener("click", reset);
 $("open-settings").addEventListener("click", openSettings);
+$("open-inspo").addEventListener("click", () => {
+  $("inspo-list").replaceChildren(...inspoToday().map(renderInspo));
+  $("inspo").showModal();
+  document.activeElement.blur(); // open quietly, without a ring on the first video
+});
+$("inspo").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 
 const tagInput = $("tag");
 tagInput.value = load(KEY.tag, "");

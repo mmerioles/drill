@@ -203,6 +203,18 @@ button, input { font: inherit; color: inherit; }
 .switch:checked::after { transform: translateX(14px); }
 .done { display: flex; justify-content: flex-end; margin-top: 4px; }
 
+/* Inspo */
+
+.top .link + .link { margin-left: 8px; }
+.inspo h2 { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+.inspo .by { color: var(--faint); font-size: 13px; margin-bottom: 16px; }
+.inspo ul { list-style: none; padding: 0; margin-bottom: 12px; }
+.inspo li + li { margin-top: 12px; }
+.inspo a { display: block; color: inherit; text-decoration: none; }
+.inspo b { display: block; font-size: 14px; font-weight: 500; }
+.inspo span { display: block; color: var(--faint); font-size: 13px; transition: color .12s ease-out; }
+.inspo a:hover span { color: var(--ink); }
+
 /* Phones */
 
 @media (max-width: 560px) {

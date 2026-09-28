@@ -19,6 +19,7 @@
       <span class="word">tetodoro</span>
       <span class="spacer"></span>
       <span class="sync" id="sync" hidden></span>
+      <button class="link" id="open-inspo" type="button">inspo</button>
       <button class="link" id="open-settings" type="button">settings</button>
     </header>
 
@@ -86,6 +87,15 @@
         <label class="row"><span>sync token</span><input type="password" id="token" placeholder="none" autocomplete="off"></label>
         <p class="row note" id="sync-note"></p>
       </div>
+      <div class="done"><button class="capsule small" value="done">done</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="settings inspo" id="inspo">
+    <form method="dialog">
+      <h2>inspo</h2>
+      <p class="by">shuzo matsuoka, never give up · in japanese</p>
+      <ul id="inspo-list"></ul>
       <div class="done"><button class="capsule small" value="done">done</button></div>
     </form>
   </dialog>

@@ -6,6 +6,7 @@ struct MainView: View {
     /// The page itself holds focus by default, so the tag field doesn't grab
     /// it on open, and space can start and pause the timer.
     @FocusState private var pageFocused: Bool
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,8 +19,11 @@ struct MainView: View {
                 if let error = model.lastError {
                     Text(error).font(Ink.text(13)).foregroundStyle(Ink.faint)
                 }
-                SettingsLink { Text("settings") }
-                    .buttonStyle(.inkLink)
+                HStack(spacing: 16) {
+                    Button("inspo") { openWindow(id: "inspo") }
+                    SettingsLink { Text("settings") }
+                }
+                .buttonStyle(.inkLink)
             }
             .padding(.top, 8)
 
