@@ -52,20 +52,19 @@ final class AppModel {
         }
     }
 
-    private let store: SessionStore
-    private let sync: SyncService
+    let store: SessionStore
+    let deviceID: String
+    /// Called after a finished block is written, so sync can send it along.
+    var onLogged: (() -> Void)?
     private let defaults: UserDefaults
-    private let deviceID: String
     private let notifier = Notifier()
     private let builder = HeatmapBuilder()
     private var tickTask: Task<Void, Never>?
     private var blockTag: String?
     private var yearSessions: [FocusSession] = []
 
-    init(store: SessionStore, sync: SyncService = DisabledSync(), defaults: UserDefaults = .standard,
-         configOverride: TimerConfig? = nil) {
+    init(store: SessionStore, defaults: UserDefaults = .standard, configOverride: TimerConfig? = nil) {
         self.store = store
-        self.sync = sync
         self.defaults = defaults
         self.deviceID = DeviceIdentity.current(defaults)
 
@@ -196,6 +195,7 @@ final class AppModel {
         do {
             try store.save(session)
             lastError = nil
+            onLogged?()
         } catch {
             lastError = "couldn't save that session."
         }

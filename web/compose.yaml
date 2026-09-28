@@ -7,8 +7,12 @@ services:
     ports:
       - "8080:8080"
     environment:
-      # Every device (browser or mac app) uses this to sync. Pick something long.
-      TETODORO_TOKEN: ${TETODORO_TOKEN:?set TETODORO_TOKEN, e.g. in a .env file next to this one}
+      # Where people reach this server, for the links in confirmation email.
+      TETODORO_PUBLIC_URL: ${TETODORO_PUBLIC_URL:-}
+      # Optional: an endpoint that sends email (e.g. a Cloudflare Worker).
+      # Without it, confirmation links are printed to the container log.
+      TETODORO_MAIL_URL: ${TETODORO_MAIL_URL:-}
+      TETODORO_MAIL_KEY: ${TETODORO_MAIL_KEY:-}
     volumes:
       - tetodoro-data:/data
 

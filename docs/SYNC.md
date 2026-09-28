@@ -1,7 +1,8 @@
 # sync contract
 
-The server is `web/server.py` (see the README to run it). The web app in
-`web/static` is its first client; the mac app's `HTTPSync` is the next.
+The server is `web/server.py` (see the README to run it). Its clients are the
+web app in `web/static` (`store.js`) and the mac app (`SyncAPI` in
+TetodoroCore, driven by `Sync.swift` in the app).
 
 The home server's job is small: keep the union of every device's sessions and
 hand back what each device hasn't seen yet. Devices do all merging themselves
@@ -15,10 +16,39 @@ bumped), so a delete also wins by being the newer write. Rows are never
 hard-deleted. `SQLiteSessionStore.save` already enforces this rule, so saving a
 pulled row is the whole merge.
 
-## Endpoints
+## Accounts
 
-Auth for `/v1`: `Authorization: Bearer <TETODORO_TOKEN>`. One shared token
-for all your devices — it's your server. `401` means a missing or wrong token.
+Syncing needs an account: an email and a password, nothing else. Signing in
+returns a token, which every other call sends as
+`Authorization: Bearer <token>`. Each account only ever sees its own
+sessions.
+
+```
+POST /v1/accounts   { "email": "…", "password": "…" }
+  → 201 { "token": "…", "email": "…", "confirmed": false }
+POST /v1/signin     { "email": "…", "password": "…" }
+  → 200 { "token": "…", "email": "…", "confirmed": true }
+POST /v1/signout    revokes the token it's sent with → 200 {}
+GET  /v1/account    → 200 { "email": "…", "confirmed": true }
+GET  /confirm?token=…   the link in the confirmation email; a small page
+```
+
+Emails are trimmed and lowercased. Passwords need at least 8 characters and
+are stored as salted PBKDF2-SHA256. Errors come back as
+`{ "error": "…" }` with a lowercase sentence the apps show as-is:
+`400` bad input, `401` wrong email or password (or, on other calls, a dead
+token: sign in again), `409` email taken, `429` too many tries from one
+address.
+
+Signing up sends a confirmation email. The server POSTs
+`{ "to", "subject", "text" }` as JSON to `TETODORO_MAIL_URL`, e.g. a
+Cloudflare Worker that sends it, with `Authorization: Bearer
+$TETODORO_MAIL_KEY`. Without a mail URL it prints the message to its log.
+Links use `TETODORO_PUBLIC_URL`. Accounts can sync before confirming unless
+`TETODORO_REQUIRE_CONFIRMED=1`, in which case sync calls answer
+`403 { "error": "confirm your email first" }`.
+
+## Sessions
 
 ```
 POST /v1/sessions/push
@@ -63,10 +93,17 @@ client buckets sessions into days in its own time zone.
 
 ## Client loop
 
-`web/static/store.js` is the reference client. For the mac app (`HTTPSync`,
-to be written):
+`web/static/store.js` and `Sources/TetodoroApp/Sync.swift` both do this:
 
-1. `store.changes(since: lastPushedAt)` → push → on success, save `lastPushedAt`.
+1. `store.changes(since: lastPushedAt)` → push in batches → on success, save
+   `lastPushedAt` (taken before reading the changes).
 2. Pull with the saved cursor → `store.save` each row → save the new cursor.
    Repeat while `more` is true.
-3. Run at launch, after each logged session, and every few minutes while the app is open.
+3. Run at launch, after each logged session, every few minutes, and when the
+   sync button is pressed.
+
+On sign-in, a client forgets its push mark and cursor, so everything already
+on the device joins the account and the whole account comes down.
+
+Servers from before accounts kept one shared history. On first start the
+server renames that table to `sessions_before_accounts` and leaves it alone.

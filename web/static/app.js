@@ -297,17 +297,63 @@ function dayAt(event) {
   return { ...heat.weeks[w][d], w, d };
 }
 
+let lastSyncState = store.syncState;
+let syncedFlash = null;
+
+/** The header word, the settings row, and a brief "synced" after a sync. */
 function renderSync() {
-  const words = { local: "", synced: "", offline: "offline", locked: "needs token" };
-  const el = $("sync");
-  el.textContent = words[store.syncState];
-  el.hidden = !el.textContent;
+  const state = store.syncState, account = store.account;
+  if (lastSyncState === "syncing" && state === "synced") {
+    clearTimeout(syncedFlash);
+    syncedFlash = setTimeout(() => { syncedFlash = null; renderSync(); }, 2000);
+  }
+  lastSyncState = state;
+  $("sync").textContent = {
+    signedOut: "sync", syncing: "syncing…", offline: "offline", unconfirmed: "confirm email",
+    synced: syncedFlash ? "synced" : "sync",
+  }[state];
+  $("account-line").textContent = account?.email ?? "sync";
+  $("account-action").textContent = account ? "sign out" : "sign in";
   $("sync-note").textContent = {
-    local: "connecting…",
-    synced: "synced with this server.",
-    offline: "can't reach the server. sessions are kept here until it's back.",
-    locked: "this server needs its token (TETODORO_TOKEN).",
-  }[store.syncState];
+    signedOut: "sign in to keep your sessions on every device.",
+    syncing: "syncing…",
+    synced: "synced.",
+    offline: "can't reach the server. sessions stay here until it's back.",
+    unconfirmed: "confirm your email to start syncing. check your inbox.",
+  }[state];
+}
+
+// MARK: Account dialog
+
+let creating = false;
+
+function openAccount() {
+  creating = false;
+  $("account-form").reset();
+  renderAccount();
+  $("account").showModal();
+}
+
+function renderAccount(error = "") {
+  $("account-title").textContent = creating ? "create an account" : "sign in to sync";
+  $("account-submit").textContent = creating ? "create" : "sign in";
+  $("account-switch").textContent = creating ? "i have an account" : "create an account";
+  $("password").autocomplete = creating ? "new-password" : "current-password";
+  $("account-error").textContent = error;
+}
+
+async function submitAccount(e) {
+  e.preventDefault();
+  const button = $("account-submit");
+  button.disabled = true;
+  try {
+    await store.signIn($("email").value, $("password").value, creating);
+    $("account").close();
+  } catch (err) {
+    renderAccount(err.message);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 // MARK: Theme, sound, notifications
@@ -406,7 +452,6 @@ function openSettings() {
   $("autoStartBreaks").checked = c.autoStartBreaks;
   $("autoStartFocus").checked = c.autoStartFocus;
   $("sound").checked = settings.sound;
-  $("token").value = store.token;
   markTheme();
   renderSync();
   $("settings").showModal();
@@ -480,7 +525,15 @@ $("theme").addEventListener("click", (e) => {
   markTheme();
   applyTheme();
 });
-$("token").addEventListener("change", (e) => { store.token = e.target.value; });
+$("sync").addEventListener("click", () => (store.account ? store.sync() : openAccount()));
+$("account-action").addEventListener("click", () => {
+  if (store.account) return store.signOut();
+  $("settings").close();
+  openAccount();
+});
+$("account-switch").addEventListener("click", () => { creating = !creating; renderAccount(); });
+$("account-form").addEventListener("submit", submitAccount);
+$("account").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 
 const grid = $("grid");
 grid.addEventListener("pointermove", (e) => {

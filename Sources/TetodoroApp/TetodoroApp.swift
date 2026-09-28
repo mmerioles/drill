@@ -5,14 +5,21 @@ import SwiftUI
 @main
 struct TetodoroApp: App {
     @NSApplicationDelegateAdaptor private var delegate: AppDelegate
-    @State private var model = AppModel.live()
+    @State private var model: AppModel
     @State private var updater: Updater
+    @State private var sync: Sync
 
     init() {
+        let model = AppModel.live()
+        let sync = Sync(store: model.store, deviceID: model.deviceID, onPulled: { [weak model] in model?.reload() })
+        model.onLogged = { [weak sync] in sync?.syncNow() }
         // Checks run from launch, whether or not the main window opens.
         let updater = Updater()
         updater.start()
+        sync.start()
+        _model = State(initialValue: model)
         _updater = State(initialValue: updater)
+        _sync = State(initialValue: sync)
     }
 
     var body: some Scene {
@@ -20,6 +27,7 @@ struct TetodoroApp: App {
             MainView()
                 .environment(model)
                 .environment(updater)
+                .environment(sync)
                 .frame(width: 780, height: 700)
         }
         .windowStyle(.hiddenTitleBar)
@@ -46,7 +54,7 @@ struct TetodoroApp: App {
         .menuBarExtraStyle(.window)
 
         Settings {
-            SettingsView().environment(model).environment(updater)
+            SettingsView().environment(model).environment(updater).environment(sync)
         }
     }
 }

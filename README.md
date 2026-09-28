@@ -41,18 +41,21 @@ update with `git pull && ./scripts/install.sh`.
 ## web app and sync server
 
 tetodoro also runs in the browser, served by a small self-hosted server that
-keeps every device's sessions in one SQLite file. it's one container:
+is also the sync server. syncing needs an account (just an email and a
+password), and each account keeps its own history. it's one container:
 
 ```sh
 docker run -d --name tetodoro -p 8080:8080 \
-  -e TETODORO_TOKEN=pick-something-long \
+  -e TETODORO_PUBLIC_URL=https://tetodoro.example.com \
   -v tetodoro-data:/data --restart unless-stopped \
   ghcr.io/mmerioles/tetodoro:latest
 ```
 
-or `cd web && docker compose up -d` with `TETODORO_TOKEN` in `web/.env`.
-open `http://<server>:8080` and paste the token in settings. every browser
-with the token shares one history, and the mac app will join over the same
+or `cd web && docker compose up -d`. open the server in a browser, or press
+sync in the mac app and enter the server's address, then sign in or create an
+account. confirmation emails go out through `TETODORO_MAIL_URL` (any endpoint
+that takes `{ to, subject, text }`, such as a Cloudflare Worker); until
+that's set, the links are printed to the server log. the details are in the
 [sync protocol](docs/SYNC.md).
 
 the server is plain Python with no dependencies, so `python3 web/server.py`

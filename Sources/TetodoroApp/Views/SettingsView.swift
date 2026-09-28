@@ -29,6 +29,7 @@ struct SettingsView: View {
                 Toggle("auto-start focus", isOn: $model.config.autoStartFocus)
                 Toggle("sound", isOn: $model.soundOn)
             }
+            Section { AccountRow() }
             if updater.isEnabled {
                 Section { UpdateRow() }
             }
@@ -96,6 +97,38 @@ private struct UpdateRow: View {
         case .available: model.isActive ? "finish this block first. updating restarts the app." : nil
         case .failed(let message): message
         default: nil
+        }
+    }
+}
+
+/// Who you're syncing as, with a way in or out.
+private struct AccountRow: View {
+    @Environment(Sync.self) private var sync
+    @State private var signingIn = false
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(sync.account?.email ?? "sync")
+                Text(note).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            if sync.isSignedIn {
+                Button("sign out", action: sync.signOut)
+            } else {
+                Button("sign in") { signingIn = true }
+            }
+        }
+        .sheet(isPresented: $signingIn) { AccountSheet() }
+    }
+
+    private var note: String {
+        switch sync.state {
+        case .signedOut: "sign in to keep your sessions on every device."
+        case .syncing: "syncing…"
+        case .idle: "synced with \(URL(string: sync.server)?.host() ?? sync.server)."
+        case .offline: "can't reach the server. sessions stay here until it's back."
+        case .unconfirmed: "confirm your email to start syncing. check your inbox."
         }
     }
 }

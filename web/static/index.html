@@ -18,7 +18,7 @@
       <svg class="mark" id="mark" viewBox="0 0 22 22" aria-hidden="true"><path/></svg>
       <span class="word">tetodoro</span>
       <span class="spacer"></span>
-      <span class="sync" id="sync" hidden></span>
+      <button class="link" id="sync" type="button">sync</button>
       <button class="link" id="open-inspo" type="button">inspo</button>
       <button class="link" id="open-settings" type="button">settings</button>
     </header>
@@ -84,10 +84,25 @@
         <label class="row"><span>sound</span><input type="checkbox" class="switch" id="sound"></label>
       </div>
       <div class="group">
-        <label class="row"><span>sync token</span><input type="password" id="token" placeholder="none" autocomplete="off"></label>
+        <div class="row"><span id="account-line">sync</span><button class="link" id="account-action" type="button">sign in</button></div>
         <p class="row note" id="sync-note"></p>
       </div>
       <div class="done"><button class="capsule small" value="done">done</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="settings account" id="account">
+    <form id="account-form">
+      <h2 id="account-title">sign in to sync</h2>
+      <div class="group">
+        <label class="row"><span>email</span><input type="email" id="email" autocomplete="username" required spellcheck="false"></label>
+        <label class="row"><span>password</span><input type="password" id="password" autocomplete="current-password" required minlength="8"></label>
+      </div>
+      <p class="error" id="account-error" aria-live="polite"></p>
+      <div class="account-actions">
+        <button class="link" id="account-switch" type="button">create an account</button>
+        <button class="capsule small" id="account-submit" type="submit">sign in</button>
+      </div>
     </form>
   </dialog>
 

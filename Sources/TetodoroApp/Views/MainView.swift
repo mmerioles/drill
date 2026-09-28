@@ -4,6 +4,8 @@ import SwiftUI
 struct MainView: View {
     @Environment(AppModel.self) private var model
     @Environment(Updater.self) private var updater
+    @Environment(Sync.self) private var sync
+    @State private var signingIn = false
     /// The page itself holds focus by default, so the tag field doesn't grab
     /// it on open, and space can start and pause the timer.
     @FocusState private var pageFocused: Bool
@@ -27,12 +29,14 @@ struct MainView: View {
                     } else if let release = updater.available, !model.isActive {
                         Button("update to \(release.version.description)") { Task { await updater.install() } }
                     }
+                    Button(syncLabel) { sync.isSignedIn ? sync.syncNow() : (signingIn = true) }
                     Button("inspo") { openWindow(id: "inspo") }
                     SettingsLink { Text("settings") }
                 }
                 .buttonStyle(.inkLink)
             }
             .padding(.top, 8)
+            .sheet(isPresented: $signingIn) { AccountSheet() }
 
             Spacer(minLength: 20)
             TimerView()
@@ -57,6 +61,15 @@ struct MainView: View {
         .onAppear {
             model.applyTheme()
             model.reload()
+        }
+    }
+
+    private var syncLabel: String {
+        switch sync.state {
+        case .syncing: "syncing…"
+        case .offline: "offline"
+        case .unconfirmed: "confirm email"
+        case .signedOut, .idle: sync.justSynced ? "synced" : "sync"
         }
     }
 }

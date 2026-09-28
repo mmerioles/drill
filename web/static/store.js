@@ -3,7 +3,7 @@
 // it hasn't seen, and merges with one rule — newer updatedAt wins.
 
 const KEY = { sessions: "tetodoro.sessions", dirty: "tetodoro.dirty",
-              cursor: "tetodoro.cursor", token: "tetodoro.token", device: "tetodoro.deviceID" };
+              cursor: "tetodoro.cursor", account: "tetodoro.account", device: "tetodoro.deviceID" };
 
 const read = (key, fallback) => {
   try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
@@ -48,8 +48,9 @@ export class Store extends EventTarget {
     this.deviceID = localStorage.getItem(KEY.device) || `web-${randomUUID()}`;
     try { localStorage.setItem(KEY.device, this.deviceID); } catch {}
     this.sessions = read(KEY.sessions, {});
-    this.syncState = "local"; // local | synced | offline | locked
+    this.syncState = this.account ? "synced" : "signedOut"; // signedOut | syncing | synced | offline | unconfirmed
     this.syncing = null;
+    try { localStorage.removeItem("tetodoro.token"); } catch {} // from before accounts
 
     // Another tab wrote: pick up its sessions.
     addEventListener("storage", (e) => {
@@ -60,10 +61,39 @@ export class Store extends EventTarget {
     });
   }
 
-  get token() { return localStorage.getItem(KEY.token) || ""; }
-  set token(value) {
-    try { localStorage.setItem(KEY.token, value.trim()); } catch {}
-    this.sync();
+  /** { email, token, confirmed } once signed in, else null. */
+  get account() { return read(KEY.account, null); }
+
+  /** Signs in, or creates the account when `create` is set. Throws an Error
+   *  whose message is fit to show, like "wrong email or password". */
+  async signIn(email, password, create = false) {
+    let r;
+    try {
+      r = await fetch(create ? "/v1/accounts" : "/v1/signin", {
+        method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store",
+        body: JSON.stringify({ email, password }),
+      });
+    } catch {
+      throw new Error("can't reach the server.");
+    }
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.error || "something went wrong. try again.");
+    write(KEY.account, { email: body.email, token: body.token, confirmed: body.confirmed });
+    // Everything on this device joins the account; then catch up from the top.
+    write(KEY.dirty, Object.keys(this.sessions));
+    write(KEY.cursor, "0");
+    this.#setState("synced");
+    return this.sync();
+  }
+
+  async signOut() {
+    const token = this.account?.token;
+    try { localStorage.removeItem(KEY.account); } catch {}
+    this.#setState("signedOut");
+    if (token) {
+      fetch("/v1/signout", { method: "POST", headers: { Authorization: `Bearer ${token}` },
+                             body: "{}" }).catch(() => {});
+    }
   }
 
   /** Live sessions, oldest first. */
@@ -136,14 +166,17 @@ export class Store extends EventTarget {
   }
 
   async #sync() {
-    const headers = { "Content-Type": "application/json" };
-    if (this.token) headers.Authorization = `Bearer ${this.token}`;
+    const account = this.account;
+    if (!account) return this.#setState("signedOut");
+    const headers = { "Content-Type": "application/json", Authorization: `Bearer ${account.token}` };
     const call = async (path, init = {}) => {
       const r = await fetch(path, { ...init, headers, cache: "no-store" });
-      if (r.status === 401) throw Object.assign(new Error("locked"), { locked: true });
+      if (r.status === 401) throw Object.assign(new Error("signed out"), { signedOut: true });
+      if (r.status === 403) throw Object.assign(new Error("unconfirmed"), { unconfirmed: true });
       if (!r.ok) throw new Error(`${r.status}`);
       return r.json();
     };
+    this.#setState("syncing");
 
     try {
       const dirty = read(KEY.dirty, []);
@@ -169,7 +202,10 @@ export class Store extends EventTarget {
       }
       this.#setState("synced");
     } catch (e) {
-      this.#setState(e.locked ? "locked" : "offline");
+      if (e.signedOut) {
+        try { localStorage.removeItem(KEY.account); } catch {}
+      }
+      this.#setState(e.signedOut ? "signedOut" : e.unconfirmed ? "unconfirmed" : "offline");
     }
   }
 }
