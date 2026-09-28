@@ -6,16 +6,31 @@ import SwiftUI
 struct TetodoroApp: App {
     @NSApplicationDelegateAdaptor private var delegate: AppDelegate
     @State private var model = AppModel.live()
+    @State private var updater: Updater
+
+    init() {
+        // Checks run from launch, whether or not the main window opens.
+        let updater = Updater()
+        updater.start()
+        _updater = State(initialValue: updater)
+    }
 
     var body: some Scene {
         Window("tetodoro", id: "main") {
             MainView()
                 .environment(model)
+                .environment(updater)
                 .frame(width: 780, height: 700)
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
-        .commands { TimerCommands(model: model) }
+        .commands {
+            TimerCommands(model: model)
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { Task { await updater.check() } }
+                    .disabled(!updater.isEnabled)
+            }
+        }
 
         Window("inspo", id: "inspo") {
             InspoView()
@@ -31,7 +46,7 @@ struct TetodoroApp: App {
         .menuBarExtraStyle(.window)
 
         Settings {
-            SettingsView().environment(model)
+            SettingsView().environment(model).environment(updater)
         }
     }
 }

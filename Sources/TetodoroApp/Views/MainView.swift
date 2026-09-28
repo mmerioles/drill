@@ -3,6 +3,7 @@ import SwiftUI
 
 struct MainView: View {
     @Environment(AppModel.self) private var model
+    @Environment(Updater.self) private var updater
     /// The page itself holds focus by default, so the tag field doesn't grab
     /// it on open, and space can start and pause the timer.
     @FocusState private var pageFocused: Bool
@@ -20,6 +21,12 @@ struct MainView: View {
                     Text(error).font(Ink.text(13)).foregroundStyle(Ink.faint)
                 }
                 HStack(spacing: 16) {
+                    // Offered between blocks only: updating relaunches the app.
+                    if updater.state == .installing {
+                        Text("updating…").font(Ink.text(14)).foregroundStyle(Ink.faint)
+                    } else if let release = updater.available, !model.isActive {
+                        Button("update to \(release.version.description)") { Task { await updater.install() } }
+                    }
                     Button("inspo") { openWindow(id: "inspo") }
                     SettingsLink { Text("settings") }
                 }

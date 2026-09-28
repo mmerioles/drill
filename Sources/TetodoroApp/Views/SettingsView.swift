@@ -4,6 +4,7 @@ import TetodoroCore
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
+    @Environment(Updater.self) private var updater
 
     var body: some View {
         @Bindable var model = model
@@ -27,6 +28,9 @@ struct SettingsView: View {
                 Toggle("auto-start breaks", isOn: $model.config.autoStartBreaks)
                 Toggle("auto-start focus", isOn: $model.config.autoStartFocus)
                 Toggle("sound", isOn: $model.soundOn)
+            }
+            if updater.isEnabled {
+                Section { UpdateRow() }
             }
         }
         .formStyle(.grouped)
@@ -56,6 +60,42 @@ struct SettingsView: View {
             Text(label)
             Spacer()
             Text(value).monospacedDigit().foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// The version you're on, and one button that does the next sensible thing.
+private struct UpdateRow: View {
+    @Environment(Updater.self) private var updater
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("version \(updater.current?.description ?? "?")")
+                if let note { Text(note).font(.caption).foregroundStyle(.secondary) }
+            }
+            Spacer()
+            switch updater.state {
+            case .checking:
+                Text("checking…").foregroundStyle(.secondary)
+            case .installing:
+                Text("updating…").foregroundStyle(.secondary)
+            case .available(let release):
+                Button("update to \(release.version.description)") { Task { await updater.install() } }
+                    .disabled(model.isActive)
+            default:
+                Button("check") { Task { await updater.check() } }
+            }
+        }
+    }
+
+    private var note: String? {
+        switch updater.state {
+        case .upToDate: "you're up to date."
+        case .available: model.isActive ? "finish this block first. updating restarts the app." : nil
+        case .failed(let message): message
+        default: nil
         }
     }
 }
