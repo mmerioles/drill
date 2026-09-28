@@ -20,17 +20,32 @@ enum Inspo {
 
     static let perDay = 5
 
-    /// A fresh handful each day: the daily pool shuffled with the date as
-    /// the seed.
-    static func today(_ now: Date = .now, calendar: Calendar = .current) -> [Video] {
-        let d = calendar.dateComponents([.year, .month, .day], from: now)
-        var seed = UInt32(d.year! * 10000 + d.month! * 100 + d.day!)
-        var pool = videos.filter(\.daily)
+    /// A day as a number, like 20260928: the key for watched videos and
+    /// the seed for the daily shuffle.
+    static func day(_ date: Date = .now, calendar: Calendar = .current) -> Int {
+        let d = calendar.dateComponents([.year, .month, .day], from: date)
+        return d.year! * 10000 + d.month! * 100 + d.day!
+    }
+
+    /// A fresh handful each day, seeded by the date, leaving out anything
+    /// watched before today. Mindset videos come first, technique once those
+    /// run out, and the full rotation again once you've seen everything.
+    /// Videos watched today stay put, so the list doesn't shift under you.
+    static func today(skipping seen: Set<Int>, on day: Int = day()) -> [Video] {
+        var seed = UInt32(day)
+        let daily = shuffled(videos.filter(\.daily), &seed)
+        let rest = shuffled(videos.filter { !$0.daily }, &seed)
+        let fresh = (daily + rest).filter { !seen.contains($0.number) }
+        return Array((fresh.isEmpty ? daily : fresh).prefix(perDay))
+    }
+
+    private static func shuffled(_ videos: [Video], _ seed: inout UInt32) -> [Video] {
+        var pool = videos
         for i in stride(from: pool.count - 1, to: 0, by: -1) {
             let j = Int(mulberry32(&seed) % UInt32(i + 1))
             pool.swapAt(i, j)
         }
-        return Array(pool.prefix(perDay))
+        return pool
     }
 
     /// A tiny seeded generator, bit-for-bit the same as the one in inspo.js.
@@ -120,22 +135,42 @@ enum Inspo {
     ]
 }
 
-/// Which videos you've opened, by number. Local to this Mac.
+/// Which videos you've opened, and on which day. Local to this Mac.
 @Observable @MainActor
 final class Watched {
-    private static let key = "tetodoro.inspo.watched"
+    private static let key = "tetodoro.inspo.watchedOn"
+    /// Before days were kept: a plain list of numbers.
+    private static let legacyKey = "tetodoro.inspo.watched"
     private let defaults: UserDefaults
-    private(set) var numbers: Set<Int>
+    /// Video number to the day it was first opened.
+    private var days: [Int: Int]
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        numbers = Set(defaults.array(forKey: Self.key) as? [Int] ?? [])
+        let stored = defaults.dictionary(forKey: Self.key) as? [String: Int] ?? [:]
+        days = Dictionary(uniqueKeysWithValues: stored.compactMap { k, v in Int(k).map { ($0, v) } })
+        if let legacy = defaults.array(forKey: Self.legacyKey) as? [Int] {
+            for number in legacy where days[number] == nil { days[number] = 0 }
+            defaults.removeObject(forKey: Self.legacyKey)
+            save()
+        }
     }
 
-    func contains(_ video: Inspo.Video) -> Bool { numbers.contains(video.number) }
+    var numbers: Set<Int> { Set(days.keys) }
+
+    func contains(_ video: Inspo.Video) -> Bool { days[video.number] != nil }
+
+    func seen(before day: Int) -> Set<Int> {
+        Set(days.filter { $0.value < day }.keys)
+    }
 
     func mark(_ video: Inspo.Video) {
-        guard numbers.insert(video.number).inserted else { return }
-        defaults.set(numbers.sorted(), forKey: Self.key)
+        guard days[video.number] == nil else { return }
+        days[video.number] = Inspo.day()
+        save()
+    }
+
+    private func save() {
+        defaults.set(Dictionary(uniqueKeysWithValues: days.map { (String($0.key), $0.value) }), forKey: Self.key)
     }
 }

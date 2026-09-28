@@ -1,7 +1,7 @@
 import { Engine, Phase, defaultConfig, isBreak } from "./engine.js";
 import { buildHeatmap } from "./heatmap.js";
 import { BOIL_MS, drill, ring, square } from "./ink.js";
-import { VIDEOS, markWatched, today as inspoToday, watched } from "./inspo.js";
+import { VIDEOS, markWatched, today as inspoToday, watched, watchedBefore } from "./inspo.js";
 import { Store } from "./store.js";
 
 const $ = (id) => document.getElementById(id);
@@ -392,7 +392,7 @@ function renderInspo() {
     }));
     $("inspo-count").textContent = `${seen.size} of ${VIDEOS.length} watched`;
   }
-  $("inspo-list").replaceChildren(...(all ? VIDEOS : inspoToday()).map((v) => inspoRow(v, seen)));
+  $("inspo-list").replaceChildren(...(all ? VIDEOS : inspoToday(watchedBefore())).map((v) => inspoRow(v, seen)));
 }
 
 // MARK: Settings dialog

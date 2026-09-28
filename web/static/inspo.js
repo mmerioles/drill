@@ -46,7 +46,13 @@ export const VIDEOS = [
 }));
 
 const PER_DAY = 5;
-const WATCHED = "tetodoro.inspo.watched";
+const WATCHED = "tetodoro.inspo.watchedOn";
+/** Before days were kept: a plain list of numbers. */
+const LEGACY = "tetodoro.inspo.watched";
+
+/** A day as a number, like 20260928: the key for watched videos and the seed. */
+export const day = (date = new Date()) =>
+  date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
 
 /** A tiny seeded generator, bit-for-bit the same as the Swift one. */
 function mulberry32(seed) {
@@ -60,25 +66,53 @@ function mulberry32(seed) {
   };
 }
 
-/** A fresh handful each day: the daily pool shuffled with the date as the seed. */
-export function today(now = new Date()) {
-  const next = mulberry32(now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate());
-  const pool = VIDEOS.filter((v) => v.daily);
+function shuffled(videos, next) {
+  const pool = [...videos];
   for (let i = pool.length - 1; i > 0; i--) {
     const j = next() % (i + 1);
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
-  return pool.slice(0, PER_DAY);
+  return pool;
 }
 
-/** Numbers of the videos opened in this browser. */
-export function watched() {
-  try { return new Set(JSON.parse(localStorage.getItem(WATCHED)) ?? []); }
-  catch { return new Set(); }
+/**
+ * A fresh handful each day, seeded by the date, leaving out anything watched
+ * before today. Mindset videos come first, technique once those run out, and
+ * the full rotation again once you've seen everything. Videos watched today
+ * stay put, so the list doesn't shift under you.
+ */
+export function today(seen, on = day()) {
+  const next = mulberry32(on);
+  const daily = shuffled(VIDEOS.filter((v) => v.daily), next);
+  const rest = shuffled(VIDEOS.filter((v) => !v.daily), next);
+  const fresh = [...daily, ...rest].filter((v) => !seen.has(v.number));
+  return (fresh.length ? fresh : daily).slice(0, PER_DAY);
+}
+
+/** Video number to the day it was first opened in this browser. */
+function watchedDays() {
+  try {
+    const days = JSON.parse(localStorage.getItem(WATCHED)) ?? {};
+    const legacy = JSON.parse(localStorage.getItem(LEGACY));
+    if (Array.isArray(legacy)) {
+      for (const n of legacy) days[n] ??= 0;
+      localStorage.setItem(WATCHED, JSON.stringify(days));
+      localStorage.removeItem(LEGACY);
+    }
+    return days;
+  } catch { return {}; }
+}
+
+/** Numbers of every video opened in this browser. */
+export const watched = () => new Set(Object.keys(watchedDays()).map(Number));
+
+/** Numbers of the videos opened before `on`. */
+export function watchedBefore(on = day()) {
+  return new Set(Object.entries(watchedDays()).filter(([, d]) => d < on).map(([n]) => Number(n)));
 }
 
 export function markWatched(video) {
-  const seen = watched();
-  seen.add(video.number);
-  try { localStorage.setItem(WATCHED, JSON.stringify([...seen].sort((a, b) => a - b))); } catch {}
+  const days = watchedDays();
+  days[video.number] ??= day();
+  try { localStorage.setItem(WATCHED, JSON.stringify(days)); } catch {}
 }

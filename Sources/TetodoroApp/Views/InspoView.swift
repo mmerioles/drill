@@ -22,7 +22,7 @@ struct InspoView: View {
             switch page {
             case .today:
                 VStack(alignment: .leading, spacing: 14) {
-                    ForEach(Inspo.today()) { InspoRow(video: $0, numbered: false) }
+                    ForEach(Inspo.today(skipping: watched.seen(before: Inspo.day()))) { InspoRow(video: $0, numbered: false) }
                 }
             case .all:
                 AllVideos()
