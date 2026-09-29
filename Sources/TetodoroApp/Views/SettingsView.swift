@@ -29,7 +29,10 @@ struct SettingsView: View {
                 Toggle("auto-start focus", isOn: $model.config.autoStartFocus)
                 Toggle("sound", isOn: $model.soundOn)
             }
-            Section { AccountRow() }
+            Section {
+                AccountRow()
+                ServerRow()
+            }
             if updater.isEnabled {
                 Section { UpdateRow() }
             }
@@ -126,9 +129,44 @@ private struct AccountRow: View {
         switch sync.state {
         case .signedOut: "sign in to keep your sessions on every device."
         case .syncing: "syncing…"
-        case .idle: "synced with \(URL(string: sync.server)?.host() ?? sync.server)."
+        case .idle: "synced."
         case .offline: "can't reach the server. sessions stay here until it's back."
         case .unconfirmed: "confirm your email to start syncing. check your inbox."
         }
+    }
+}
+
+/// Our server by default; self-hosters put their own address here.
+private struct ServerRow: View {
+    @Environment(Sync.self) private var sync
+    @State private var text = ""
+    @State private var problem: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            TextField("server", text: $text, prompt: Text(Sync.defaultServer == nil ? "" : "tetodoro's"))
+                .multilineTextAlignment(.trailing)
+                .disabled(sync.isSignedIn)
+                .onSubmit(save)
+            Text(note).font(.caption).foregroundStyle(.secondary)
+        }
+        .onAppear { text = sync.customServer ?? "" }
+    }
+
+    private var note: String {
+        if let problem { return problem }
+        if sync.isSignedIn { return "sign out to change servers." }
+        return Sync.defaultServer == nil
+            ? "put in your own server to self-host." : "leave empty to use ours, or put in your own to self-host."
+    }
+
+    private func save() {
+        do {
+            try sync.setServer(text)
+            text = sync.customServer ?? ""
+            problem = nil
+        } catch let error as Sync.Problem {
+            problem = error.message
+        } catch {}
     }
 }

@@ -19,8 +19,12 @@ final class Sync {
     private(set) var account: Account?
     /// True for a moment after a sync lands, for a quiet "synced".
     private(set) var justSynced = false
-    /// The last server signed in to, to fill the form next time.
-    private(set) var server: String
+    /// A self-hosted server from settings, or nil for ours.
+    private(set) var customServer: String?
+
+    /// Where accounts live unless settings name a self-hosted server. Nil
+    /// until ours is up; until then syncing needs a self-hosted server.
+    static let defaultServer: URL? = nil
 
     private let store: SessionStore
     private let deviceID: String
@@ -39,11 +43,28 @@ final class Sync {
         self.onPulled = onPulled
         let account = defaults.data(forKey: Keys.account).flatMap { try? JSONDecoder().decode(Account.self, from: $0) }
         self.account = account
-        server = defaults.string(forKey: Keys.server) ?? ""
+        customServer = defaults.string(forKey: Keys.server)
         state = account == nil ? .signedOut : .idle
     }
 
     var isSignedIn: Bool { account != nil }
+
+    var server: URL? { customServer.flatMap(URL.init(string:)) ?? Self.defaultServer }
+
+    /// Points sync at a self-hosted server, or back at ours with an empty
+    /// string. Only while signed out: a token only works where it was made.
+    /// Throws a sentence fit to show.
+    func setServer(_ text: String) throws {
+        guard !isSignedIn else { throw Problem("sign out to change servers.") }
+        if text.trimmingCharacters(in: .whitespaces).isEmpty {
+            customServer = nil
+            defaults.removeObject(forKey: Keys.server)
+            return
+        }
+        guard let url = SyncAPI.serverURL(text) else { throw Problem("that server address doesn't look right.") }
+        customServer = url.absoluteString
+        defaults.set(customServer, forKey: Keys.server)
+    }
 
     func start() {
         guard loop == nil else { return }
@@ -59,18 +80,16 @@ final class Sync {
 
     /// Signs in, or makes the account first. Everything already on this Mac
     /// joins the account. Throws a sentence fit to show.
-    func signIn(server text: String, email: String, password: String, create: Bool) async throws {
-        guard let url = SyncAPI.serverURL(text) else { throw Problem("that server address doesn't look right") }
+    func signIn(email: String, password: String, create: Bool) async throws {
+        guard let server else { throw Problem("sync isn't open yet. to self-host, add your server in settings.") }
         let account: Account
         do {
-            account = try await SyncAPI(server: url).signIn(email: email, password: password, create: create)
+            account = try await SyncAPI(server: server).signIn(email: email, password: password, create: create)
         } catch SyncError.rejected(let message) {
             throw Problem(message)
         } catch {
-            throw Problem("can't reach that server.")
+            throw Problem("can't reach the server. try again in a bit.")
         }
-        server = url.absoluteString
-        defaults.set(server, forKey: Keys.server)
         save(account)
         // Upload everything, and catch up from the start.
         defaults.removeObject(forKey: Keys.pushedAt)
@@ -80,8 +99,9 @@ final class Sync {
     }
 
     func signOut() {
-        if let token = account?.token, let url = URL(string: server) {
-            Task { await SyncAPI(server: url).signOut(token) }
+        if let token = account?.token, let server {
+            let api = SyncAPI(server: server)
+            Task { await api.signOut(token) }
         }
         running?.cancel()
         save(nil)
@@ -94,9 +114,10 @@ final class Sync {
 
     /// Starts a sync unless one is already running.
     func syncNow() {
-        guard running == nil, let account, let url = URL(string: server) else { return }
+        guard running == nil, let account, let server else { return }
+        let api = SyncAPI(server: server)
         running = Task { [weak self] in
-            await self?.run(SyncAPI(server: url), token: account.token)
+            await self?.run(api, token: account.token)
             self?.running = nil
         }
     }
@@ -155,7 +176,7 @@ final class Sync {
 
     private enum Keys {
         static let account = "tetodoro.sync.account"
-        static let server = "tetodoro.sync.server"
+        static let server = "tetodoro.sync.server" // self-hosted only
         static let cursor = "tetodoro.sync.cursor"
         static let pushedAt = "tetodoro.sync.pushedAt"
     }

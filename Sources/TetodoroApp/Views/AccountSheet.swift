@@ -1,20 +1,20 @@
 import InkKit
 import SwiftUI
 
-/// Sign in, or make an account: a server, an email and a password.
+/// Sign in, or make an account: an email and a password. The server is
+/// ours unless settings name a self-hosted one.
 struct AccountSheet: View {
     @Environment(Sync.self) private var sync
     @Environment(\.dismiss) private var dismiss
 
     @State private var creating = false
-    @State private var server = ""
     @State private var email = ""
     @State private var password = ""
     @State private var problem: String?
     @State private var working = false
     @FocusState private var focused: Field?
 
-    private enum Field { case server, email, password }
+    private enum Field { case email, password }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -23,12 +23,6 @@ struct AccountSheet: View {
                 .foregroundStyle(Ink.ink)
 
             VStack(spacing: 0) {
-                row("server") {
-                    TextField("", text: $server, prompt: Text("tetodoro.example.com"))
-                        .focused($focused, equals: .server)
-                        .textContentType(.URL)
-                }
-                Divider().overlay(Ink.ghost)
                 row("email") {
                     TextField("", text: $email)
                         .focused($focused, equals: .email)
@@ -70,14 +64,11 @@ struct AccountSheet: View {
         .padding(28)
         .frame(width: 400)
         .background(Ink.paper)
-        .onAppear {
-            server = sync.server
-            focused = server.isEmpty ? .server : .email
-        }
+        .onAppear { focused = .email }
     }
 
     private var ready: Bool {
-        !server.trimmingCharacters(in: .whitespaces).isEmpty && email.contains("@") && password.count >= 8
+        email.contains("@") && password.count >= 8
     }
 
     private func row(_ label: String, @ViewBuilder field: () -> some View) -> some View {
@@ -95,7 +86,7 @@ struct AccountSheet: View {
         problem = nil
         Task {
             do {
-                try await sync.signIn(server: server, email: email, password: password, create: creating)
+                try await sync.signIn(email: email, password: password, create: creating)
                 dismiss()
             } catch let error as Sync.Problem {
                 problem = error.message

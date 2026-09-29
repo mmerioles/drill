@@ -51,9 +51,9 @@ docker run -d --name tetodoro -p 8080:8080 \
   ghcr.io/mmerioles/tetodoro:latest
 ```
 
-or `cd web && docker compose up -d`. open the server in a browser, or press
-sync in the mac app and enter the server's address, then sign in or create an
-account. confirmation emails go out through `TETODORO_MAIL_URL` (any endpoint
+or `cd web && docker compose up -d`. open the server in a browser, or put its
+address under server in the mac app's settings, then press sync to sign in or
+create an account. confirmation emails go out through `TETODORO_MAIL_URL` (any endpoint
 that takes `{ to, subject, text }`, such as a Cloudflare Worker); until
 that's set, the links are printed to the server log. the details are in the
 [sync protocol](docs/SYNC.md).
