@@ -69,6 +69,8 @@ struct SettingsView: View {
 }
 
 /// The version you're on, and one button that does the next sensible thing.
+/// A mark beside it says how the last check went: a spinner while looking,
+/// a green check when current, a yellow dot when there's something newer.
 private struct UpdateRow: View {
     @Environment(Updater.self) private var updater
     @Environment(AppModel.self) private var model
@@ -77,30 +79,76 @@ private struct UpdateRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text("version \(updater.current?.description ?? "?")")
-                if let note { Text(note).font(.caption).foregroundStyle(.secondary) }
+                if let note {
+                    Text(note).font(.caption).foregroundStyle(.secondary)
+                        .transition(.opacity)
+                }
             }
             Spacer()
-            switch updater.state {
-            case .checking:
-                Text("checking…").foregroundStyle(.secondary)
-            case .installing:
-                Text("updating…").foregroundStyle(.secondary)
-            case .available(let release):
-                Button("update to \(release.version.description)") { Task { await updater.install() } }
-                    .disabled(model.isActive)
-            default:
-                Button("check") { Task { await updater.check() } }
+            HStack(spacing: 8) {
+                UpdateMark(state: updater.state)
+                switch updater.state {
+                case .checking:
+                    Text("checking…").foregroundStyle(.secondary)
+                case .installing:
+                    Text("updating…").foregroundStyle(.secondary)
+                case .available(let release):
+                    Button("update to \(release.version.description)") { Task { await updater.install() } }
+                        .disabled(model.isActive)
+                default:
+                    Button("check") { Task { await updater.check() } }
+                }
             }
         }
+        .animation(.easeInOut(duration: 0.25), value: updater.state)
     }
 
     private var note: String? {
         switch updater.state {
         case .upToDate: "you're up to date."
-        case .available: model.isActive ? "finish this block first. updating restarts the app." : nil
+        case .available: model.isActive ? "finish this block first. updating restarts the app." : "an update is available."
         case .failed(let message): message
         default: nil
         }
+    }
+}
+
+private struct UpdateMark: View {
+    let state: Updater.State
+
+    var body: some View {
+        ZStack {
+            switch state {
+            case .checking, .installing:
+                Spinner()
+            case .upToDate:
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .transition(.scale(scale: 0.5).combined(with: .opacity))
+            case .available:
+                Circle().fill(.yellow)
+                    .frame(width: 10, height: 10)
+                    .transition(.scale(scale: 0.5).combined(with: .opacity))
+            default:
+                EmptyView()
+            }
+        }
+        .frame(width: 14, height: 14)
+    }
+}
+
+/// An open ring turning at an even pace.
+private struct Spinner: View {
+    @State private var turned = false
+
+    var body: some View {
+        Circle()
+            .trim(from: 0, to: 0.72)
+            .stroke(.secondary, style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+            .rotationEffect(.degrees(turned ? 360 : 0))
+            .animation(.linear(duration: 0.8).repeatForever(autoreverses: false), value: turned)
+            .onAppear { turned = true }
+            .transition(.opacity)
     }
 }
 

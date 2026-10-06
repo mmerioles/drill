@@ -65,10 +65,14 @@ class Updater(private val context: Context, private val scope: CoroutineScope) {
         }
     }
 
-    suspend fun check() {
+    /** A check you asked for ([manual]) spins a moment even when GitHub
+     *  answers at once, so the answer reads as an answer. */
+    suspend fun check(manual: Boolean = false) {
         if (state is State.Checking || state is State.Downloading) return
         state = State.Checking
+        val settle = System.currentTimeMillis() + if (manual) 900 else 0
         val found = withContext(Dispatchers.IO) { runCatching { latest() } }
+        delay(settle - System.currentTimeMillis())
         state = found.fold(
             onSuccess = { r ->
                 lastFound = r

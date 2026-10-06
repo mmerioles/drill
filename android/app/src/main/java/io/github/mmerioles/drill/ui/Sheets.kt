@@ -2,6 +2,24 @@ package io.github.mmerioles.drill.ui
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -103,16 +121,25 @@ fun SettingsSheet(model: AppModel, close: () -> Unit, signIn: () -> Unit) {
         val updater = model.updater
         Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             Words("version ${BuildConfig.VERSION_NAME}", Modifier.weight(1f), size = 13.sp, color = ink.faint)
-            when (val s = updater.state) {
-                Updater.State.Checking -> Words("checking…", size = 13.sp, color = ink.faint)
-                Updater.State.Downloading -> Words("downloading…", size = 13.sp, color = ink.faint)
-                is Updater.State.Available ->
-                    Link("update to ${s.release.version}", size = 13.sp, on = true, action = updater::install)
-                is Updater.State.Failed -> Link(s.message, size = 13.sp) {
-                    if (updater.available != null) updater.install() else scope.launch { updater.check() }
+            UpdateMark(updater.state)
+            Spacer(Modifier.width(8.dp))
+            AnimatedContent(
+                updater.state,
+                transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
+                contentKey = { it::class },
+                label = "update",
+            ) { s ->
+                when (s) {
+                    Updater.State.Checking -> Words("checking…", size = 13.sp, color = ink.faint)
+                    Updater.State.Downloading -> Words("downloading…", size = 13.sp, color = ink.faint)
+                    is Updater.State.Available ->
+                        Link("update to ${s.release.version}", size = 13.sp, on = true, action = updater::install)
+                    is Updater.State.Failed -> Link(s.message, size = 13.sp) {
+                        if (updater.available != null) updater.install() else scope.launch { updater.check(manual = true) }
+                    }
+                    Updater.State.UpToDate -> Link("up to date", size = 13.sp) { scope.launch { updater.check(manual = true) } }
+                    Updater.State.Idle -> Link("check", size = 13.sp) { scope.launch { updater.check(manual = true) } }
                 }
-                Updater.State.UpToDate -> Words("up to date", size = 13.sp, color = ink.faint)
-                Updater.State.Idle -> Link("check", size = 13.sp) { scope.launch { updater.check() } }
             }
         }
         Spacer(Modifier.height(18.dp))
@@ -217,5 +244,52 @@ fun InspoSheet(model: AppModel, close: () -> Unit) {
         }
         Spacer(Modifier.height(14.dp))
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Capsule("done", small = true, action = close) }
+    }
+}
+
+private val Green = Color(0xFF3DA35D)
+private val Yellow = Color(0xFFE8B931)
+
+/** How the last update check went: a spinner while looking, a green check
+ *  when current, a yellow dot when there's something newer. */
+@Composable
+private fun UpdateMark(state: Updater.State) {
+    val ink = LocalPalette.current
+    Crossfade(
+        state::class,
+        Modifier.size(14.dp),
+        animationSpec = tween(220),
+        label = "mark",
+    ) { kind ->
+        Box(Modifier.size(14.dp), contentAlignment = Alignment.Center) {
+            when (kind) {
+                Updater.State.Checking::class, Updater.State.Downloading::class -> {
+                    val turn by rememberInfiniteTransition(label = "spin").animateFloat(
+                        0f, 360f, infiniteRepeatable(tween(800, easing = LinearEasing)), label = "turn",
+                    )
+                    Canvas(Modifier.size(12.dp).graphicsLayer { rotationZ = turn }) {
+                        drawArc(
+                            ink.faint, 0f, 260f, useCenter = false,
+                            style = Stroke(1.6.dp.toPx(), cap = StrokeCap.Round),
+                        )
+                    }
+                }
+                Updater.State.UpToDate::class -> Canvas(Modifier.size(14.dp)) {
+                    drawCircle(Green)
+                    val w = size.width
+                    drawPath(
+                        Path().apply {
+                            moveTo(w * 0.28f, w * 0.52f)
+                            lineTo(w * 0.44f, w * 0.68f)
+                            lineTo(w * 0.73f, w * 0.36f)
+                        },
+                        Color.White,
+                        style = Stroke(1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+                    )
+                }
+                Updater.State.Available::class -> Box(Modifier.size(10.dp).clip(CircleShape).background(Yellow))
+                else -> Unit
+            }
+        }
     }
 }

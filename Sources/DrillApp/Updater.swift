@@ -59,14 +59,19 @@ final class Updater {
         }
     }
 
-    /// `quietly` keeps a failed background check from showing an error.
+    /// `quietly` keeps a failed background check from showing an error. A
+    /// check you asked for spins a moment even when GitHub answers at once,
+    /// so the answer reads as an answer.
     func check(quietly: Bool = false) async {
         guard isEnabled, let current, state != .checking, state != .installing else { return }
         state = .checking
-        do {
-            let release = try await Self.fetchLatest()
+        let settle = ContinuousClock.now + (quietly ? .zero : .milliseconds(900))
+        let release: Release?
+        do { release = try await Self.fetchLatest() } catch { release = nil }
+        try? await Task.sleep(until: settle, clock: .continuous)
+        if let release {
             state = release.version > current ? .available(release) : .upToDate
-        } catch {
+        } else {
             state = quietly ? .idle : .failed("couldn't check for updates.")
         }
     }
