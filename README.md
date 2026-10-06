@@ -24,7 +24,7 @@
 - a year heatmap of your focus time
 - menu bar countdown on mac, a notification countdown on android
 - light and dark themes
-- a self-hosted web app that syncs through your own server
+- sync across your devices with an email and a password, or through your own server
 
 ## install
 
@@ -47,6 +47,10 @@ needs android 8+. updates install the same way, over the top; settings shows whe
 building it yourself is in [android/README.md](android/README.md).
 
 ## web app and sync server
+
+press sync and sign in to keep your sessions on every device. by default
+that's drill's hosted sync (on Supabase). to keep your data at home instead,
+run your own server and put its address under server in settings.
 
 drill also runs in the browser, served by a small self-hosted server that
 is also the sync server. syncing needs an account (just an email and a

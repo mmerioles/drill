@@ -10,7 +10,7 @@ import Testing
         defer { server.stop() }
         let api = SyncAPI(server: server.url)
 
-        let me = try await api.signIn(email: "Teto@Example.test", password: "kasane-0401", create: true)
+        let me = try #require(await api.createAccount(email: "Teto@Example.test", password: "kasane-0401").account)
         #expect(me.email == "teto@example.test")
         #expect(me.confirmed == false)
 
@@ -27,12 +27,12 @@ import Testing
         #expect(try await api.pull(after: page.cursor, token: me.token).sessions.isEmpty)
 
         // Another account sees none of it.
-        let other = try await api.signIn(email: "miku@example.test", password: "hatsune-0831", create: true)
+        let other = try #require(await api.createAccount(email: "miku@example.test", password: "hatsune-0831").account)
         #expect(try await api.pull(after: "0", token: other.token).sessions.isEmpty)
 
         // Signing in again works; signing out ends that token.
         let again = try await api.signIn(email: "teto@example.test", password: "kasane-0401")
-        await api.signOut(again.token)
+        await api.signOut(again)
         await #expect(throws: SyncError.signedOut) { try await api.pull(after: "0", token: again.token) }
     }
 
@@ -41,15 +41,15 @@ import Testing
         defer { server.stop() }
         let api = SyncAPI(server: server.url)
 
-        _ = try await api.signIn(email: "teto@example.test", password: "kasane-0401", create: true)
+        _ = try await api.createAccount(email: "teto@example.test", password: "kasane-0401")
         await #expect(throws: SyncError.rejected("wrong email or password")) {
             try await api.signIn(email: "teto@example.test", password: "not-it-at-all")
         }
         await #expect(throws: SyncError.rejected("there's already an account with that email")) {
-            try await api.signIn(email: "teto@example.test", password: "kasane-0401", create: true)
+            try await api.createAccount(email: "teto@example.test", password: "kasane-0401")
         }
         await #expect(throws: SyncError.rejected("use at least 8 characters for the password")) {
-            try await api.signIn(email: "new@example.test", password: "short", create: true)
+            try await api.createAccount(email: "new@example.test", password: "short")
         }
     }
 
@@ -65,6 +65,10 @@ import Testing
         #expect(SyncAPI.serverURL("") == nil)
         #expect(SyncAPI.serverURL("ftp://teto.example.com") == nil)
     }
+}
+
+private extension SignUp {
+    var account: Account? { if case .signedIn(let account) = self { account } else { nil } }
 }
 
 /// web/server.py on a free port with a throwaway data folder.

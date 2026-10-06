@@ -65,7 +65,8 @@ struct MainView: View {
     }
 
     private var syncLabel: String {
-        switch sync.state {
+        if sync.waiting?.confirmed == false { return "check email" }
+        return switch sync.state {
         case .syncing: "syncing…"
         case .offline: "offline"
         case .unconfirmed: "confirm email"

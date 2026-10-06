@@ -22,10 +22,6 @@ final class Sync {
     /// A self-hosted server from settings, or nil for ours.
     private(set) var customServer: String?
 
-    /// Where accounts live unless settings name a self-hosted server. Nil
-    /// until ours is up; until then syncing needs a self-hosted server.
-    static let defaultServer: URL? = nil
-
     private let store: SessionStore
     private let deviceID: String
     private let defaults: UserDefaults
@@ -49,7 +45,10 @@ final class Sync {
 
     var isSignedIn: Bool { account != nil }
 
-    var server: URL? { customServer.flatMap(URL.init(string:)) ?? Self.defaultServer }
+    /// The self-hosted server from settings, or ours on Supabase.
+    var backend: any SyncBackend {
+        customServer.flatMap(URL.init(string:)).map { SyncAPI(server: $0) } ?? SupabaseAPI.hosted
+    }
 
     /// Points sync at a self-hosted server, or back at ours with an empty
     /// string. Only while signed out: a token only works where it was made.
@@ -78,18 +77,92 @@ final class Sync {
 
     // MARK: Account
 
-    /// Signs in, or makes the account first. Everything already on this Mac
-    /// joins the account. Throws a sentence fit to show.
-    func signIn(email: String, password: String, create: Bool) async throws {
-        guard let server else { throw Problem("sync isn't open yet. to self-host, add your server in settings.") }
-        let account: Account
+    /// An account made here whose email link hasn't been clicked yet. Lives
+    /// in memory only, password and all, just long enough to sign in by
+    /// itself once the link is clicked.
+    struct Waiting: Equatable {
+        let email: String
+        fileprivate let password: String
+        /// Nil when signing in found the email unconfirmed: then the only
+        /// way to tell is to try signing in again, less often.
+        fileprivate let userID: String?
+        /// True for a moment once the link is clicked, for the check mark.
+        var confirmed = false
+    }
+
+    private(set) var waiting: Waiting?
+    private var watching: Task<Void, Never>?
+
+    // Each throws a sentence fit to show.
+
+    func signIn(email: String, password: String) async throws {
+        stopWaiting()
         do {
-            account = try await SyncAPI(server: server).signIn(email: email, password: password, create: create)
-        } catch SyncError.rejected(let message) {
-            throw Problem(message)
-        } catch {
-            throw Problem("can't reach the server. try again in a bit.")
+            try await begin(attempt { try await backend.signIn(email: email, password: password) })
+        } catch is Unconfirmed {
+            watch(Waiting(email: email, password: password, userID: nil))
         }
+    }
+
+    /// Makes the account, then signs in, or waits for the email link.
+    func createAccount(email: String, password: String) async throws {
+        stopWaiting()
+        switch try await attempt({ try await backend.createAccount(email: email, password: password) }) {
+        case .signedIn(let account): begin(account)
+        case .confirmByLink(let id): watch(Waiting(email: email, password: password, userID: id))
+        }
+    }
+
+    func resendLink() async throws {
+        guard let waiting else { return }
+        try await attempt { try await backend.resendLink(email: waiting.email) }
+    }
+
+    /// Gives up waiting, for a wrong email or a change of mind.
+    func stopWaiting() {
+        watching?.cancel()
+        watching = nil
+        waiting = nil
+    }
+
+    /// Checks every few seconds whether the link was clicked, then signs in.
+    private func watch(_ start: Waiting) {
+        watching?.cancel()
+        waiting = start
+        let backend = backend
+        let began = Date()
+        watching = Task { [weak self] in
+            while !Task.isCancelled {
+                // Quick at first, while they're likely at their inbox.
+                let quick = began.timeIntervalSinceNow > -30 * 60
+                try? await Task.sleep(for: .seconds(start.userID == nil ? 10 : quick ? 3 : 30))
+                guard !Task.isCancelled else { return }
+                do {
+                    if let id = start.userID, try await !backend.isConfirmed(userID: id) { continue }
+                    let account = try await backend.signIn(email: start.email, password: start.password)
+                    await self?.confirmed(account)
+                    return
+                } catch SyncError.rejected {
+                    self?.stopWaiting() // the password changed elsewhere: sign in by hand
+                    return
+                } catch {
+                    continue // not yet, or offline for a moment
+                }
+            }
+        }
+    }
+
+    private func confirmed(_ account: Account) async {
+        guard waiting != nil, !Task.isCancelled else { return }
+        waiting?.confirmed = true
+        begin(account)
+        try? await Task.sleep(for: .seconds(2.5))
+        if waiting?.confirmed == true { waiting = nil }
+        watching = nil
+    }
+
+    /// Everything already on this Mac joins the account.
+    private func begin(_ account: Account) {
         save(account)
         // Upload everything, and catch up from the start.
         defaults.removeObject(forKey: Keys.pushedAt)
@@ -98,63 +171,100 @@ final class Sync {
         syncNow()
     }
 
+    private func attempt<T>(_ call: () async throws -> T) async throws -> T {
+        do {
+            return try await call()
+        } catch SyncError.rejected(let message) {
+            throw Problem(message)
+        } catch SyncError.unconfirmed {
+            throw Unconfirmed()
+        } catch {
+            throw Problem("can't reach the server. try again in a bit.")
+        }
+    }
+
     func signOut() {
-        if let token = account?.token, let server {
-            let api = SyncAPI(server: server)
-            Task { await api.signOut(token) }
+        stopWaiting()
+        if let account {
+            let backend = backend
+            Task { await backend.signOut(account) }
         }
         running?.cancel()
         save(nil)
         state = .signedOut
     }
 
+    /// Signing in to an account whose email isn't confirmed yet.
+    private struct Unconfirmed: Error {}
     struct Problem: Error { let message: String; init(_ m: String) { message = m } }
 
     // MARK: Syncing
 
     /// Starts a sync unless one is already running.
     func syncNow() {
-        guard running == nil, let account, let server else { return }
-        let api = SyncAPI(server: server)
+        guard running == nil, let account else { return }
+        let backend = backend
         running = Task { [weak self] in
-            await self?.run(api, token: account.token)
+            await self?.run(backend, as: account)
             self?.running = nil
         }
     }
 
-    private func run(_ api: SyncAPI, token: String) async {
+    private func run(_ api: any SyncBackend, as start: Account) async {
         state = .syncing
+        var token = start.token
         do {
-            let mark = Date()
-            let since = defaults.object(forKey: Keys.pushedAt) as? Date ?? .distantPast
-            let changes = try store.changes(since: since)
-            for start in stride(from: 0, to: changes.count, by: 200) {
-                try await api.push(Array(changes[start..<min(start + 200, changes.count)]),
-                                   deviceID: deviceID, token: token)
+            // Hosted tokens last an hour: swap one that's nearly out, and
+            // once more if the server turns it down anyway.
+            token = try await fresh(api, start, force: false)
+            do {
+                try await exchange(api, token: token)
+            } catch SyncError.signedOut where start.refreshToken != nil {
+                token = try await fresh(api, start, force: true)
+                try await exchange(api, token: token)
             }
-            defaults.set(mark, forKey: Keys.pushedAt)
-
-            var pulled = false
-            var page: SyncAPI.Page
-            repeat {
-                page = try await api.pull(after: defaults.string(forKey: Keys.cursor) ?? "0", token: token)
-                for session in page.sessions { try store.save(session) }
-                pulled = pulled || !page.sessions.isEmpty
-                defaults.set(page.cursor, forKey: Keys.cursor)
-            } while page.more
-            if pulled { onPulled() }
-
             guard account?.token == token else { return } // signed out meanwhile
             state = .idle
             flashSynced()
         } catch SyncError.signedOut {
+            guard account?.email == start.email else { return }
             save(nil)
             state = .signedOut
         } catch SyncError.unconfirmed {
             state = .unconfirmed
         } catch {
-            if account?.token == token { state = .offline }
+            if account?.email == start.email { state = .offline }
         }
+    }
+
+    /// A token good for a while, saved for next time.
+    private func fresh(_ api: any SyncBackend, _ start: Account, force: Bool) async throws -> String {
+        let current = account ?? start
+        let fresh = try await api.refreshed(current, force: force)
+        if fresh != current, account?.email == start.email { save(fresh) }
+        return fresh.token
+    }
+
+    /// Push what changed here, then pull what changed elsewhere.
+    private func exchange(_ api: any SyncBackend, token: String) async throws {
+        let mark = Date()
+        let since = defaults.object(forKey: Keys.pushedAt) as? Date ?? .distantPast
+        let changes = try store.changes(since: since)
+        for start in stride(from: 0, to: changes.count, by: 200) {
+            try await api.push(Array(changes[start..<min(start + 200, changes.count)]),
+                               deviceID: deviceID, token: token)
+        }
+        defaults.set(mark, forKey: Keys.pushedAt)
+
+        var pulled = false
+        var page: SyncPage
+        repeat {
+            page = try await api.pull(after: defaults.string(forKey: Keys.cursor) ?? "0", token: token)
+            for session in page.sessions { try store.save(session) }
+            pulled = pulled || !page.sessions.isEmpty
+            defaults.set(page.cursor, forKey: Keys.cursor)
+        } while page.more
+        if pulled { onPulled() }
     }
 
     private func flashSynced() {

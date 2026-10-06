@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>drill</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="../icon.png">
+  <meta name="theme-color" content="#F2F0ED" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121211" media="(prefers-color-scheme: dark)">
+  <style>
+    :root {
+      --paper: #F2F0ED;
+      --ink: #2B2A2F;
+      --faint: rgba(43, 42, 47, .5);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #121211;
+        --ink: #F1F0EB;
+        --faint: rgba(241, 240, 235, .5);
+      }
+    }
+    * { box-sizing: border-box; margin: 0; }
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    main {
+      min-height: 100vh;
+      padding: 72px 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .icon { width: 72px; height: 72px; }
+    h1 { font-size: 26px; font-weight: 700; letter-spacing: -.01em; margin-top: 18px; }
+    p { color: var(--faint); margin-top: 6px; max-width: 340px; }
+  </style>
+</head>
+<body>
+  <!-- Where the link in drill's confirmation email lands. Supabase has
+       confirmed the email before sending people here; the app notices on
+       its own. -->
+  <main>
+    <img class="icon" src="../icon.png" alt="">
+    <h1 id="title">you're confirmed</h1>
+    <p id="note">head back to drill. it'll sign you in by itself.</p>
+  </main>
+  <script>
+    // Supabase puts a session (or an error) after the #. The app signs in on
+    // its own, so drop it rather than leave a token in the address bar.
+    const hash = new URLSearchParams(location.hash.slice(1));
+    if (hash.has("error")) {
+      document.getElementById("title").textContent = "that link didn't work";
+      document.getElementById("note").textContent =
+        "it may have expired or been used already. in drill, press send it again.";
+    }
+    if (location.hash) history.replaceState(null, "", location.pathname);
+  </script>
+</body>
+</html>

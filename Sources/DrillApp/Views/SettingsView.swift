@@ -117,38 +117,16 @@ private struct UpdateMark: View {
     let state: Updater.State
 
     var body: some View {
-        ZStack {
-            switch state {
-            case .checking, .installing:
-                Spinner()
-            case .upToDate:
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                    .transition(.scale(scale: 0.5).combined(with: .opacity))
-            case .available:
-                Circle().fill(.yellow)
-                    .frame(width: 10, height: 10)
-                    .transition(.scale(scale: 0.5).combined(with: .opacity))
-            default:
-                EmptyView()
-            }
-        }
-        .frame(width: 14, height: 14)
+        StatusMark(status: status)
     }
-}
 
-/// An open ring turning at an even pace.
-private struct Spinner: View {
-    @State private var turned = false
-
-    var body: some View {
-        Circle()
-            .trim(from: 0, to: 0.72)
-            .stroke(.secondary, style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
-            .rotationEffect(.degrees(turned ? 360 : 0))
-            .animation(.linear(duration: 0.8).repeatForever(autoreverses: false), value: turned)
-            .onAppear { turned = true }
-            .transition(.opacity)
+    private var status: StatusMark.Status {
+        switch state {
+        case .checking, .installing: .working
+        case .upToDate: .done
+        case .available: .pending
+        default: .none
+        }
     }
 }
 
@@ -160,21 +138,31 @@ private struct AccountRow: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(sync.account?.email ?? "sync")
+                Text(sync.account?.email ?? sync.waiting?.email ?? "sync")
                 Text(note).font(.caption).foregroundStyle(.secondary)
+                    .contentTransition(.opacity)
             }
             Spacer()
-            if sync.isSignedIn {
+            if let waiting = sync.waiting {
+                StatusMark(status: waiting.confirmed ? .done : .pending, breathing: true)
+            }
+            if sync.waiting?.confirmed == false {
+                Button("cancel", action: sync.stopWaiting)
+            } else if sync.isSignedIn {
                 Button("sign out", action: sync.signOut)
             } else {
                 Button("sign in") { signingIn = true }
             }
         }
         .sheet(isPresented: $signingIn) { AccountSheet() }
+        .animation(.easeInOut(duration: 0.25), value: sync.waiting)
     }
 
     private var note: String {
-        switch sync.state {
+        if let waiting = sync.waiting {
+            return waiting.confirmed ? "confirmed. you're in." : "click the link we emailed you. this updates by itself."
+        }
+        return switch sync.state {
         case .signedOut: "sign in to keep your sessions on every device."
         case .syncing: "syncing…"
         case .idle: "synced."
@@ -192,7 +180,7 @@ private struct ServerRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            TextField("server", text: $text, prompt: Text(Sync.defaultServer == nil ? "" : "drill's"))
+            TextField("server", text: $text, prompt: Text("drill's"))
                 .multilineTextAlignment(.trailing)
                 .disabled(sync.isSignedIn)
                 .onSubmit(save)
@@ -204,8 +192,7 @@ private struct ServerRow: View {
     private var note: String {
         if let problem { return problem }
         if sync.isSignedIn { return "sign out to change servers." }
-        return Sync.defaultServer == nil
-            ? "put in your own server to self-host." : "leave empty to use ours, or put in your own to self-host."
+        return "leave empty to use ours, or put in your own to self-host."
     }
 
     private func save() {

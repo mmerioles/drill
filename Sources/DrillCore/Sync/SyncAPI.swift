@@ -1,17 +1,59 @@
 import Foundation
 
 /// Who you're signed in as. The token stands in for the password on every
-/// call after sign-in.
+/// call after sign-in. Hosted tokens run out after an hour and come with a
+/// refresh token to get the next one; self-hosted tokens never run out.
 public struct Account: Codable, Equatable, Sendable {
     public var email: String
     public var token: String
     public var confirmed: Bool
+    public var refreshToken: String?
+    public var expiresAt: Date?
 
-    public init(email: String, token: String, confirmed: Bool) {
+    public init(email: String, token: String, confirmed: Bool,
+                refreshToken: String? = nil, expiresAt: Date? = nil) {
         self.email = email
         self.token = token
         self.confirmed = confirmed
+        self.refreshToken = refreshToken
+        self.expiresAt = expiresAt
     }
+}
+
+/// Where an account lives: drill's hosted sync (`SupabaseAPI`) or a
+/// self-hosted server (`SyncAPI`). Both throw `SyncError`.
+public protocol SyncBackend: Sendable {
+    func signIn(email: String, password: String) async throws -> Account
+    func createAccount(email: String, password: String) async throws -> SignUp
+    /// Whether the account made by `createAccount` has had its email link
+    /// clicked yet.
+    func isConfirmed(userID: String) async throws -> Bool
+    /// Sends the confirmation email again.
+    func resendLink(email: String) async throws
+    /// The account with a token good for a while yet: the same one unless
+    /// it's about to run out, or `force` says the server turned it down.
+    func refreshed(_ account: Account, force: Bool) async throws -> Account
+    /// Best effort: signing out locally never waits on it.
+    func signOut(_ account: Account) async
+    func push(_ sessions: [FocusSession], deviceID: String, token: String) async throws
+    func pull(after cursor: String, token: String) async throws -> SyncPage
+}
+
+/// How making an account went.
+public enum SignUp: Equatable, Sendable {
+    /// Ready to sync.
+    case signedIn(Account)
+    /// Waiting on the link in the confirmation email; sign in once
+    /// `isConfirmed(userID:)` says so.
+    case confirmByLink(userID: String)
+}
+
+/// One page of a pull: rows after the cursor, the cursor to pull from next,
+/// and whether there's more.
+public struct SyncPage: Decodable, Sendable {
+    public var sessions: [FocusSession]
+    public var cursor: String
+    public var more: Bool
 }
 
 public enum SyncError: Error, Equatable, Sendable {
@@ -26,9 +68,9 @@ public enum SyncError: Error, Equatable, Sendable {
     case rejected(String)
 }
 
-/// The sync server's API, as in docs/SYNC.md. Stateless: callers keep the
-/// account, cursor and push mark.
-public struct SyncAPI: Sendable {
+/// A self-hosted sync server's API, as in docs/SYNC.md. Stateless: callers
+/// keep the account, cursor and push mark.
+public struct SyncAPI: SyncBackend {
     public var server: URL
     private let session: URLSession
 
@@ -51,15 +93,32 @@ public struct SyncAPI: Sendable {
 
     // MARK: Accounts
 
-    /// Signs in, or makes the account first when `create` is set.
-    public func signIn(email: String, password: String, create: Bool = false) async throws -> Account {
+    public func signIn(email: String, password: String) async throws -> Account {
         let body = try JSONEncoder().encode(["email": email, "password": password])
-        return try await call(create ? "v1/accounts" : "v1/signin", body: body, as: Account.self)
+        return try await call("v1/signin", body: body, as: Account.self)
     }
 
-    /// Revokes the token. Best effort: signing out locally never waits on it.
-    public func signOut(_ token: String) async {
-        _ = try? await call("v1/signout", token: token, body: Data("{}".utf8), as: Empty.self)
+    /// Always signed in: a self-hosted account syncs before it's confirmed,
+    /// unless the server says otherwise.
+    public func createAccount(email: String, password: String) async throws -> SignUp {
+        let body = try JSONEncoder().encode(["email": email, "password": password])
+        return .signedIn(try await call("v1/accounts", body: body, as: Account.self))
+    }
+
+    public func isConfirmed(userID: String) async throws -> Bool { true }
+
+    public func resendLink(email: String) async throws {
+        throw SyncError.rejected("this server sends its own confirmation emails")
+    }
+
+    public func refreshed(_ account: Account, force: Bool) async throws -> Account {
+        if force { throw SyncError.signedOut }
+        return account
+    }
+
+    /// Revokes the token.
+    public func signOut(_ account: Account) async {
+        _ = try? await call("v1/signout", token: account.token, body: Data("{}".utf8), as: Empty.self)
     }
 
     // MARK: Sessions
@@ -70,15 +129,9 @@ public struct SyncAPI: Sendable {
         _ = try await call("v1/sessions/push", token: token, body: body, as: Empty.self)
     }
 
-    public struct Page: Decodable, Sendable {
-        public var sessions: [FocusSession]
-        public var cursor: String
-        public var more: Bool
-    }
-
-    public func pull(after cursor: String, token: String) async throws -> Page {
+    public func pull(after cursor: String, token: String) async throws -> SyncPage {
         let path = "v1/sessions/pull?cursor=" + (cursor.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "0")
-        return try await call(path, token: token, as: Page.self)
+        return try await call(path, token: token, as: SyncPage.self)
     }
 
     // MARK: Plumbing

@@ -92,6 +92,32 @@ Dates are ISO-8601 with a zone; the server returns whole-second UTC (`Z`),
 which Swift's `.iso8601` strategy decodes. IDs come back uppercase. Each
 client buckets sessions into days in its own time zone.
 
+## Hosted sync (Supabase)
+
+With no server in settings, the apps sync through drill's Supabase project
+(`SupabaseAPI.swift`, `SupabaseApi.kt`). Same rows, same merge rule, same
+cursor; only the calls differ. The schema is
+`supabase/migrations/20261005000000_sessions.sql`.
+
+- **Accounts** are Supabase Auth users (email and password). Signing up
+  (`/auth/v1/signup`) emails a link that lands on `site/confirmed/`. The
+  app keeps the new user's id and asks
+  `POST /rest/v1/rpc/email_confirmed { user_id }` every few seconds; once
+  it says `true`, the app signs in by itself. `/auth/v1/resend` sends the
+  link again. Sign-in is
+  `/auth/v1/token?grant_type=password`. Access tokens last an hour; the apps
+  swap them with the refresh token before a sync, and once more if a call
+  comes back 401.
+- **Push** is `POST /rest/v1/rpc/push_sessions { sessions: [FocusSession] }`
+  → the number of rows that won. Accounts that haven't confirmed their email
+  get `403` (`42501`).
+- **Pull** is `POST /rest/v1/rpc/pull_sessions { after: <cursor> }` →
+  `{ sessions, cursor, more }`, as above.
+
+Clients send the project's publishable key as `apikey`. It's public by
+design; the table only lets each user read their own rows, and only
+`push_sessions` writes.
+
 ## Client loop
 
 `web/static/store.js`, `Sources/DrillApp/Sync.swift` and the android

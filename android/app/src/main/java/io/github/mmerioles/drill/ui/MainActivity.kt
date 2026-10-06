@@ -180,7 +180,7 @@ private fun Header(model: AppModel, tick: Long, open: (Open) -> Unit) {
         DrillMark(tick)
         Words("drill", size = 20.sp, weight = FontWeight.Bold)
         Spacer(Modifier.weight(1f))
-        val word = when (sync.state) {
+        val word = if (sync.waiting?.confirmed == false) "check email" else when (sync.state) {
             Sync.State.SignedOut -> "sync"
             Sync.State.Syncing -> "syncing…"
             Sync.State.Offline -> "offline"

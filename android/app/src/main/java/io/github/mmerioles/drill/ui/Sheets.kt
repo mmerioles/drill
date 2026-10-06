@@ -3,22 +3,14 @@ package io.github.mmerioles.drill.ui
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedContent
+import kotlinx.coroutines.delay
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -88,7 +80,13 @@ fun SettingsSheet(model: AppModel, close: () -> Unit, signIn: () -> Unit) {
         }
         Group {
             val account = sync.account
-            if (account == null) {
+            val waiting = sync.waiting
+            if (waiting != null) {
+                SettingRow(waiting.email) {
+                    StatusMark(if (waiting.confirmed) Mark.Done else Mark.Pending, breathing = true)
+                    if (!waiting.confirmed) Link("cancel", action = sync::stopWaiting)
+                }
+            } else if (account == null) {
                 var server by remember { mutableStateOf(sync.customServer.orEmpty()) }
                 var problem by remember { mutableStateOf<String?>(null) }
                 SettingRow("server") {
@@ -108,7 +106,9 @@ fun SettingsSheet(model: AppModel, close: () -> Unit, signIn: () -> Unit) {
             } else {
                 SettingRow(account.email) { Link("sign out", action = sync::signOut) }
             }
-            val note = when (sync.state) {
+            val note = if (waiting != null) {
+                if (waiting.confirmed) "confirmed. you're in." else "click the link we emailed you. this updates by itself."
+            } else when (sync.state) {
                 Sync.State.SignedOut -> "sign in to keep your sessions on every device."
                 Sync.State.Syncing -> "syncing…"
                 Sync.State.Idle -> "synced."
@@ -147,48 +147,121 @@ fun SettingsSheet(model: AppModel, close: () -> Unit, signIn: () -> Unit) {
     }
 }
 
+/** Sign in, or make an account: an email and a password, then a click on
+ *  the link in the confirmation email, which the sheet notices by itself.
+ *  Like AccountSheet.swift on the mac. */
 @Composable
 fun AccountSheet(model: AppModel, close: () -> Unit) {
     val ink = LocalPalette.current
+    val sync = model.sync
     val scope = rememberCoroutineScope()
     var creating by remember { mutableStateOf(false) }
-    var email by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf(sync.waiting?.email.orEmpty()) }
     var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    val waiting = sync.waiting
+
+    /** Runs one call at a time; a sentence that comes back is shown. */
+    fun working(work: suspend () -> String?) {
+        if (busy) return
+        busy = true
+        error = ""
+        scope.launch {
+            work()?.let { error = it }
+            busy = false
+        }
+    }
 
     fun submit() {
-        if (busy) return
         if (email.isBlank() || password.length < 8) {
             error = if (email.isBlank()) "enter your email." else "passwords are at least 8 characters."
             return
         }
-        busy = true
-        scope.launch {
-            val problem = model.sync.signIn(email, password, creating)
-            busy = false
-            if (problem == null) close() else error = problem
+        working {
+            note = ""
+            val problem = if (creating) sync.createAccount(email, password) else sync.signIn(email, password)
+            if (problem == null && sync.waiting == null) close()
+            problem
+        }
+    }
+
+    fun resend() = working {
+        val problem = sync.resendLink()
+        if (problem == null) note = "sent another link to ${sync.waiting?.email.orEmpty()}."
+        problem
+    }
+
+    // Once the link is clicked: a beat on the check mark, then out.
+    LaunchedEffect(waiting?.confirmed) {
+        if (waiting?.confirmed == true) {
+            delay(1400)
+            close()
         }
     }
 
     Sheet(close) {
-        Words(if (creating) "create an account" else "sign in to sync", Modifier.padding(bottom = 14.dp),
-            size = 18.sp, weight = FontWeight.Bold)
-        Group {
-            SettingRow("email") {
-                Field(email, { email = it; error = "" }, Modifier.width(190.dp), keyboard = KeyboardType.Email,
-                    weight = FontWeight.Normal)
+        AnimatedContent(
+            waiting != null,
+            transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
+            label = "step",
+        ) { linkStep ->
+            Column {
+                val w = sync.waiting
+                if (!linkStep || w == null) {
+                    Words(if (creating) "create an account" else "sign in to sync", Modifier.padding(bottom = 14.dp),
+                        size = 18.sp, weight = FontWeight.Bold)
+                    Group {
+                        SettingRow("email") {
+                            Field(email, { email = it; error = "" }, Modifier.width(190.dp), keyboard = KeyboardType.Email,
+                                weight = FontWeight.Normal)
+                        }
+                        SettingRow("password") {
+                            Field(password, { password = it; error = "" }, Modifier.width(190.dp), password = true,
+                                weight = FontWeight.Normal, done = ::submit)
+                        }
+                    }
+                    if (error.isNotEmpty()) {
+                        Words(error, Modifier.padding(bottom = 10.dp), size = 13.sp, color = ink.accent)
+                    } else {
+                        Words(if (creating) "at least 8 characters. we'll email you a link to confirm." else "",
+                            Modifier.padding(bottom = 10.dp), size = 13.sp, color = ink.faint)
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Link(if (creating) "i have an account" else "create an account") { creating = !creating; error = "" }
+                        Spacer(Modifier.weight(1f))
+                        Capsule(if (creating) "create" else "sign in", small = true, enabled = !busy, action = ::submit)
+                    }
+                } else {
+                    Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Crossfade(w.confirmed, Modifier.weight(1f), animationSpec = tween(220), label = "title") { done ->
+                            Words(if (done) "you're in" else "check your email", size = 18.sp, weight = FontWeight.Bold)
+                        }
+                        StatusMark(if (w.confirmed) Mark.Done else Mark.Pending, breathing = true, size = 21.dp)
+                    }
+                    Crossfade(w.confirmed, animationSpec = tween(220), label = "note") { done ->
+                        Words(
+                            when {
+                                done -> "confirmed. syncing now."
+                                note.isNotEmpty() -> note
+                                else -> "we sent a link to ${w.email}. tap it, and this moves along by itself."
+                            },
+                            Modifier.padding(bottom = 10.dp), size = 13.sp, color = ink.faint,
+                        )
+                    }
+                    Words(error, Modifier.padding(bottom = 10.dp), size = 13.sp, color = ink.accent)
+                    val links by animateFloatAsState(if (w.confirmed) 0f else 1f, tween(250), label = "links")
+                    Row(Modifier.fillMaxWidth().graphicsLayer { alpha = links }, verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Link("wrong email?", size = 13.sp) { sync.stopWaiting(); error = "" }
+                        Link("send it again", size = 13.sp) { resend() }
+                        Spacer(Modifier.weight(1f))
+                        // Closing keeps waiting; settings shows how it's going.
+                        Link("close", size = 13.sp, action = close)
+                    }
+                }
             }
-            SettingRow("password") {
-                Field(password, { password = it; error = "" }, Modifier.width(190.dp), password = true,
-                    weight = FontWeight.Normal, done = ::submit)
-            }
-        }
-        Words(error, Modifier.padding(bottom = 10.dp), size = 13.sp, color = ink.accent)
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Link(if (creating) "i have an account" else "create an account") { creating = !creating; error = "" }
-            Spacer(Modifier.weight(1f))
-            Capsule(if (creating) "create" else "sign in", small = true, enabled = !busy, action = ::submit)
         }
     }
 }
@@ -247,49 +320,16 @@ fun InspoSheet(model: AppModel, close: () -> Unit) {
     }
 }
 
-private val Green = Color(0xFF3DA35D)
-private val Yellow = Color(0xFFE8B931)
-
 /** How the last update check went: a spinner while looking, a green check
  *  when current, a yellow dot when there's something newer. */
 @Composable
 private fun UpdateMark(state: Updater.State) {
-    val ink = LocalPalette.current
-    Crossfade(
-        state::class,
-        Modifier.size(14.dp),
-        animationSpec = tween(220),
-        label = "mark",
-    ) { kind ->
-        Box(Modifier.size(14.dp), contentAlignment = Alignment.Center) {
-            when (kind) {
-                Updater.State.Checking::class, Updater.State.Downloading::class -> {
-                    val turn by rememberInfiniteTransition(label = "spin").animateFloat(
-                        0f, 360f, infiniteRepeatable(tween(800, easing = LinearEasing)), label = "turn",
-                    )
-                    Canvas(Modifier.size(12.dp).graphicsLayer { rotationZ = turn }) {
-                        drawArc(
-                            ink.faint, 0f, 260f, useCenter = false,
-                            style = Stroke(1.6.dp.toPx(), cap = StrokeCap.Round),
-                        )
-                    }
-                }
-                Updater.State.UpToDate::class -> Canvas(Modifier.size(14.dp)) {
-                    drawCircle(Green)
-                    val w = size.width
-                    drawPath(
-                        Path().apply {
-                            moveTo(w * 0.28f, w * 0.52f)
-                            lineTo(w * 0.44f, w * 0.68f)
-                            lineTo(w * 0.73f, w * 0.36f)
-                        },
-                        Color.White,
-                        style = Stroke(1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
-                    )
-                }
-                Updater.State.Available::class -> Box(Modifier.size(10.dp).clip(CircleShape).background(Yellow))
-                else -> Unit
-            }
-        }
-    }
+    StatusMark(
+        when (state) {
+            Updater.State.Checking, Updater.State.Downloading -> Mark.Working
+            Updater.State.UpToDate -> Mark.Done
+            is Updater.State.Available -> Mark.Pending
+            else -> Mark.None
+        },
+    )
 }
