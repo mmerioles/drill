@@ -17,6 +17,7 @@ import io.github.mmerioles.tetodoro.core.TimerConfig
 import io.github.mmerioles.tetodoro.core.Transition
 import io.github.mmerioles.tetodoro.data.SessionStore
 import io.github.mmerioles.tetodoro.data.Sync
+import io.github.mmerioles.tetodoro.data.Updater
 import io.github.mmerioles.tetodoro.timer.Notifier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -53,6 +54,7 @@ class AppModel(private val app: Application) {
         ?: "android-${UUID.randomUUID().toString().uppercase()}".also { prefs.edit().putString("deviceID", it).apply() }
 
     val sync = Sync(store, deviceID, prefs, scope, onPulled = ::reload)
+    val updater = Updater(app, scope)
 
     var config by mutableStateOf(loadConfig())
         private set

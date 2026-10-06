@@ -52,6 +52,7 @@ import io.github.mmerioles.tetodoro.TetodoroApp
 import io.github.mmerioles.tetodoro.Theme
 import io.github.mmerioles.tetodoro.core.Status
 import io.github.mmerioles.tetodoro.data.Sync
+import io.github.mmerioles.tetodoro.data.Updater
 import io.github.mmerioles.tetodoro.ink.Doodle
 import io.github.mmerioles.tetodoro.ink.LocalPalette
 import io.github.mmerioles.tetodoro.ink.Palette
@@ -62,6 +63,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        model.updater.start()
         setContent { App(model) }
     }
 
@@ -70,6 +72,7 @@ class MainActivity : ComponentActivity() {
         model.catchUp()
         model.sync.syncNow()
         model.reload()
+        model.updater.resume()
     }
 }
 
@@ -183,6 +186,15 @@ private fun Header(model: AppModel, tick: Long, open: (Open) -> Unit) {
             Sync.State.Offline -> "offline"
             Sync.State.Unconfirmed -> "confirm email"
             Sync.State.Idle -> if (sync.justSynced) "synced" else "sync"
+        }
+        // A newer version, offered between blocks: installing restarts the app.
+        val updater = model.updater
+        if (updater.state is Updater.State.Downloading) {
+            Words("updating…", size = 14.sp, color = LocalPalette.current.faint)
+            Spacer(Modifier.padding(start = 6.dp))
+        } else if (updater.available != null && model.timer.status is Status.Idle) {
+            Link("update", on = true, action = updater::install)
+            Spacer(Modifier.padding(start = 6.dp))
         }
         Link(word) { if (sync.isSignedIn) sync.syncNow() else open(Open.Account) }
         Spacer(Modifier.padding(start = 6.dp))

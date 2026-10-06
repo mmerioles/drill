@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,16 +40,14 @@ import io.github.mmerioles.tetodoro.core.Inspo
 import io.github.mmerioles.tetodoro.data.Sync
 import io.github.mmerioles.tetodoro.data.Updater
 import io.github.mmerioles.tetodoro.ink.LocalPalette
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingsSheet(model: AppModel, close: () -> Unit, signIn: () -> Unit) {
     val ink = LocalPalette.current
     val c = model.config
     val sync = model.sync
-    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     Sheet(close) {
         Group {
@@ -103,14 +100,19 @@ fun SettingsSheet(model: AppModel, close: () -> Unit, signIn: () -> Unit) {
             Words(note, Modifier.padding(bottom = 12.dp), size = 13.sp, color = ink.faint)
         }
 
-        var update by remember { mutableStateOf<Updater.Release?>(null) }
-        LaunchedEffect(Unit) { update = withContext(Dispatchers.IO) { Updater.newer() } }
+        val updater = model.updater
         Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             Words("version ${BuildConfig.VERSION_NAME}", Modifier.weight(1f), size = 13.sp, color = ink.faint)
-            update?.let { release ->
-                Link("update to ${release.version}", size = 13.sp, on = true) {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.apk)))
+            when (val s = updater.state) {
+                Updater.State.Checking -> Words("checking…", size = 13.sp, color = ink.faint)
+                Updater.State.Downloading -> Words("downloading…", size = 13.sp, color = ink.faint)
+                is Updater.State.Available ->
+                    Link("update to ${s.release.version}", size = 13.sp, on = true, action = updater::install)
+                is Updater.State.Failed -> Link(s.message, size = 13.sp) {
+                    if (updater.available != null) updater.install() else scope.launch { updater.check() }
                 }
+                Updater.State.UpToDate -> Words("up to date", size = 13.sp, color = ink.faint)
+                Updater.State.Idle -> Link("check", size = 13.sp) { scope.launch { updater.check() } }
             }
         }
         Spacer(Modifier.height(18.dp))
