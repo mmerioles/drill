@@ -171,7 +171,7 @@ final class Sync {
         syncNow()
     }
 
-    private func attempt<T>(_ call: () async throws -> T) async throws -> T {
+    private func attempt<T: Sendable>(_ call: () async throws -> T) async throws -> T {
         do {
             return try await call()
         } catch SyncError.rejected(let message) {
