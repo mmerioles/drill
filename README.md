@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  a quiet pomodoro timer for mac and android.<br>
+  a quiet pomodoro timer<br>
   <a href="https://mmerioles.github.io/tetodoro/"><b>mmerioles.github.io/tetodoro</b></a>
 </p>
 
