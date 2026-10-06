@@ -156,17 +156,51 @@ function renderTimer() {
   }
 }
 
-function renderTags() {
+/** Tags to offer, most recent first; the demo's sample classes come after yours. */
+function tagList() {
   const tags = store.tags(6);
+  if (demo) for (const t of SAMPLE_TAGS) if (!tags.includes(t) && tags.length < 6) tags.push(t);
+  return tags;
+}
+
+let filterTags = null;
+function renderTags() {
+  const tags = tagList();
   if (tagFilter && !tags.includes(tagFilter)) tagFilter = null;
 
   const current = $("tag").value.trim().toLowerCase();
   $("suggest").replaceChildren(...tags.filter((t) => t !== current).slice(0, 4).map((t) =>
     button(t, () => { $("tag").value = t; save(KEY.tag, t); renderTags(); })));
 
-  $("filter").replaceChildren(
-    button("all", () => { tagFilter = null; renderYear(); renderTags(); }, tagFilter === null),
-    ...tags.map((t) => button(t, () => { tagFilter = t; renderYear(); renderTags(); }, tagFilter === t)));
+  // The tabs are only rebuilt when the tags change, so the underline can
+  // slide from one tab to the next.
+  const filter = $("filter");
+  if (String(tags) !== String(filterTags)) {
+    filterTags = tags;
+    const pick = (t) => () => { if (tagFilter === t) return; tagFilter = t; renderYear(true); renderTags(); };
+    filter.replaceChildren(button("all", pick(null)), ...tags.map((t) => button(t, pick(t))),
+                           Object.assign(document.createElement("i"), { className: "underline" }));
+  }
+  const buttons = [...filter.querySelectorAll(".link")];
+  buttons.forEach((b, i) => b.setAttribute("aria-pressed", String((i === 0 ? null : tags[i - 1]) === tagFilter)));
+  const on = buttons[tagFilter === null ? 0 : tags.indexOf(tagFilter) + 1];
+  const line = filter.querySelector(".underline");
+  line.style.width = `${on.offsetWidth}px`;
+  line.style.transform = `translateX(${on.offsetLeft}px)`;
+  fadeEdge();
+  // A chosen tab under a faded edge slides to the middle of the row. Only
+  // the row scrolls, never the page around it.
+  const fade = 28, left = filter.scrollLeft, right = left + filter.clientWidth;
+  if (filter.scrollWidth > filter.clientWidth &&
+      (on.offsetLeft + on.offsetWidth > right - fade || on.offsetLeft < left + fade)) {
+    filter.scrollTo({ left: on.offsetLeft + on.offsetWidth / 2 - filter.clientWidth / 2, behavior: "smooth" });
+  }
+}
+
+function fadeEdge() {
+  const filter = $("filter");
+  filter.classList.toggle("more-left", filter.scrollLeft > 1);
+  filter.classList.toggle("more-right", filter.scrollLeft + filter.clientWidth < filter.scrollWidth - 1);
 }
 
 function button(label, action, pressed) {
@@ -179,20 +213,31 @@ function button(label, action, pressed) {
   return b;
 }
 
-/** A made-up year of focus for the demo, the same on every visit. */
+/** The demo's made-up year: a few classes, each with its own rhythm, the
+ *  same on every visit. A class takes `[min, max]` blocks on the weekdays it
+ *  meets (0 is sunday), in the months it runs (0 is january). */
+const SAMPLE = {
+  "15-213": { days: [1, 2, 3, 4], months: [0, 1, 2, 3, 4, 8, 9, 10, 11], blocks: [1, 4], skip: 0.25 },
+  "linear algebra": { days: [1, 3, 5], months: [0, 1, 2, 3, 4], blocks: [1, 3], skip: 0.2 },
+  "japanese": { days: [0, 1, 2, 3, 4, 5, 6], months: [...Array(12).keys()], blocks: [1, 2], skip: 0.3 },
+  "piano": { days: [0, 6], months: [5, 6, 7, 8, 9], blocks: [1, 3], skip: 0.3 },
+};
+const SAMPLE_TAGS = Object.keys(SAMPLE);
 let sample = null;
 function sampleYear() {
   if (sample) return sample;
   let seed = 7;
   const next = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
   sample = [];
-  for (let d = 1; d < 365; d++) {
-    if (next() < 0.35) continue;
+  for (let d = 1; d < 371; d++) {
     const day = new Date();
     day.setHours(10, 0, 0, 0);
     day.setDate(day.getDate() - d);
-    const blocks = 1 + Math.floor(next() * 6);
-    sample.push({ startedAt: day.toISOString(), focusSeconds: blocks * 25 * 60 });
+    for (const [tag, c] of Object.entries(SAMPLE)) {
+      if (!c.days.includes(day.getDay()) || !c.months.includes(day.getMonth()) || next() < c.skip) continue;
+      const blocks = c.blocks[0] + Math.floor(next() * (c.blocks[1] - c.blocks[0] + 1));
+      sample.push({ startedAt: day.toISOString(), focusSeconds: blocks * 25 * 60, tag });
+    }
   }
   return sample;
 }
@@ -202,13 +247,30 @@ const GAP = 0.24, MONTH_ROW = 16, MARGIN = 3;
 const INK = [0, 0.16, 0.36, 0.62, 0.92];
 let heat = null, metrics = null;
 
-function renderYear() {
+let cells = [], drawn = "";
+
+const cellFill = (level) =>
+  level > 0 ? `color-mix(in srgb, var(--accent) ${INK[level] * 100}%, transparent)` : "var(--wash)";
+
+/** Draws the year. With `fade` (a new tab), the same grid stays and only
+ *  the colours change, so cells fade from one subject to the next. */
+function renderYear(fade = false) {
   const svg = $("grid");
   const width = svg.clientWidth || 700;
   const weeks = width < 520 ? 26 : 53;
-  const sessions = [...(demo && !tagFilter ? sampleYear() : []), ...store.live()]
+  const sessions = [...(demo ? sampleYear() : []), ...store.live()]
     .filter((s) => !tagFilter || s.tag === tagFilter);
   heat = buildHeatmap(sessions, weeks);
+
+  const shape = `${width}:${weeks}:${new Date().toDateString()}`;
+  if (shape === drawn && cells.length) {
+    heat.weeks.flat().filter(Boolean).forEach((day, i) => { cells[i].style.fill = cellFill(day.level); });
+    if (fade) $("caption").animate([{ opacity: 0.2 }, { opacity: 1 }], { duration: 420, easing: "ease-out" });
+    renderHover();
+    return;
+  }
+  drawn = shape;
+  cells = [];
 
   const pitch = (width - MARGIN * 2) / (weeks - GAP), size = pitch * (1 - GAP);
   const height = MONTH_ROW + 7 * pitch - (pitch - size) + MARGIN;
@@ -243,8 +305,11 @@ function renderYear() {
       if (!day) return;
       const x = w * pitch, y = MONTH_ROW + d * pitch;
       const cell = el("path", { d: square(x, y, size, (w * 7 + d) * 31 + 7), class: "cell" });
-      if (day.level > 0) cell.style.fill = `color-mix(in srgb, var(--accent) ${INK[day.level] * 100}%, transparent)`;
+      cell.style.fill = cellFill(day.level);
+      // A gentle left-to-right wave when a tab changes the colours.
+      cell.style.transitionDelay = `${Math.round(w / weeks * 180)}ms`;
       nodes.push(cell);
+      cells.push(cell);
       if (day.date === today) nodes.push(outline(x, y, "today"));
     });
   });
@@ -523,6 +588,8 @@ $("inspo").addEventListener("click", (e) => {
   renderInspo();
 });
 
+$("filter").addEventListener("scroll", fadeEdge, { passive: true });
+
 const tagInput = $("tag");
 tagInput.value = load(KEY.tag, "");
 tagInput.addEventListener("input", () => { save(KEY.tag, tagInput.value); renderTags(); });
@@ -566,7 +633,7 @@ grid.addEventListener("pointermove", (e) => {
   renderHover();
 });
 grid.addEventListener("pointerleave", () => { hovered = null; renderHover(); });
-new ResizeObserver(() => renderYear()).observe(grid);
+new ResizeObserver(() => { renderYear(); renderTags(); }).observe(grid);
 
 store.addEventListener("change", () => { renderTags(); renderYear(); });
 store.addEventListener("sync", renderSync);

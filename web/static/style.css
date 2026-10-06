@@ -138,12 +138,28 @@ button, input { font: inherit; color: inherit; }
 /* Year */
 
 .year-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
-.year-head h2 { font-size: 18px; font-weight: 700; }
-.filter { display: flex; gap: 12px; overflow-x: auto; scrollbar-width: none; }
+.year-head h2 { font-size: 18px; font-weight: 700; white-space: nowrap; flex: none; }
+.filter { position: relative; display: flex; gap: 12px; min-width: 0; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
+.filter::-webkit-scrollbar { display: none; }
+/* Too many tabs for the width: they scroll, and an edge with more tabs
+   past it fades to say so. */
+.filter.more-right { mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+.filter.more-left { mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); }
+.filter.more-left.more-right {
+  mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
 .filter .link { font-size: 13px; white-space: nowrap; }
+/* Tabs: the chosen one is marked by colour and an underline that slides
+   over, not by weight, so the row never shifts. */
+.filter .link[aria-pressed="true"] { font-weight: inherit; }
+.filter .underline {
+  position: absolute; left: 0; bottom: 0; height: 1.5px; border-radius: 1px;
+  background: var(--ink);
+  transition: transform .35s cubic-bezier(.3, .7, .2, 1), width .35s cubic-bezier(.3, .7, .2, 1);
+}
 .grid { display: block; width: 100%; overflow: visible; touch-action: pan-y; }
 .grid .month { fill: var(--faint); font-size: 10px; }
-.grid .cell { fill: var(--wash); }
+.grid .cell { fill: var(--wash); transition: fill .5s cubic-bezier(.3, .7, .2, 1); }
 .grid .today { fill: none; stroke: var(--ink); stroke-width: 1.1; }
 .grid .hover { fill: none; stroke: var(--faint); stroke-width: 1.1; }
 
@@ -236,6 +252,9 @@ button, input { font: inherit; color: inherit; }
 /* Demo: the app on the download site (?demo), without an account. */
 
 .demo #sync, .demo .sync-group { display: none; }
+/* Sized by its content, so the site can fit the frame to it. */
+.demo .app { min-height: 0; }
+.demo .timer { flex: none; }
 
 /* Phones */
 

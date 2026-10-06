@@ -75,7 +75,6 @@
     .frame {
       width: 100%;
       max-width: 780px;
-      height: 790px;
       margin-top: 14px;
       border-radius: 12px;
       overflow: hidden;
@@ -86,11 +85,13 @@
     }
     .bar { display: flex; gap: 7px; padding: 12px 14px 0; }
     .bar i { width: 11px; height: 11px; border-radius: 50%; background: var(--ghost); }
-    .android .frame { max-width: 360px; height: 740px; border-radius: 32px; }
+    .android .frame { max-width: 360px; border-radius: 32px; }
     .android .bar { display: none; }
+    /* Sized to the app by the script below, so nothing is cut off. */
     .frame iframe {
-      flex: 1;
+      display: block;
       width: 100%;
+      height: 760px;
       border: 0;
       opacity: 0;
       transition: opacity .6s ease;
@@ -134,7 +135,7 @@
     <p class="try">try it</p>
     <div class="frame">
       <div class="bar" aria-hidden="true"><i></i><i></i><i></i></div>
-      <iframe src="try/?demo" title="drill, live" loading="lazy" onload="this.classList.add('ready')"></iframe>
+      <iframe src="try/?demo" title="drill, live" loading="lazy"></iframe>
     </div>
 
     <ul class="features">
@@ -174,6 +175,21 @@
     }
 
     render();
+
+    // Fit the frame to the app as it lays out, so nothing is cut off at the
+    // bottom and the app never scrolls inside the frame.
+    const demo = document.querySelector(".frame iframe");
+    function fit() {
+      const doc = demo.contentDocument;
+      if (!doc?.body || doc.location.href === "about:blank" || demo.classList.contains("ready")) return;
+      const size = () => { demo.style.height = `${Math.ceil(doc.body.getBoundingClientRect().height)}px`; };
+      new ResizeObserver(size).observe(doc.body);
+      size();
+      demo.classList.add("ready");
+    }
+    demo.addEventListener("load", fit);
+    if (demo.contentDocument?.readyState === "complete") fit();
+
     fetch("https://api.github.com/repos/mmerioles/drill/releases/latest")
       .then((r) => r.ok ? r.json() : Promise.reject())
       .then((r) => { release = r; render(); })
