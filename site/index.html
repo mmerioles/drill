@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>tetodoro</title>
-  <meta name="description" content="a quiet pomodoro timer for mac.">
+  <meta name="description" content="a quiet pomodoro timer for mac and android.">
   <link rel="icon" href="icon.png">
   <link rel="apple-touch-icon" href="icon.png">
   <meta name="theme-color" content="#F2F0ED" media="(prefers-color-scheme: light)">
@@ -12,7 +12,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mmerioles.github.io/tetodoro/">
   <meta property="og:title" content="tetodoro">
-  <meta property="og:description" content="a quiet pomodoro timer for mac.">
+  <meta property="og:description" content="a quiet pomodoro timer for mac and android.">
   <meta property="og:image" content="https://mmerioles.github.io/tetodoro/light-running.png">
   <meta name="twitter:card" content="summary_large_image">
   <style>
@@ -65,12 +65,24 @@
     .download:hover { opacity: .86; }
     .download:active { transform: scale(.97); }
     .meta { color: var(--faint); font-size: 13px; margin-top: 12px; }
+    .other { font-size: 13px; margin-top: 4px; }
     .shot {
       width: 100%;
       max-width: 780px;
       margin-top: 56px;
       filter: drop-shadow(0 20px 40px rgba(0, 0, 0, .14));
     }
+    .phone {
+      display: none;
+      width: 100%;
+      max-width: 300px;
+      margin-top: 48px;
+      border-radius: 28px;
+      box-shadow: 0 0 0 1px var(--ghost), 0 20px 40px rgba(0, 0, 0, .14);
+    }
+    /* On android, the phone shot stands in for the mac one. */
+    .android .phone { display: block; }
+    .android picture { display: none; }
     .features {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -98,23 +110,25 @@
   <main>
     <img class="icon" src="icon.png" alt="">
     <h1>tetodoro</h1>
-    <p class="tagline">a quiet pomodoro timer for mac.</p>
+    <p class="tagline" id="tagline">a quiet pomodoro timer for mac.</p>
 
     <a class="download" id="download" href="https://github.com/mmerioles/tetodoro/releases/latest">download</a>
     <p class="meta" id="meta">macOS 15 or later</p>
+    <a class="link other" id="other" href="#android">also on android</a>
 
     <picture>
       <source srcset="dark.png" media="(prefers-color-scheme: dark)">
       <img class="shot" src="light-running.png" alt="tetodoro">
     </picture>
+    <img class="phone" src="android.png" alt="tetodoro on android" loading="lazy">
 
     <ul class="features">
       <li><b>focus, then rest</b><span>a pomodoro timer that starts your breaks for you.</span></li>
       <li><b>tag what you study</b><span>see a year of focus time, per subject.</span></li>
-      <li><b>always in reach</b><span>the countdown lives in your menu bar.</span></li>
+      <li><b>always in reach</b><span id="reach">the countdown lives in your menu bar.</span></li>
     </ul>
 
-    <p class="note">
+    <p class="note" id="note">
       first open: if macOS says it can't verify the app, go to
       system settings → privacy &amp; security and click open anyway.
     </p>
@@ -125,17 +139,54 @@
   </main>
 
   <script>
-    // Point the button straight at the newest release's dmg. If the API is
+    // One page for both apps. Android phones get the apk, everyone else the
+    // dmg; #android or #mac in the address picks one by hand. The button
+    // points straight at the newest release's file. If the API is
     // unreachable, it still links to the latest release page.
+    const PLATFORMS = {
+      mac: {
+        ext: ".dmg", needs: "macOS 15 or later", other: "android",
+        tagline: "a quiet pomodoro timer for mac.",
+        reach: "the countdown lives in your menu bar.",
+        note: "first open: if macOS says it can't verify the app, go to " +
+              "system settings → privacy & security and click open anyway.",
+      },
+      android: {
+        ext: ".apk", needs: "android 8 or later", other: "mac",
+        tagline: "a quiet pomodoro timer for android.",
+        reach: "the countdown lives in your notifications.",
+        note: "your phone downloads the app. open it, and if android asks, " +
+              "let your browser install apps. updates install the same way, over the top.",
+      },
+    };
+    const $ = (id) => document.getElementById(id);
+    const isAndroid = /android/i.test(navigator.userAgent);
+    let release = null;
+
+    function platform() {
+      const hash = location.hash.slice(1);
+      return PLATFORMS[hash] ? hash : isAndroid ? "android" : "mac";
+    }
+
+    function render() {
+      const name = platform(), p = PLATFORMS[name];
+      document.body.classList.toggle("android", name === "android");
+      $("tagline").textContent = p.tagline;
+      $("reach").textContent = p.reach;
+      $("note").textContent = p.note;
+      $("other").textContent = `also on ${p.other}`;
+      $("other").href = `#${p.other}`;
+      const file = release?.assets.find((a) => a.name.endsWith(p.ext));
+      $("download").href = file?.browser_download_url ??
+        "https://github.com/mmerioles/tetodoro/releases/latest";
+      $("meta").textContent = file ? `${release.tag_name} · ${p.needs}` : p.needs;
+    }
+
+    addEventListener("hashchange", render);
+    render();
     fetch("https://api.github.com/repos/mmerioles/tetodoro/releases/latest")
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(release => {
-        const dmg = release.assets.find(a => a.name.endsWith(".dmg"));
-        if (!dmg) return;
-        document.getElementById("download").href = dmg.browser_download_url;
-        document.getElementById("meta").textContent =
-          `${release.tag_name} · macOS 15 or later`;
-      })
+      .then((r) => r.ok ? r.json() : Promise.reject())
+      .then((r) => { release = r; render(); })
       .catch(() => {});
   </script>
 </body>

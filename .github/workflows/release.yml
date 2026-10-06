@@ -1,6 +1,10 @@
-# On every push to main: test, pick the next semantic version from commit
-# messages (scripts/next-version.sh), build a universal app, and publish
-# tetodoro_<version>.dmg as GitHub release v<version>.
+# On every push to main: pick the next semantic version from commit messages
+# (scripts/next-version.sh), build the mac app and the android app with it,
+# and publish both as GitHub release v<version>:
+#   tetodoro_<version>.dmg   universal mac app
+#   tetodoro_<version>.apk   android app, signed with the release key
+# The android key lives in repo secrets (see android/README.md). Every release
+# has to be signed with the same key, or phones refuse the update.
 name: release
 
 on:
@@ -11,6 +15,7 @@ on:
       - "docs/**"
       - "site/**"
       - "web/**"
+      - "android/README.md"
       - ".github/workflows/pages.yml"
       - ".github/workflows/web.yml"
   workflow_dispatch:
@@ -23,39 +28,101 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: macos-15
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      value: ${{ steps.version.outputs.value }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # tags and history, for versioning
-
       - name: Version
         id: version
         run: echo "value=$(scripts/next-version.sh)" >> "$GITHUB_OUTPUT"
 
+  mac:
+    needs: version
+    if: needs.version.outputs.value != ''
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+
       - name: Test
-        if: steps.version.outputs.value != ''
         run: swift test
 
       - name: Build app
-        if: steps.version.outputs.value != ''
         env:
-          VERSION: ${{ steps.version.outputs.value }}
+          VERSION: ${{ needs.version.outputs.value }}
           BUILD_NUMBER: ${{ github.run_number }}
           UNIVERSAL: "1"
         run: scripts/bundle.sh
 
       - name: Build dmg
-        if: steps.version.outputs.value != ''
         id: dmg
         run: echo "path=$(scripts/dmg.sh)" >> "$GITHUB_OUTPUT"
 
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dmg
+          path: ${{ steps.dmg.outputs.path }}
+          if-no-files-found: error
+
+  android:
+    needs: version
+    if: needs.version.outputs.value != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Release key
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [[ -z "$KEYSTORE" ]]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 isn't set. See android/README.md."
+            exit 1
+          fi
+          echo "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/release.jks"
+
+      - name: Test and build apk
+        working-directory: android
+        env:
+          VERSION: ${{ needs.version.outputs.value }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew --no-daemon testReleaseUnitTest assembleRelease
+          mkdir -p ../build
+          cp app/build/outputs/apk/release/app-release.apk "../build/tetodoro_$VERSION.apk"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: apk
+          path: build/tetodoro_*.apk
+          if-no-files-found: error
+
+  publish:
+    needs: [version, mac, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
       - name: Publish release
-        if: steps.version.outputs.value != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.value }}
+          VERSION: ${{ needs.version.outputs.value }}
         run: |
-          gh release create "v$VERSION" "${{ steps.dmg.outputs.path }}" \
+          gh release create "v$VERSION" dist/* --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --title "v$VERSION" --generate-notes

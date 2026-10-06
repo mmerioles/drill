@@ -6,10 +6,11 @@
   <a href="https://github.com/mmerioles/tetodoro/releases/latest"><img src="https://img.shields.io/github/v/release/mmerioles/tetodoro?style=flat-square&color=2B2A2F&label=version" alt="version"></a>
   <a href="https://github.com/mmerioles/tetodoro/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/mmerioles/tetodoro/release.yml?style=flat-square&label=build" alt="build"></a>
   <img src="https://img.shields.io/badge/macOS-15%2B-2B2A2F?style=flat-square&logo=apple" alt="macOS 15+">
+  <img src="https://img.shields.io/badge/android-8%2B-2B2A2F?style=flat-square&logo=android" alt="android 8+">
 </p>
 
 <p align="center">
-  a quiet pomodoro timer for mac.<br>
+  a quiet pomodoro timer for mac and android.<br>
   <a href="https://mmerioles.github.io/tetodoro/"><b>mmerioles.github.io/tetodoro</b></a>
 </p>
 
@@ -21,7 +22,7 @@
 - pomodoro timer with auto breaks
 - tag what you're studying
 - a year heatmap of your focus time
-- menu bar countdown
+- menu bar countdown on mac, a notification countdown on android
 - light and dark themes
 - a self-hosted web app that syncs through your own server
 
@@ -37,6 +38,13 @@ git clone https://github.com/mmerioles/tetodoro.git && cd tetodoro && ./scripts/
 ```
 
 update with `git pull && ./scripts/install.sh`.
+
+### android
+
+open **[the site](https://mmerioles.github.io/tetodoro/)** on your phone and tap download: it
+picks the apk for you. open the download, and if android asks, let your browser install apps.
+needs android 8+. updates install the same way, over the top; settings shows when one is out.
+building it yourself is in [android/README.md](android/README.md).
 
 ## web app and sync server
 

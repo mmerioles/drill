@@ -1,8 +1,9 @@
 # sync contract
 
 The server is `web/server.py` (see the README to run it). Its clients are the
-web app in `web/static` (`store.js`) and the mac app (`SyncAPI` in
-TetodoroCore, driven by `Sync.swift` in the app).
+web app in `web/static` (`store.js`), the mac app (`SyncAPI` in
+TetodoroCore, driven by `Sync.swift` in the app), and the android app
+(`SyncApi.kt` and `Sync.kt` in `android/.../data`).
 
 The home server's job is small: keep the union of every device's sessions and
 hand back what each device hasn't seen yet. Devices do all merging themselves
@@ -93,7 +94,8 @@ client buckets sessions into days in its own time zone.
 
 ## Client loop
 
-`web/static/store.js` and `Sources/TetodoroApp/Sync.swift` both do this:
+`web/static/store.js`, `Sources/TetodoroApp/Sync.swift` and the android
+app's `Sync.kt` all do this:
 
 1. `store.changes(since: lastPushedAt)` → push in batches → on success, save
    `lastPushedAt` (taken before reading the changes).
