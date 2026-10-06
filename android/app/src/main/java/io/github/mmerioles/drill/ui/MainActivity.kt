@@ -14,7 +14,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -64,6 +63,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         model.updater.start()
+        model.pinNightMode()
         setContent { App(model) }
     }
 
@@ -73,6 +73,7 @@ class MainActivity : ComponentActivity() {
         model.sync.syncNow()
         model.reload()
         model.updater.resume()
+        model.updater.checkIfStale(15 * 60_000L)
     }
 }
 
@@ -80,11 +81,7 @@ enum class Open { None, Settings, Account, Inspo }
 
 @Composable
 fun App(model: AppModel) {
-    val dark = when (model.theme) {
-        Theme.Auto -> isSystemInDarkTheme()
-        Theme.Light -> false
-        Theme.Dark -> true
-    }
+    val dark = model.theme == Theme.Dark
     val activity = LocalContext.current as ComponentActivity
     SideEffect {
         val bars = if (dark) SystemBarStyle.dark(AndroidColor.TRANSPARENT)

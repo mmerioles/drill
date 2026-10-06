@@ -53,16 +53,27 @@ class Updater(private val context: Context, private val scope: CoroutineScope) {
     /** Sent to Android's install switch; carry on when back, if allowed. */
     private var awaitingPermission = false
 
-    /** Checks now, then every few hours while the process lives. */
+    private var lastChecked = 0L
+
+    /** Checks now, then every hour while the process lives. Coming back to
+     *  the app and opening settings check too, via [checkIfStale]. */
     fun start() {
         if (started) return
         started = true
         scope.launch {
             while (true) {
                 check()
-                delay(6 * 3600_000L)
+                delay(3600_000L)
             }
         }
+    }
+
+    /** A quiet check, unless one ran within [ageMs]. Settings asks with a
+     *  short age, so it opens on a fresh answer. */
+    fun checkIfStale(ageMs: Long = 60_000L) {
+        if (state is State.Available) return // already found one
+        if (System.currentTimeMillis() - lastChecked < ageMs) return
+        scope.launch { check() }
     }
 
     /** A check you asked for ([manual]) spins a moment even when GitHub
@@ -70,6 +81,7 @@ class Updater(private val context: Context, private val scope: CoroutineScope) {
     suspend fun check(manual: Boolean = false) {
         if (state is State.Checking || state is State.Downloading) return
         state = State.Checking
+        lastChecked = System.currentTimeMillis()
         val settle = System.currentTimeMillis() + if (manual) 900 else 0
         val found = withContext(Dispatchers.IO) { runCatching { latest() } }
         delay(settle - System.currentTimeMillis())

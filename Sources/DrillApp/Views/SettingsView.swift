@@ -101,6 +101,7 @@ private struct UpdateRow: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: updater.state)
+        .onAppear { updater.checkIfStale() }
     }
 
     private var note: String? {

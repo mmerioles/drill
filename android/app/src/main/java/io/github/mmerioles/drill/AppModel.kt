@@ -1,8 +1,10 @@
 package io.github.mmerioles.drill
 
 import android.app.Application
+import android.app.UiModeManager
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Build
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -39,7 +41,8 @@ class DrillApp : Application() {
     }
 }
 
-enum class Theme { Auto, Light, Dark }
+/** Light or dark, like the mac; dark unless picked. */
+enum class Theme { Light, Dark }
 
 /**
  * Everything the screen shows, and the one place the timer changes. The
@@ -58,7 +61,7 @@ class AppModel(private val app: Application) {
 
     var config by mutableStateOf(loadConfig())
         private set
-    var theme by mutableStateOf(runCatching { Theme.valueOf(prefs.getString("theme", "Auto")!!) }.getOrDefault(Theme.Auto))
+    var theme by mutableStateOf(runCatching { Theme.valueOf(prefs.getString("theme", "Dark")!!) }.getOrDefault(Theme.Dark))
         private set
     var soundOn by mutableStateOf(prefs.getBoolean("sound", true))
         private set
@@ -137,6 +140,15 @@ class AppModel(private val app: Application) {
     fun updateTheme(t: Theme) {
         theme = t
         prefs.edit().putString("theme", t.name).apply()
+        pinNightMode()
+    }
+
+    /** Tells Android 12+ the app's own light or dark, so the launch screen
+     *  (values-night) matches the app rather than the phone. */
+    fun pinNightMode() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        val mode = if (theme == Theme.Dark) UiModeManager.MODE_NIGHT_YES else UiModeManager.MODE_NIGHT_NO
+        app.getSystemService(UiModeManager::class.java).setApplicationNightMode(mode)
     }
 
     fun updateSound(on: Boolean) {

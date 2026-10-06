@@ -21,7 +21,12 @@ const save = (key, value) => {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
 };
 
-const settings = { theme: "auto", sound: true, ...load(KEY.settings, {}) };
+const settings = { sound: true, ...load(KEY.settings, {}) };
+// Light or dark, like the mac. Dark unless picked; the demo on the site
+// starts in the visitor's own mode. Old "auto" choices become the default.
+if (!["light", "dark"].includes(settings.theme)) {
+  settings.theme = demo && matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
 settings.config = { ...defaultConfig, ...settings.config };
 
 const store = new Store();
@@ -447,8 +452,7 @@ async function submitAccount(e) {
 // MARK: Theme, sound, notifications
 
 function applyTheme() {
-  if (settings.theme === "auto") delete document.documentElement.dataset.theme;
-  else document.documentElement.dataset.theme = settings.theme;
+  document.documentElement.dataset.theme = settings.theme;
 }
 
 let audio = null;

@@ -10,6 +10,17 @@
   <link rel="apple-touch-icon" href="icon.png">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="style.css">
+  <script>
+    // The theme before first paint, so dark doesn't flash in after light.
+    // app.js makes the same choice: the saved one, else the visitor's own
+    // mode in the site's demo, else dark.
+    try {
+      const saved = JSON.parse(localStorage.getItem("drill.settings") || "{}").theme;
+      const light = saved === "light" || (saved !== "dark" && location.search.includes("demo")
+        && matchMedia("(prefers-color-scheme: light)").matches);
+      document.documentElement.dataset.theme = light ? "light" : "dark";
+    } catch { document.documentElement.dataset.theme = "dark"; }
+  </script>
   <script type="module" src="app.js"></script>
 </head>
 <body>
@@ -66,7 +77,6 @@
         <div class="row">
           <span>appearance</span>
           <div class="segmented" id="theme" role="radiogroup">
-            <button type="button" value="auto">auto</button>
             <button type="button" value="light">light</button>
             <button type="button" value="dark">dark</button>
           </div>

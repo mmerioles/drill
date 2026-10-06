@@ -119,6 +119,7 @@ fun SettingsSheet(model: AppModel, close: () -> Unit, signIn: () -> Unit) {
         }
 
         val updater = model.updater
+        LaunchedEffect(Unit) { updater.checkIfStale() }
         Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             Words("version ${BuildConfig.VERSION_NAME}", Modifier.weight(1f), size = 13.sp, color = ink.faint)
             UpdateMark(updater.state)

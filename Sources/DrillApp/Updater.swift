@@ -7,7 +7,8 @@ import DrillCore
 /// the newest release, downloads its dmg, swaps the app bundle in place and
 /// relaunches. Your sessions live in Application Support and are untouched.
 ///
-/// It checks at launch and every few hours after. When the app can't replace
+/// It checks at launch, every hour, when you come back to the app after a
+/// while, and when you open settings. When the app can't replace
 /// itself (a folder you can't write to, or run straight from the dmg), update
 /// opens the release page instead.
 @Observable @MainActor
@@ -31,10 +32,13 @@ final class Updater {
     let current: Version?
 
     private static let latest = URL(string: "https://api.github.com/repos/mmerioles/drill/releases/latest")!
-    private static let every: Duration = .seconds(6 * 3600)
+    private static let every: Duration = .seconds(3600)
+    /// Coming back to the app checks again once the last check is this old.
+    private static let stale: TimeInterval = 15 * 60
 
     private let bundle: URL
     private var loop: Task<Void, Never>?
+    private var lastChecked: Date?
 
     init(bundle: Bundle = .main) {
         self.bundle = bundle.bundleURL
@@ -57,6 +61,19 @@ final class Updater {
                 try? await Task.sleep(for: Self.every)
             }
         }
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkIfStale(Self.stale) }
+        }
+    }
+
+    /// A quiet check, unless one ran within `age` seconds. Settings asks
+    /// with a short age, so it opens on a fresh answer.
+    func checkIfStale(_ age: TimeInterval = 60) {
+        if case .available = state { return } // already found one
+        guard lastChecked.map({ -$0.timeIntervalSinceNow > age }) ?? true else { return }
+        Task { await check(quietly: true) }
     }
 
     /// `quietly` keeps a failed background check from showing an error. A
@@ -65,6 +82,7 @@ final class Updater {
     func check(quietly: Bool = false) async {
         guard isEnabled, let current, state != .checking, state != .installing else { return }
         state = .checking
+        lastChecked = Date()
         let settle = ContinuousClock.now + (quietly ? .zero : .milliseconds(900))
         let release: Release?
         do { release = try await Self.fetchLatest() } catch { release = nil }
