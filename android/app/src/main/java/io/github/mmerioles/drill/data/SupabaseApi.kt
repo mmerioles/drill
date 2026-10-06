@@ -30,7 +30,7 @@ class SupabaseApi(private val project: String, private val key: String) : SyncBa
         val reply = call("auth/v1/signup?redirect_to=$REDIRECT", body = JSONObject().put("email", email).put("password", password))
         if (reply.has("access_token")) return SignUp.SignedIn(account(reply)) // confirmation is off
         if (reply.optJSONArray("identities")?.length() == 0) {
-            throw SyncBackend.Rejected("there's already an account with that email")
+            throw SyncBackend.Rejected("that email already has an account")
         }
         val id = reply.optString("id").ifEmpty { throw IOException("no user id") }
         return SignUp.ConfirmByLink(id)
@@ -153,21 +153,21 @@ class SupabaseApi(private val project: String, private val key: String) : SyncBa
         /** Tokens this close to running out are swapped before a sync. */
         private const val MARGIN = 5 * 60 * 1000L
 
-        private const val TOO_MANY = "too many tries. wait a minute and try again."
+        private const val TOO_MANY = "too many tries. give it a minute."
 
         /** Supabase's error codes, in the apps' words. */
         private val SENTENCES = mapOf(
             "invalid_credentials" to "wrong email or password",
             "invalid_grant" to "wrong email or password",
-            "user_already_exists" to "there's already an account with that email",
-            "email_exists" to "there's already an account with that email",
-            "weak_password" to "use at least 8 characters for the password",
+            "user_already_exists" to "that email already has an account",
+            "email_exists" to "that email already has an account",
+            "weak_password" to "password needs 8+ characters",
             "email_address_invalid" to "that email doesn't look right",
             "validation_failed" to "that email doesn't look right",
-            "signup_disabled" to "new accounts are closed for now",
-            "over_email_send_rate_limit" to "we just sent you one. give it a minute before asking for another.",
+            "signup_disabled" to "sign-ups are closed for now",
+            "over_email_send_rate_limit" to "just sent one. try again in a minute.",
             "over_request_rate_limit" to TOO_MANY,
-            "22023" to "this device has a session the server can't take. update the app.",
+            "22023" to "couldn't sync. try updating the app.",
         )
     }
 }

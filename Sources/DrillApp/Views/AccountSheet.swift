@@ -49,7 +49,7 @@ struct AccountSheet: View {
     // MARK: Email and password
 
     @ViewBuilder private var details: some View {
-        Text(creating ? "create an account" : "sign in to sync")
+        Text(creating ? "make an account" : "sign in")
             .font(Ink.word(20))
             .foregroundStyle(Ink.ink)
 
@@ -67,10 +67,10 @@ struct AccountSheet: View {
             }
         }
 
-        message(problem ?? (creating ? "at least 8 characters. we'll email you a link to confirm." : " "))
+        message(problem ?? (creating ? "password needs 8+ characters." : " "))
 
         HStack {
-            Button(creating ? "i have an account" : "create an account") {
+            Button(creating ? "have an account?" : "new here?") {
                 creating.toggle()
                 problem = nil
             }
@@ -101,7 +101,7 @@ struct AccountSheet: View {
 
     @ViewBuilder private func waitingForLink(_ waiting: Sync.Waiting) -> some View {
         HStack(spacing: 10) {
-            Text(waiting.confirmed ? "you're in" : "check your email")
+            Text(waiting.confirmed ? "you're in" : "check your inbox")
                 .font(Ink.word(20))
                 .foregroundStyle(Ink.ink)
                 .contentTransition(.opacity)
@@ -111,8 +111,8 @@ struct AccountSheet: View {
         }
 
         message(waiting.confirmed
-            ? "confirmed. syncing now."
-            : note ?? "we sent a link to \(waiting.email). click it, and this moves along by itself.")
+            ? "syncing now."
+            : note ?? "click the link we sent to \(waiting.email).")
             .contentTransition(.opacity)
 
         message(problem ?? " ")
@@ -124,7 +124,7 @@ struct AccountSheet: View {
                 focused = .email
             }
             .buttonStyle(.inkLink(selected: false, size: 13))
-            Button("send it again", action: resend)
+            Button("resend", action: resend)
                 .buttonStyle(.inkLink(selected: false, size: 13))
                 .disabled(working)
             Spacer()
@@ -140,7 +140,7 @@ struct AccountSheet: View {
     private func resend() {
         run {
             try await sync.resendLink()
-            if let email = sync.waiting?.email { note = "sent another link to \(email)." }
+            note = "sent another one."
         }
     }
 

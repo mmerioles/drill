@@ -52,7 +52,7 @@ public struct SupabaseAPI: SyncBackend {
             return .signedIn(try account(from: data)) // confirmation is off
         }
         if reply?.identities?.isEmpty == true {
-            throw SyncError.rejected("there's already an account with that email")
+            throw SyncError.rejected("that email already has an account")
         }
         guard let id = reply?.id else { throw SyncError.unreachable }
         return .confirmByLink(userID: id)
@@ -177,20 +177,20 @@ public struct SupabaseAPI: SyncBackend {
         }
     }
 
-    private static let tooMany = "too many tries. wait a minute and try again."
+    private static let tooMany = "too many tries. give it a minute."
 
     /// Supabase's error codes, in the apps' words.
     private static let sentences: [String: String] = [
         "invalid_credentials": "wrong email or password",
         "invalid_grant": "wrong email or password",
-        "user_already_exists": "there's already an account with that email",
-        "email_exists": "there's already an account with that email",
-        "weak_password": "use at least 8 characters for the password",
+        "user_already_exists": "that email already has an account",
+        "email_exists": "that email already has an account",
+        "weak_password": "password needs 8+ characters",
         "email_address_invalid": "that email doesn't look right",
         "validation_failed": "that email doesn't look right",
-        "signup_disabled": "new accounts are closed for now",
-        "over_email_send_rate_limit": "we just sent you one. give it a minute before asking for another.",
+        "signup_disabled": "sign-ups are closed for now",
+        "over_email_send_rate_limit": "just sent one. try again in a minute.",
         "over_request_rate_limit": tooMany,
-        "22023": "this device has a session the server can't take. update the app.",
+        "22023": "couldn't sync. try updating the app.",
     ]
 }

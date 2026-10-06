@@ -107,13 +107,13 @@ fun SettingsSheet(model: AppModel, close: () -> Unit, signIn: () -> Unit) {
                 SettingRow(account.email) { Link("sign out", action = sync::signOut) }
             }
             val note = if (waiting != null) {
-                if (waiting.confirmed) "confirmed. you're in." else "click the link we emailed you. this updates by itself."
+                if (waiting.confirmed) "you're in." else "check your inbox for the link."
             } else when (sync.state) {
-                Sync.State.SignedOut -> "sign in to keep your sessions on every device."
+                Sync.State.SignedOut -> "sign in to sync across devices."
                 Sync.State.Syncing -> "syncing…"
                 Sync.State.Idle -> "synced."
-                Sync.State.Offline -> "can't reach the server. sessions stay here until it's back."
-                Sync.State.Unconfirmed -> "confirm your email to start syncing. check your inbox."
+                Sync.State.Offline -> "offline. your sessions are safe here."
+                Sync.State.Unconfirmed -> "confirm your email to start syncing."
             }
             Words(note, Modifier.padding(bottom = 12.dp), size = 13.sp, color = ink.faint)
         }
@@ -176,7 +176,7 @@ fun AccountSheet(model: AppModel, close: () -> Unit) {
 
     fun submit() {
         if (email.isBlank() || password.length < 8) {
-            error = if (email.isBlank()) "enter your email." else "passwords are at least 8 characters."
+            error = if (email.isBlank()) "enter your email." else "password needs 8+ characters."
             return
         }
         working {
@@ -189,7 +189,7 @@ fun AccountSheet(model: AppModel, close: () -> Unit) {
 
     fun resend() = working {
         val problem = sync.resendLink()
-        if (problem == null) note = "sent another link to ${sync.waiting?.email.orEmpty()}."
+        if (problem == null) note = "sent another one."
         problem
     }
 
@@ -210,7 +210,7 @@ fun AccountSheet(model: AppModel, close: () -> Unit) {
             Column {
                 val w = sync.waiting
                 if (!linkStep || w == null) {
-                    Words(if (creating) "create an account" else "sign in to sync", Modifier.padding(bottom = 14.dp),
+                    Words(if (creating) "make an account" else "sign in", Modifier.padding(bottom = 14.dp),
                         size = 18.sp, weight = FontWeight.Bold)
                     Group {
                         SettingRow("email") {
@@ -225,27 +225,27 @@ fun AccountSheet(model: AppModel, close: () -> Unit) {
                     if (error.isNotEmpty()) {
                         Words(error, Modifier.padding(bottom = 10.dp), size = 13.sp, color = ink.accent)
                     } else {
-                        Words(if (creating) "at least 8 characters. we'll email you a link to confirm." else "",
+                        Words(if (creating) "password needs 8+ characters." else "",
                             Modifier.padding(bottom = 10.dp), size = 13.sp, color = ink.faint)
                     }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Link(if (creating) "i have an account" else "create an account") { creating = !creating; error = "" }
+                        Link(if (creating) "have an account?" else "new here?") { creating = !creating; error = "" }
                         Spacer(Modifier.weight(1f))
                         Capsule(if (creating) "create" else "sign in", small = true, enabled = !busy, action = ::submit)
                     }
                 } else {
                     Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Crossfade(w.confirmed, Modifier.weight(1f), animationSpec = tween(220), label = "title") { done ->
-                            Words(if (done) "you're in" else "check your email", size = 18.sp, weight = FontWeight.Bold)
+                            Words(if (done) "you're in" else "check your inbox", size = 18.sp, weight = FontWeight.Bold)
                         }
                         StatusMark(if (w.confirmed) Mark.Done else Mark.Pending, breathing = true, size = 21.dp)
                     }
                     Crossfade(w.confirmed, animationSpec = tween(220), label = "note") { done ->
                         Words(
                             when {
-                                done -> "confirmed. syncing now."
+                                done -> "syncing now."
                                 note.isNotEmpty() -> note
-                                else -> "we sent a link to ${w.email}. tap it, and this moves along by itself."
+                                else -> "tap the link we sent to ${w.email}."
                             },
                             Modifier.padding(bottom = 10.dp), size = 13.sp, color = ink.faint,
                         )
@@ -255,7 +255,7 @@ fun AccountSheet(model: AppModel, close: () -> Unit) {
                     Row(Modifier.fillMaxWidth().graphicsLayer { alpha = links }, verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         Link("wrong email?", size = 13.sp) { sync.stopWaiting(); error = "" }
-                        Link("send it again", size = 13.sp) { resend() }
+                        Link("resend", size = 13.sp) { resend() }
                         Spacer(Modifier.weight(1f))
                         // Closing keeps waiting; settings shows how it's going.
                         Link("close", size = 13.sp, action = close)

@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import Observation
 import DrillCore
 
@@ -28,6 +28,7 @@ final class Sync {
     private let onPulled: () -> Void
     private var running: Task<Void, Never>?
     private var loop: Task<Void, Never>?
+    private var lastStarted: Date?
 
     private static let every: Duration = .seconds(5 * 60)
 
@@ -60,11 +61,13 @@ final class Sync {
             defaults.removeObject(forKey: Keys.server)
             return
         }
-        guard let url = SyncAPI.serverURL(text) else { throw Problem("that server address doesn't look right.") }
+        guard let url = SyncAPI.serverURL(text) else { throw Problem("that address doesn't look right.") }
         customServer = url.absoluteString
         defaults.set(customServer, forKey: Keys.server)
     }
 
+    /// Syncs at launch, every few minutes, and whenever you come back to
+    /// the app, since it keeps running in the menu bar.
     func start() {
         guard loop == nil else { return }
         loop = Task { [weak self] in
@@ -73,6 +76,16 @@ final class Sync {
                 try? await Task.sleep(for: Self.every)
             }
         }
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.cameBack() }
+        }
+    }
+
+    private func cameBack() {
+        // Not on every click back in: skip when a sync just started.
+        if lastStarted.map({ $0.timeIntervalSinceNow < -20 }) ?? true { syncNow() }
     }
 
     // MARK: Account
@@ -179,7 +192,7 @@ final class Sync {
         } catch SyncError.unconfirmed {
             throw Unconfirmed()
         } catch {
-            throw Problem("can't reach the server. try again in a bit.")
+            throw Problem("can't connect. try again in a bit.")
         }
     }
 
@@ -203,6 +216,7 @@ final class Sync {
     /// Starts a sync unless one is already running.
     func syncNow() {
         guard running == nil, let account else { return }
+        lastStarted = Date()
         let backend = backend
         running = Task { [weak self] in
             await self?.run(backend, as: account)

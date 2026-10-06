@@ -49,7 +49,7 @@ struct SupabaseAPITests {
         await #expect(throws: SyncError.rejected("wrong email or password")) {
             try await api.signIn(email: email, password: password + "-not-it")
         }
-        await #expect(throws: SyncError.rejected("there's already an account with that email")) {
+        await #expect(throws: SyncError.rejected("that email already has an account")) {
             try await api.createAccount(email: email, password: password)
         }
         await #expect(throws: SyncError.signedOut) { try await api.pull(after: "0", token: "not-a-token") }

@@ -48,17 +48,16 @@
        its own. -->
   <main>
     <img class="icon" src="../icon.png" alt="">
-    <h1 id="title">you're confirmed</h1>
-    <p id="note">head back to drill. it'll sign you in by itself.</p>
+    <h1 id="title">you're in</h1>
+    <p id="note">head back to drill.</p>
   </main>
   <script>
     // Supabase puts a session (or an error) after the #. The app signs in on
     // its own, so drop it rather than leave a token in the address bar.
     const hash = new URLSearchParams(location.hash.slice(1));
     if (hash.has("error")) {
-      document.getElementById("title").textContent = "that link didn't work";
-      document.getElementById("note").textContent =
-        "it may have expired or been used already. in drill, press send it again.";
+      document.getElementById("title").textContent = "that link expired";
+      document.getElementById("note").textContent = "hit resend in drill for a new one.";
     }
     if (location.hash) history.replaceState(null, "", location.pathname);
   </script>

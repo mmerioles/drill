@@ -160,14 +160,14 @@ private struct AccountRow: View {
 
     private var note: String {
         if let waiting = sync.waiting {
-            return waiting.confirmed ? "confirmed. you're in." : "click the link we emailed you. this updates by itself."
+            return waiting.confirmed ? "you're in." : "check your inbox for the link."
         }
         return switch sync.state {
-        case .signedOut: "sign in to keep your sessions on every device."
+        case .signedOut: "sign in to sync across devices."
         case .syncing: "syncing…"
         case .idle: "synced."
-        case .offline: "can't reach the server. sessions stay here until it's back."
-        case .unconfirmed: "confirm your email to start syncing. check your inbox."
+        case .offline: "offline. your sessions are safe here."
+        case .unconfirmed: "confirm your email to start syncing."
         }
     }
 }
@@ -192,7 +192,7 @@ private struct ServerRow: View {
     private var note: String {
         if let problem { return problem }
         if sync.isSignedIn { return "sign out to change servers." }
-        return "leave empty to use ours, or put in your own to self-host."
+        return "leave blank to use ours, or add your own."
     }
 
     private func save() {

@@ -57,7 +57,7 @@ class Sync(
             prefs.edit().remove(Keys.SERVER).apply()
             return null
         }
-        val url = SyncApi.serverUrl(text) ?: return "that server address doesn't look right."
+        val url = SyncApi.serverUrl(text) ?: return "that address doesn't look right."
         customServer = url
         prefs.edit().putString(Keys.SERVER, url).apply()
         return null
@@ -173,7 +173,7 @@ class Sync(
     } catch (e: SyncBackend.Rejected) {
         throw Problem(e.message ?: "something went wrong. try again.")
     } catch (e: Exception) {
-        throw Problem("can't reach the server. try again in a bit.")
+        throw Problem("can't connect. try again in a bit.")
     }
 
     private suspend fun problem(work: suspend () -> Unit): String? = try {
@@ -182,7 +182,7 @@ class Sync(
     } catch (e: Problem) {
         e.message
     } catch (e: SyncBackend.Unconfirmed) {
-        "confirm your email first. check your inbox."
+        "confirm your email first."
     }
 
     fun signOut() {
