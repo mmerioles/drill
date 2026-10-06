@@ -233,6 +233,10 @@ button, input { font: inherit; color: inherit; }
 .inspo li a:hover span { color: var(--ink); }
 #inspo[data-page="all"] ul { max-height: 360px; overflow-y: auto; scrollbar-width: none; }
 
+/* Demo: the app on the download site (?demo), without an account. */
+
+.demo #sync, .demo .sync-group { display: none; }
+
 /* Phones */
 
 @media (max-width: 560px) {

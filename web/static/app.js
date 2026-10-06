@@ -6,6 +6,10 @@ import { Store } from "./store.js";
 
 const $ = (id) => document.getElementById(id);
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+/** On the download site, as a try-out: no sync, no notification prompt, and
+ *  a sample year so the heatmap shows what it's for. */
+const demo = new URLSearchParams(location.search).has("demo");
+if (demo) document.documentElement.classList.add("demo");
 
 // MARK: Persistence
 
@@ -175,6 +179,24 @@ function button(label, action, pressed) {
   return b;
 }
 
+/** A made-up year of focus for the demo, the same on every visit. */
+let sample = null;
+function sampleYear() {
+  if (sample) return sample;
+  let seed = 7;
+  const next = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+  sample = [];
+  for (let d = 1; d < 365; d++) {
+    if (next() < 0.35) continue;
+    const day = new Date();
+    day.setHours(10, 0, 0, 0);
+    day.setDate(day.getDate() - d);
+    const blocks = 1 + Math.floor(next() * 6);
+    sample.push({ startedAt: day.toISOString(), focusSeconds: blocks * 25 * 60 });
+  }
+  return sample;
+}
+
 // Heatmap geometry, as in HeatmapView.swift: the grid stretches to the width.
 const GAP = 0.24, MONTH_ROW = 16, MARGIN = 3;
 const INK = [0, 0.16, 0.36, 0.62, 0.92];
@@ -184,7 +206,8 @@ function renderYear() {
   const svg = $("grid");
   const width = svg.clientWidth || 700;
   const weeks = width < 520 ? 26 : 53;
-  const sessions = store.live().filter((s) => !tagFilter || s.tag === tagFilter);
+  const sessions = [...(demo && !tagFilter ? sampleYear() : []), ...store.live()]
+    .filter((s) => !tagFilter || s.tag === tagFilter);
   heat = buildHeatmap(sessions, weeks);
 
   const pitch = (width - MARGIN * 2) / (weeks - GAP), size = pitch * (1 - GAP);
@@ -385,7 +408,7 @@ function chime(focusDone) {
 
 // Notifications need a secure context (https or localhost).
 function askForNotifications() {
-  if ("Notification" in window && isSecureContext && Notification.permission === "default") {
+  if (!demo && "Notification" in window && isSecureContext && Notification.permission === "default") {
     Notification.requestPermission().catch(() => {});
   }
 }
@@ -575,4 +598,4 @@ changed();
 renderTags();
 renderYear();
 renderSync();
-store.sync();
+if (!demo) store.sync();

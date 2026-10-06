@@ -1,5 +1,6 @@
-# Publishes site/ to GitHub Pages. The download button looks up the newest
-# release at page load, so the site doesn't need redeploying per release.
+# Publishes site/ to GitHub Pages, with the web app under try/ for the
+# live try-out. The download button looks up the newest release at page
+# load, so the site doesn't need redeploying per release.
 name: pages
 
 on:
@@ -7,6 +8,7 @@ on:
     branches: [main]
     paths:
       - "site/**"
+      - "web/static/**"
       - "docs/icon.png"
       - "docs/screenshots/**"
       - ".github/workflows/pages.yml"
@@ -34,6 +36,7 @@ jobs:
           mkdir -p _site
           cp -R site/. _site/
           cp docs/icon.png docs/screenshots/*.png _site/
+          cp -R web/static _site/try # the live try-out on the page
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
