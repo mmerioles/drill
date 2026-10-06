@@ -1,6 +1,6 @@
 import SwiftUI
 
-// Tetodoro's look, lifted from bord's "ink" prototype: paper, one ink, lots
+// Drill's look, lifted from bord's "ink" prototype: paper, one ink, lots
 // of air, lowercase sentences, hand-drawn strokes that "boil" gently.
 //
 // Two themes, chosen by appearance:

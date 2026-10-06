@@ -1,4 +1,4 @@
-// The pomodoro state machine, ported from TetodoroCore/PomodoroEngine.swift.
+// The pomodoro state machine, ported from DrillCore/PomodoroEngine.swift.
 // Time is passed in (epoch ms), so it never drifts and survives a closed tab:
 // the host calls tick(now) as often as it likes and gets back a transition
 // when a phase ends.

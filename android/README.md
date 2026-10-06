@@ -1,8 +1,8 @@
-# tetodoro for android
+# drill for android
 
 The android app: Kotlin and Jetpack Compose, no other libraries. It is the
 same app as the mac and web ones: the timer engine, the year heatmap, inspo
-and account sync are ports of `web/static` (and so of TetodoroCore), and it
+and account sync are ports of `web/static` (and so of DrillCore), and it
 speaks the [sync contract](../docs/SYNC.md) like any other device.
 
 - `core/` has the engine, heatmap, sessions and inspo, with no android in it,
@@ -25,7 +25,7 @@ cd android
 
 ## releases
 
-The release workflow builds `tetodoro_<version>.apk` next to the dmg on every
+The release workflow builds `drill_<version>.apk` next to the dmg on every
 release, with the same version, and `versionCode` set to the run number so
 it only goes up. Phones only accept an update signed with the same key as
 the app they have, so every release is signed with one key, kept in four
@@ -35,7 +35,7 @@ repo secrets:
 | --- | --- |
 | `ANDROID_KEYSTORE_BASE64` | the keystore, base64 |
 | `ANDROID_KEYSTORE_PASSWORD` | its password |
-| `ANDROID_KEY_ALIAS` | `tetodoro` |
+| `ANDROID_KEY_ALIAS` | `drill` |
 | `ANDROID_KEY_PASSWORD` | the key's password |
 
 With the [GitHub CLI](https://cli.github.com), from a keystore and an env file

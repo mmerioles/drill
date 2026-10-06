@@ -1,4 +1,4 @@
-# tetodoro: the web app and the home sync server in one small image.
+# drill: the web app and the home sync server in one small image.
 FROM python:3.13-alpine
 
 WORKDIR /app
@@ -8,7 +8,7 @@ COPY static ./static
 RUN mkdir /data && chown nobody:nobody /data
 USER nobody
 
-ENV TETODORO_DATA=/data \
+ENV DRILL_DATA=/data \
     PORT=8080 \
     PYTHONUNBUFFERED=1
 VOLUME /data

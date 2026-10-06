@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Packs build/Tetodoro.app into build/tetodoro_<version>.dmg, with an
+# Packs build/Drill.app into build/drill_<version>.dmg, with an
 # Applications shortcut to drag onto and the app icon as the volume icon.
 # Run scripts/bundle.sh first.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-app=build/Tetodoro.app
+app=build/Drill.app
 version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
-out="build/tetodoro_$version.dmg"
+out="build/drill_$version.dmg"
 
 tmp="$(mktemp -d)"
 mnt=""
@@ -20,7 +20,7 @@ ln -s /Applications "$stage/Applications"
 
 # Build writable, mount it to set the volume icon, then compress.
 rw="$tmp/rw.dmg"
-hdiutil create -quiet -volname Tetodoro -srcfolder "$stage" -fs HFS+ -format UDRW "$rw"
+hdiutil create -quiet -volname Drill -srcfolder "$stage" -fs HFS+ -format UDRW "$rw"
 mnt="$tmp/mnt"
 hdiutil attach -quiet -nobrowse -noautoopen -mountpoint "$mnt" "$rw"
 cp Support/AppIcon.icns "$mnt/.VolumeIcon.icns"

@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "tetodoro"
+rootProject.name = "drill"
 include(":app")

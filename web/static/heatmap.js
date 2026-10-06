@@ -1,4 +1,4 @@
-// A year of days in week columns, ported from TetodoroCore/Heatmap.swift.
+// A year of days in week columns, ported from DrillCore/Heatmap.swift.
 // Days are bucketed in the browser's own time zone.
 
 /** Intensity 0–4. Fixed thresholds, so a cell means the same thing next year. */

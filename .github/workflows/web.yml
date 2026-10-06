@@ -1,5 +1,5 @@
 # On pushes that touch web/: test the server, then publish the image to
-# ghcr.io/<owner>/tetodoro for amd64 and arm64 (a Raspberry Pi is a fine
+# ghcr.io/<owner>/drill for amd64 and arm64 (a Raspberry Pi is a fine
 # home server).
 name: web
 
@@ -43,5 +43,5 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ghcr.io/${{ github.repository_owner }}/tetodoro:latest
-            ghcr.io/${{ github.repository_owner }}/tetodoro:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/drill:latest
+            ghcr.io/${{ github.repository_owner }}/drill:${{ github.sha }}

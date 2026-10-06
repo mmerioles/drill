@@ -1,4 +1,4 @@
-"""tetodoro server: serves the web app and is the sync server.
+"""drill server: serves the web app and is the sync server.
 
 One process, no dependencies beyond the Python standard library, one SQLite
 file. Implements docs/SYNC.md: accounts (email and password) and per-account
@@ -14,16 +14,16 @@ session sync.
     GET  /healthz
 
 Environment:
-    TETODORO_DATA        directory for tetodoro.sqlite (default: data/ next to this file)
+    DRILL_DATA        directory for drill.sqlite (default: data/ next to this file)
     PORT                 listen port (default 8080)
-    TETODORO_PUBLIC_URL  where people reach this server, for links in email,
-                         e.g. https://tetodoro.example.com
-    TETODORO_MAIL_URL    where to send email: the server POSTs
+    DRILL_PUBLIC_URL  where people reach this server, for links in email,
+                         e.g. https://drill.example.com
+    DRILL_MAIL_URL    where to send email: the server POSTs
                          { "to", "subject", "text" } there as JSON, e.g. to a
                          Cloudflare Worker that sends it. Unset: links are
                          printed to the log instead.
-    TETODORO_MAIL_KEY    sent as "Authorization: Bearer <key>" to the mail URL
-    TETODORO_REQUIRE_CONFIRMED  "1" to block sync until the email is confirmed
+    DRILL_MAIL_KEY    sent as "Authorization: Bearer <key>" to the mail URL
+    DRILL_REQUIRE_CONFIRMED  "1" to block sync until the email is confirmed
 """
 
 from __future__ import annotations
@@ -385,7 +385,7 @@ class Store:
 
 CONFIRM_PAGE = """<!doctype html><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>tetodoro</title>
+<title>drill</title>
 <style>
   :root { color-scheme: light dark; --paper: #F2F0ED; --ink: #2B2A2F; --faint: rgb(43 42 47 / .45); }
   @media (prefers-color-scheme: dark) {
@@ -401,7 +401,7 @@ CONFIRM_PAGE = """<!doctype html><meta charset="utf-8">
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "tetodoro"
+    server_version = "drill"
     store: Store
     mailer: Mailer
     public_url: str | None
@@ -470,8 +470,8 @@ class Handler(BaseHTTPRequestHandler):
         if created is None:
             return self.send_json(HTTPStatus.CONFLICT, {"error": "there's already an account with that email"})
         user, confirm = created
-        self.mailer.send(email, "confirm your tetodoro account",
-                         f"welcome to tetodoro.\n\nconfirm your email here:\n"
+        self.mailer.send(email, "confirm your drill account",
+                         f"welcome to drill.\n\nconfirm your email here:\n"
                          f"{self.base_url()}/confirm?token={confirm}\n\n"
                          f"if you didn't sign up, you can ignore this.\n")
         self.send_account(HTTPStatus.CREATED, user)
@@ -580,21 +580,21 @@ def make_server(store: Store, port: int, host: str = "", mailer: Mailer | None =
 
 
 def main():
-    data = Path(os.environ.get("TETODORO_DATA") or Path(__file__).resolve().parent / "data")
+    data = Path(os.environ.get("DRILL_DATA") or Path(__file__).resolve().parent / "data")
     data.mkdir(parents=True, exist_ok=True)
     port = int(os.environ.get("PORT", "8080"))
     env = lambda name: os.environ.get(name, "").strip() or None
-    mailer = Mailer(env("TETODORO_MAIL_URL"), env("TETODORO_MAIL_KEY"))
+    mailer = Mailer(env("DRILL_MAIL_URL"), env("DRILL_MAIL_KEY"))
 
-    server = make_server(Store(str(data / "tetodoro.sqlite")), port, mailer=mailer,
-                         public_url=env("TETODORO_PUBLIC_URL"),
-                         require_confirmed=env("TETODORO_REQUIRE_CONFIRMED") == "1")
+    server = make_server(Store(str(data / "drill.sqlite")), port, mailer=mailer,
+                         public_url=env("DRILL_PUBLIC_URL"),
+                         require_confirmed=env("DRILL_REQUIRE_CONFIRMED") == "1")
     # PID 1 in a container ignores SIGTERM unless it installs a handler.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     if not mailer.url:
-        print("note: TETODORO_MAIL_URL is not set; confirmation links go to this log.",
+        print("note: DRILL_MAIL_URL is not set; confirmation links go to this log.",
               file=sys.stderr)
-    print(f"tetodoro listening on :{port}, data in {data.resolve()}", file=sys.stderr)
+    print(f"drill listening on :{port}, data in {data.resolve()}", file=sys.stderr)
     try:
         server.serve_forever()
     finally:

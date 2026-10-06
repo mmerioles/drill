@@ -1,20 +1,20 @@
 # docker compose up -d, then open http://<this machine>:8080
 services:
-  tetodoro:
-    image: ghcr.io/mmerioles/tetodoro:latest
+  drill:
+    image: ghcr.io/mmerioles/drill:latest
     build: .
     restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
       # Where people reach this server, for the links in confirmation email.
-      TETODORO_PUBLIC_URL: ${TETODORO_PUBLIC_URL:-}
+      DRILL_PUBLIC_URL: ${DRILL_PUBLIC_URL:-}
       # Optional: an endpoint that sends email (e.g. a Cloudflare Worker).
       # Without it, confirmation links are printed to the container log.
-      TETODORO_MAIL_URL: ${TETODORO_MAIL_URL:-}
-      TETODORO_MAIL_KEY: ${TETODORO_MAIL_KEY:-}
+      DRILL_MAIL_URL: ${DRILL_MAIL_URL:-}
+      DRILL_MAIL_KEY: ${DRILL_MAIL_KEY:-}
     volumes:
-      - tetodoro-data:/data
+      - drill-data:/data
 
 volumes:
-  tetodoro-data:
+  drill-data:

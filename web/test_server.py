@@ -229,7 +229,7 @@ class HTTPTests(unittest.TestCase):
     def test_static_and_health(self):
         status, body = self.call("/", raw=True)
         self.assertEqual(status, 200)
-        self.assertIn(b"tetodoro", body)
+        self.assertIn(b"drill", body)
         self.assertEqual(self.call("/healthz", raw=True), (200, b"ok\n"))
         self.assertEqual(self.call("/../server.py", raw=True)[0], 404)
         self.assertEqual(self.call("/%2e%2e/server.py", raw=True)[0], 404)

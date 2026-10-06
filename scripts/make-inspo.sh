@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Writes the inspo video list, Support/inspo.json, out for every app:
-#   Sources/TetodoroApp/InspoVideos.swift, web/static/inspo-videos.js and
+#   Sources/DrillApp/InspoVideos.swift, web/static/inspo-videos.js and
 #   android/.../core/InspoVideos.kt.
 # Edit the json, then run this. Order is numbering: add new videos at the end.
 set -euo pipefail
@@ -19,7 +19,7 @@ rows = "\n".join(
     f"        .init(number: {n}, youtube: {swift(v['id'])}, daily: {str(v['daily']).lower()},\n"
     f"              title: {swift(v['title'])}, japanese: {swift(v['japanese'])}),"
     for n, v in enumerate(videos, 1))
-with open("Sources/TetodoroApp/InspoVideos.swift", "w") as f:
+with open("Sources/DrillApp/InspoVideos.swift", "w") as f:
     f.write(f"// {header}\n\nextension Inspo {{\n    static let videos: [Video] = [\n{rows}\n    ]\n}}\n")
 
 rows = "\n".join(
@@ -34,8 +34,8 @@ def kotlin(s):
 rows = "\n".join(
     f"    Inspo.Video({n}, {kotlin(v['id'])}, {str(v['daily']).lower()}, {kotlin(v['title'])}, {kotlin(v['japanese'])}),"
     for n, v in enumerate(videos, 1))
-with open("android/app/src/main/java/io/github/mmerioles/tetodoro/core/InspoVideos.kt", "w") as f:
+with open("android/app/src/main/java/io/github/mmerioles/drill/core/InspoVideos.kt", "w") as f:
     f.write(f"// {header}\n// Inspo.Video(number, youtube id, in the daily rotation, english, original title)\n\n"
-            f"package io.github.mmerioles.tetodoro.core\n\ninternal val INSPO_VIDEOS = listOf(\n{rows}\n)\n")
+            f"package io.github.mmerioles.drill.core\n\ninternal val INSPO_VIDEOS = listOf(\n{rows}\n)\n")
 print(f"wrote {len(videos)} videos")
 PY

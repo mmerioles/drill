@@ -1,7 +1,7 @@
 // Shuzo Matsuoka's short cheer-up videos: the "〜あなたに" messages from his
 // official YouTube channel, with the clams clip first. The list lives in
 // Support/inspo.json (see scripts/make-inspo.sh). The shuffle is kept in step
-// with Sources/TetodoroApp/Inspo.swift, so every device shows the same few
+// with Sources/DrillApp/Inspo.swift, so every device shows the same few
 // videos on the same day. `daily` marks the rotation; the rest are skits.
 
 import { ROWS } from "./inspo-videos.js";
@@ -11,9 +11,7 @@ export const VIDEOS = ROWS.map(([id, daily, title, japanese], i) => ({
 }));
 
 const PER_DAY = 5;
-const WATCHED = "tetodoro.inspo.seen";
-/** From when inspo listed the tennis challenge videos; those are gone. */
-const RETIRED = ["tetodoro.inspo.watched", "tetodoro.inspo.watchedOn"];
+const WATCHED = "drill.inspo.seen";
 
 /** A day as a number, like 20260928: the key for watched videos and the seed. */
 export const day = (date = new Date()) =>
@@ -57,7 +55,6 @@ export function today(seen, on = day()) {
 /** YouTube id to the day it was first opened in this browser. */
 function watchedDays() {
   try {
-    RETIRED.forEach((key) => localStorage.removeItem(key));
     return JSON.parse(localStorage.getItem(WATCHED)) ?? {};
   } catch { return {}; }
 }

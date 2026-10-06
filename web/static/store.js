@@ -2,8 +2,8 @@
 // The browser is just another device: it pushes rows it wrote, pulls rows
 // it hasn't seen, and merges with one rule — newer updatedAt wins.
 
-const KEY = { sessions: "tetodoro.sessions", dirty: "tetodoro.dirty",
-              cursor: "tetodoro.cursor", account: "tetodoro.account", device: "tetodoro.deviceID" };
+const KEY = { sessions: "drill.sessions", dirty: "drill.dirty",
+              cursor: "drill.cursor", account: "drill.account", device: "drill.deviceID" };
 
 const read = (key, fallback) => {
   try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
@@ -50,7 +50,6 @@ export class Store extends EventTarget {
     this.sessions = read(KEY.sessions, {});
     this.syncState = this.account ? "synced" : "signedOut"; // signedOut | syncing | synced | offline | unconfirmed
     this.syncing = null;
-    try { localStorage.removeItem("tetodoro.token"); } catch {} // from before accounts
 
     // Another tab wrote: pick up its sessions.
     addEventListener("storage", (e) => {

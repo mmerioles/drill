@@ -13,7 +13,7 @@ if (demo) document.documentElement.classList.add("demo");
 
 // MARK: Persistence
 
-const KEY = { timer: "tetodoro.timer", settings: "tetodoro.settings", tag: "tetodoro.tag" };
+const KEY = { timer: "drill.timer", settings: "drill.settings", tag: "drill.tag" };
 const load = (key, fallback) => {
   try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
 };
@@ -36,7 +36,7 @@ function persistTimer() {
   save(KEY.timer, { engine: engine.state, blockTag });
 }
 
-// MARK: Copy (TetodoroApp/Copy.swift)
+// MARK: Copy (DrillApp/Copy.swift)
 
 function statusWord() {
   if (engine.phase === Phase.focus && engine.isIdle) return "";
@@ -131,7 +131,7 @@ function renderTimer() {
   $("status").textContent = statusWord() || " ";
   const text = clock(engine.remaining(now));
   if ($("clock").textContent !== text) $("clock").textContent = text;
-  document.title = engine.isIdle ? "tetodoro" : `${text} · ${statusWord()}`;
+  document.title = engine.isIdle ? "drill" : `${text} · ${statusWord()}`;
 
   const toggleLabel = engine.isRunning ? "pause" : engine.isIdle ? "start" : "resume";
   $("toggle").textContent = toggleLabel;
@@ -416,7 +416,7 @@ function askForNotifications() {
 function notify(title, body) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   if (document.visibilityState === "visible" && document.hasFocus()) return;
-  try { new Notification(title, { body, icon: "icon.png", tag: "tetodoro" }); } catch {}
+  try { new Notification(title, { body, icon: "icon.png", tag: "drill" }); } catch {}
 }
 
 // MARK: Inspo dialog

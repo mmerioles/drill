@@ -1,8 +1,8 @@
 # On every push to main: pick the next semantic version from commit messages
 # (scripts/next-version.sh), build the mac app and the android app with it,
 # and publish both as GitHub release v<version>:
-#   tetodoro_<version>.dmg   universal mac app
-#   tetodoro_<version>.apk   android app, signed with the release key
+#   drill_<version>.dmg   universal mac app
+#   drill_<version>.apk   android app, signed with the release key
 # The android key lives in repo secrets (see android/README.md). Every release
 # has to be signed with the same key, or phones refuse the update.
 name: release
@@ -102,12 +102,12 @@ jobs:
         run: |
           ./gradlew --no-daemon testReleaseUnitTest assembleRelease
           mkdir -p ../build
-          cp app/build/outputs/apk/release/app-release.apk "../build/tetodoro_$VERSION.apk"
+          cp app/build/outputs/apk/release/app-release.apk "../build/drill_$VERSION.apk"
 
       - uses: actions/upload-artifact@v7
         with:
           name: apk
-          path: build/tetodoro_*.apk
+          path: build/drill_*.apk
           if-no-files-found: error
 
   publish:

@@ -2,7 +2,7 @@
 
 The server is `web/server.py` (see the README to run it). Its clients are the
 web app in `web/static` (`store.js`), the mac app (`SyncAPI` in
-TetodoroCore, driven by `Sync.swift` in the app), and the android app
+DrillCore, driven by `Sync.swift` in the app), and the android app
 (`SyncApi.kt` and `Sync.kt` in `android/.../data`).
 
 The home server's job is small: keep the union of every device's sessions and
@@ -42,11 +42,11 @@ token: sign in again), `409` email taken, `429` too many tries from one
 address.
 
 Signing up sends a confirmation email. The server POSTs
-`{ "to", "subject", "text" }` as JSON to `TETODORO_MAIL_URL`, e.g. a
+`{ "to", "subject", "text" }` as JSON to `DRILL_MAIL_URL`, e.g. a
 Cloudflare Worker that sends it, with `Authorization: Bearer
-$TETODORO_MAIL_KEY`. Without a mail URL it prints the message to its log.
-Links use `TETODORO_PUBLIC_URL`. Accounts can sync before confirming unless
-`TETODORO_REQUIRE_CONFIRMED=1`, in which case sync calls answer
+$DRILL_MAIL_KEY`. Without a mail URL it prints the message to its log.
+Links use `DRILL_PUBLIC_URL`. Accounts can sync before confirming unless
+`DRILL_REQUIRE_CONFIRMED=1`, in which case sync calls answer
 `403 { "error": "confirm your email first" }`.
 
 ## Sessions
@@ -94,7 +94,7 @@ client buckets sessions into days in its own time zone.
 
 ## Client loop
 
-`web/static/store.js`, `Sources/TetodoroApp/Sync.swift` and the android
+`web/static/store.js`, `Sources/DrillApp/Sync.swift` and the android
 app's `Sync.kt` all do this:
 
 1. `store.changes(since: lastPushedAt)` → push in batches → on success, save

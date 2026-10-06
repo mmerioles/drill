@@ -1,6 +1,6 @@
 {
-  "name": "tetodoro",
-  "short_name": "tetodoro",
+  "name": "drill",
+  "short_name": "drill",
   "description": "a quiet pomodoro timer.",
   "start_url": "/",
   "display": "standalone",

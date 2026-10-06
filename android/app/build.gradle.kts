@@ -15,11 +15,11 @@ plugins {
 val releaseKeystore: String? = System.getenv("ANDROID_KEYSTORE_PATH")
 
 android {
-    namespace = "io.github.mmerioles.tetodoro"
+    namespace = "io.github.mmerioles.drill"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "io.github.mmerioles.tetodoro"
+        applicationId = "io.github.mmerioles.drill"
         minSdk = 26
         targetSdk = 35
         versionName = System.getenv("VERSION") ?: "0.0.0"
