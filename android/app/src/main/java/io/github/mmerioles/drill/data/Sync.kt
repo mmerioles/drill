@@ -12,13 +12,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.IOException
 
 /**
  * Your account and the sync loop (docs/SYNC.md, "Client loop"), like
  * Sync.swift: push what changed here, then pull what changed elsewhere.
- * Runs at launch, after each logged block, every minute while the app is
- * open, and when you press sync.
+ * Runs at launch, after each logged block, every five minutes while the
+ * app is on screen and signed in, on coming back to it, and when you press
+ * sync.
  */
 class Sync(
     private val store: SessionStore,
@@ -41,6 +41,7 @@ class Sync(
         private set
 
     private var running: Job? = null
+    private var lastStarted = 0L
 
     val isSignedIn get() = account != null
 
@@ -203,7 +204,19 @@ class Sync(
         val account = account ?: return
         if (running?.isActive == true) return
         val backend = backend
+        lastStarted = System.currentTimeMillis()
         running = scope.launch { run(backend, account) }
+    }
+
+    /** Back on screen: sync, unless one started moments ago. */
+    fun cameBack() {
+        if (System.currentTimeMillis() - lastStarted >= 20_000L) syncNow()
+    }
+
+    /** Waits for a running sync to finish, for a receiver that has to say
+     *  when it's done. */
+    suspend fun settle() {
+        running?.join()
     }
 
     private suspend fun run(api: SyncBackend, start: Account) {
@@ -234,11 +247,11 @@ class Sync(
             state = State.SignedOut
         } catch (e: SyncBackend.Unconfirmed) {
             state = State.Unconfirmed
-        } catch (e: IOException) {
-            if (account?.email == start.email) state = State.Offline
-        } catch (e: SyncBackend.Rejected) {
-            if (account?.email == start.email) state = State.Offline
-        } catch (e: org.json.JSONException) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Anything else: a bad page, a date that won't parse, the disk.
+            // Like the mac, call it offline and try again next time.
             if (account?.email == start.email) state = State.Offline
         }
     }

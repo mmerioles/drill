@@ -29,6 +29,7 @@ final class Sync {
     private var running: Task<Void, Never>?
     private var loop: Task<Void, Never>?
     private var lastStarted: Date?
+    private var started = false
 
     private static let every: Duration = .seconds(5 * 60)
 
@@ -69,17 +70,25 @@ final class Sync {
     /// Syncs at launch, every few minutes, and whenever you come back to
     /// the app, since it keeps running in the menu bar.
     func start() {
-        guard loop == nil else { return }
-        loop = Task { [weak self] in
-            while !Task.isCancelled {
-                self?.syncNow()
-                try? await Task.sleep(for: Self.every)
-            }
-        }
+        guard !started else { return }
+        started = true
+        startLoop()
         NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.cameBack() }
+        }
+    }
+
+    /// The every-few-minutes loop runs only while signed in: signed out,
+    /// there's nothing to sync and no reason to wake.
+    private func startLoop() {
+        guard started, loop == nil, isSignedIn else { return }
+        loop = Task { [weak self] in
+            while !Task.isCancelled {
+                self?.syncNow()
+                try? await Task.sleep(for: Self.every, tolerance: .seconds(30))
+            }
         }
     }
 
@@ -293,8 +302,11 @@ final class Sync {
         self.account = account
         if let account, let data = try? JSONEncoder().encode(account) {
             defaults.set(data, forKey: Keys.account)
+            startLoop()
         } else {
             defaults.removeObject(forKey: Keys.account)
+            loop?.cancel()
+            loop = nil
         }
     }
 

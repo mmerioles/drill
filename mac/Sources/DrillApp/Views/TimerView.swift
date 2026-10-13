@@ -13,6 +13,7 @@ struct TimerView: View {
         VStack(spacing: 0) {
             ZStack {
                 DoodleRing(progress: model.progress, boiling: model.isRunning)
+                    .accessibilityHidden(true)
                 VStack(spacing: 8) {
                     // A single quiet word, only when there's something to say;
                     // the fixed height keeps the digits from jumping.
@@ -21,11 +22,13 @@ struct TimerView: View {
                         .foregroundStyle(Ink.faint)
                         .contentTransition(.opacity)
                         .animation(Ink.ease, value: model.phase)
+                        .accessibilityHidden(true)
                     Text(Copy.clock(model.remaining))
                         .font(Ink.digits(58))
                         .foregroundStyle(Ink.ink)
                         .contentTransition(.numericText(countsDown: true))
                         .animation(.snappy, value: Int(model.remaining.rounded(.up)))
+                        .modifier(SpokenTimer())
                     CycleDots(filled: model.engine.cyclePosition, of: model.config.longBreakEvery)
                 }
             }
@@ -105,5 +108,19 @@ private struct CycleDots: View {
             }
         }
         .animation(Ink.ease, value: filled)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(filled) of \(of)")
+    }
+}
+
+/// The countdown as VoiceOver says it: "focus", "12 minutes left".
+struct SpokenTimer: ViewModifier {
+    @Environment(AppModel.self) private var model
+
+    func body(content: Content) -> some View {
+        content
+            .accessibilityLabel(Copy.phaseName(model.phase))
+            .accessibilityValue(model.isActive && !model.isRunning
+                ? "paused, \(Copy.spokenLeft(model.remaining))" : Copy.spokenLeft(model.remaining))
     }
 }

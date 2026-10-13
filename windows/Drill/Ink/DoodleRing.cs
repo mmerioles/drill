@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation.Peers;
 using System.Windows.Media;
 
 namespace Drill.Ink;
@@ -30,6 +31,9 @@ public abstract class InkElement : FrameworkElement
         SnapsToDevicePixels = false;
     }
 
+    /// <summary>Drawn ink is decoration: screen readers skip it (the page names what matters).</summary>
+    protected override AutomationPeer OnCreateAutomationPeer() => new HiddenPeer(this);
+
     /// <summary>The wobble seed for this frame: steps while boiling, still otherwise.</summary>
     protected ulong Seed => _subscribed ? Boil.Seed : 0;
 
@@ -41,6 +45,14 @@ public abstract class InkElement : FrameworkElement
         if (want) Boil.Subscribe(InvalidateVisual); else Boil.Unsubscribe(InvalidateVisual);
         InvalidateVisual();
     }
+}
+
+/// <summary>A peer that keeps an element out of what screen readers see.</summary>
+public sealed class HiddenPeer(FrameworkElement owner) : FrameworkElementAutomationPeer(owner)
+{
+    protected override bool IsControlElementCore() => false;
+    protected override bool IsContentElementCore() => false;
+    protected override List<AutomationPeer>? GetChildrenCore() => null;
 }
 
 /// <summary>

@@ -43,13 +43,20 @@ function formatUUID(b) {
 const iso = (ms) => new Date(Math.floor(ms / 1000) * 1000).toISOString().replace(".000Z", "Z");
 
 export class Store extends EventTarget {
-  constructor() {
+  /** With `offline` (the site's demo), it never talks to the server. */
+  constructor({ offline = false } = {}) {
     super();
+    this.offline = offline;
     this.deviceID = localStorage.getItem(KEY.device) || `web-${randomUUID()}`;
     try { localStorage.setItem(KEY.device, this.deviceID); } catch {}
     this.sessions = read(KEY.sessions, {});
     this.syncState = this.account ? "synced" : "signedOut"; // signedOut | syncing | synced | offline | unconfirmed
     this.syncing = null;
+    /** When the last sync started, so coming back doesn't sync twice. */
+    this.lastStarted = 0;
+    /** { email, confirmed } while waiting on the email link, else null. */
+    this.waiting = null;
+    this.watching = null;
 
     // Another tab wrote: pick up its sessions.
     addEventListener("storage", (e) => {
@@ -64,29 +71,87 @@ export class Store extends EventTarget {
   get account() { return read(KEY.account, null); }
 
   /** Signs in, or creates the account when `create` is set. Throws an Error
-   *  whose message is fit to show, like "wrong email or password". */
+   *  whose message is fit to show, like "wrong email or password". When the
+   *  server won't sync until the email is confirmed, it starts waiting on
+   *  the link (`waiting`). */
   async signIn(email, password, create = false) {
-    let r;
-    try {
-      r = await fetch(create ? "/v1/accounts" : "/v1/signin", {
-        method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store",
-        body: JSON.stringify({ email, password }),
-      });
-    } catch {
-      throw new Error("can't reach the server.");
-    }
-    const body = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(body.error || "something went wrong. try again.");
+    this.stopWaiting();
+    const body = await this.#call(create ? "/v1/accounts" : "/v1/signin",
+                                  { method: "POST", body: JSON.stringify({ email, password }) });
     write(KEY.account, { email: body.email, token: body.token, confirmed: body.confirmed });
     // Everything on this device joins the account; then catch up from the top.
     write(KEY.dirty, Object.keys(this.sessions));
     write(KEY.cursor, "0");
     this.#setState("synced");
-    return this.sync();
+    // A sync for the account before this one may still be finishing.
+    if (this.syncing) await this.syncing;
+    await this.sync();
+    if (this.syncState === "unconfirmed") this.#watch();
+  }
+
+  /** Sends the confirmation email again. Throws a sentence fit to show. */
+  async resend() {
+    const token = this.account?.token;
+    if (!token) return;
+    await this.#call("/v1/resend", { method: "POST", body: "{}", token });
+  }
+
+  /** One account call. Throws an Error whose message is fit to show. */
+  async #call(path, { token, ...init }) {
+    let r;
+    try {
+      r = await fetch(path, {
+        ...init, cache: "no-store",
+        headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) },
+      });
+    } catch {
+      throw new Error("can't connect. try again in a bit.");
+    }
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.error ? `${body.error}.`.replace(/\.\.$/, ".") : "something went wrong. try again.");
+    return body;
+  }
+
+  /** Checks every few seconds whether the link was clicked, then syncs. */
+  #watch() {
+    const account = this.account;
+    if (!account) return;
+    this.waiting = { email: account.email, confirmed: false };
+    this.#emit();
+    const began = Date.now();
+    const check = async () => {
+      if (this.waiting?.email !== account.email || this.account?.token !== account.token) return;
+      try {
+        // Not while nobody's looking; quick at first, while they're likely at their inbox.
+        if (document.visibilityState === "visible") {
+          const now = await this.#call("/v1/account", { token: account.token });
+          if (this.account?.token !== account.token || !this.waiting) return;
+          if (now.confirmed) {
+            write(KEY.account, { ...account, confirmed: true });
+            this.waiting = { ...this.waiting, confirmed: true };
+            this.#emit();
+            this.sync();
+            // A beat on "you're in", then back to the plain account row.
+            this.watching = setTimeout(() => { this.waiting = null; this.watching = null; this.#emit(); }, 2500);
+            return;
+          }
+        }
+      } catch { /* not yet, or offline for a moment */ }
+      this.watching = setTimeout(check, Date.now() - began < 30 * 60_000 ? 3000 : 30_000);
+    };
+    this.watching = setTimeout(check, 3000);
+  }
+
+  /** Gives up waiting, for a wrong email or a change of mind. */
+  stopWaiting() {
+    clearTimeout(this.watching);
+    this.watching = null;
+    if (this.waiting) { this.waiting = null; this.#emit(); }
   }
 
   async signOut() {
     const token = this.account?.token;
+    this.stopWaiting();
     try { localStorage.removeItem(KEY.account); } catch {}
     this.#setState("signedOut");
     if (token) {
@@ -155,11 +220,17 @@ export class Store extends EventTarget {
   #setState(state) {
     if (this.syncState === state) return;
     this.syncState = state;
+    this.#emit();
+  }
+
+  #emit() {
     this.dispatchEvent(new Event("sync"));
   }
 
   /** Push, then pull until caught up. Safe to call often; runs one at a time. */
   sync() {
+    if (this.offline) return Promise.resolve();
+    if (!this.syncing) this.lastStarted = Date.now();
     this.syncing ??= this.#sync().finally(() => { this.syncing = null; });
     return this.syncing;
   }
@@ -167,13 +238,19 @@ export class Store extends EventTarget {
   async #sync() {
     const account = this.account;
     if (!account) return this.#setState("signedOut");
+    // Signing out, or into another account, partway through: this run's
+    // answers belong to the old token, so they're dropped from then on.
+    const current = () => this.account?.token === account.token;
     const headers = { "Content-Type": "application/json", Authorization: `Bearer ${account.token}` };
     const call = async (path, init = {}) => {
       const r = await fetch(path, { ...init, headers, cache: "no-store" });
+      if (!current()) throw Object.assign(new Error("stale"), { stale: true });
       if (r.status === 401) throw Object.assign(new Error("signed out"), { signedOut: true });
       if (r.status === 403) throw Object.assign(new Error("unconfirmed"), { unconfirmed: true });
       if (!r.ok) throw new Error(`${r.status}`);
-      return r.json();
+      const body = await r.json();
+      if (!current()) throw Object.assign(new Error("stale"), { stale: true });
+      return body;
     };
     this.#setState("syncing");
 
@@ -201,7 +278,9 @@ export class Store extends EventTarget {
       }
       this.#setState("synced");
     } catch (e) {
+      if (e.stale || !current()) return;
       if (e.signedOut) {
+        this.stopWaiting();
         try { localStorage.removeItem(KEY.account); } catch {}
       }
       this.#setState(e.signedOut ? "signedOut" : e.unconfirmed ? "unconfirmed" : "offline");

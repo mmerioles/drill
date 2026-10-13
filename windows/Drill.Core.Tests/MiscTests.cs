@@ -52,6 +52,35 @@ public class CopyTests
         Assert.Equal("long break", Copy.Status(Phase.LongBreak, running: false, active: false));
         Assert.Equal("sat, sep 26", Copy.Day(new DateTime(2026, 9, 26)));
     }
+
+    [Fact]
+    public void Finished()
+    {
+        Assert.Equal(("focus done", "take a break · 5 min"), Copy.Finished(Phase.Focus, Phase.ShortBreak, 300));
+        Assert.Equal(("focus done", "take a break · 15 min"), Copy.Finished(Phase.Focus, Phase.LongBreak, 900));
+        Assert.Equal(("break over", "back to focus"), Copy.Finished(Phase.ShortBreak, Phase.Focus, 1500));
+        Assert.Equal(("break over", "back to focus"), Copy.Finished(Phase.LongBreak, Phase.Focus, 1500));
+    }
+
+    [Fact]
+    public void Tooltip()
+    {
+        Assert.Equal("drill", Copy.Tooltip(Phase.Focus, running: false, active: false, 1500));
+        Assert.Equal("focus · 12 min left", Copy.Tooltip(Phase.Focus, running: true, active: true, 11 * 60 + 1));
+        Assert.Equal("focus · 12 min left", Copy.Tooltip(Phase.Focus, running: true, active: true, 12 * 60));
+        Assert.Equal("break · 1 min left", Copy.Tooltip(Phase.ShortBreak, running: true, active: true, 20));
+        Assert.Equal("paused · 3 min left", Copy.Tooltip(Phase.Focus, running: false, active: true, 150));
+    }
+
+    [Fact]
+    public void Spoken()
+    {
+        Assert.Equal("focus, 12 minutes left", Copy.Spoken(Phase.Focus, running: true, active: true, 12 * 60));
+        Assert.Equal("focus, 25 minutes left", Copy.Spoken(Phase.Focus, running: false, active: false, 1500));
+        Assert.Equal("paused, 1 minute left", Copy.Spoken(Phase.Focus, running: false, active: true, 60));
+        Assert.Equal("break, 30 seconds left", Copy.Spoken(Phase.ShortBreak, running: true, active: true, 30));
+        Assert.Equal("your year. today 1h 15m, this week 5h, streak 13 days.", Copy.YearSummary(4500, 18000, 13));
+    }
 }
 
 public class FocusSessionJsonTests

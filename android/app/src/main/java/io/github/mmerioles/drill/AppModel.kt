@@ -5,6 +5,7 @@ import android.app.UiModeManager
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -12,6 +13,7 @@ import io.github.mmerioles.drill.core.Engine
 import io.github.mmerioles.drill.core.EngineState
 import io.github.mmerioles.drill.core.FocusRecord
 import io.github.mmerioles.drill.core.FocusSession
+import io.github.mmerioles.drill.core.Heatmap
 import io.github.mmerioles.drill.core.Inspo
 import io.github.mmerioles.drill.core.Phase
 import io.github.mmerioles.drill.core.Status
@@ -21,11 +23,15 @@ import io.github.mmerioles.drill.data.SessionStore
 import io.github.mmerioles.drill.data.Sync
 import io.github.mmerioles.drill.data.Updater
 import io.github.mmerioles.drill.timer.Notifier
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 
 class DrillApp : Application() {
@@ -46,13 +52,30 @@ enum class Theme { Light, Dark }
 
 /**
  * Everything the screen shows, and the one place the timer changes. The
- * screen and the phase-end alarm both come through here, on the main thread,
- * and every change is saved at once, so the app can be killed at any time.
+ * screen, the notification's buttons and the phase-end alarm all come
+ * through here, on the main thread, and every change is saved at once, so
+ * the app can be killed at any time.
+ *
+ * Android has no quit: swiping drill away, or Android ending the process
+ * mid-focus, leaves the saved engine state and the phase-end alarm behind.
+ * The alarm logs the block when it ends, and the next launch catches up on
+ * whatever ended meanwhile, so studied time is never lost (the mac and
+ * windows log it on quit instead). A reset still logs the
+ * focus so far, if it's a minute or more.
  */
 class AppModel(private val app: Application) {
     private val prefs: SharedPreferences = app.getSharedPreferences("drill", Context.MODE_PRIVATE)
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    /** Work that outlives a screen. Whatever it throws is logged rather than
+     *  taking the app down. */
+    val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main.immediate +
+            CoroutineExceptionHandler { _, e -> Log.e(TAG, "background work failed", e) },
+    )
     private val store = SessionStore(app)
+    /** The database, one call at a time and in order, off the main thread. */
+    private val disk = Dispatchers.IO.limitedParallelism(1)
+    /** Writes still on their way to disk, for [settle]. */
+    private val writes = mutableListOf<Job>()
     val deviceID: String = prefs.getString("deviceID", null)
         ?: "android-${UUID.randomUUID().toString().uppercase()}".also { prefs.edit().putString("deviceID", it).apply() }
 
@@ -77,7 +100,18 @@ class AppModel(private val app: Application) {
     /** The tag in effect for the running focus block, captured when it starts. */
     private var blockTag: String? = prefs.getString("blockTag", null)
 
+    /** The sessions the year shows, nothing older. */
     var sessions by mutableStateOf(emptyList<FocusSession>())
+        private set
+    /** Distinct tags, most recently used first. */
+    var recentTags by mutableStateOf(emptyList<String>())
+        private set
+    /** The day the year ends on, moved on by [reload] at midnight, a time
+     *  zone change, or coming back to the app. */
+    var today by mutableStateOf(LocalDate.now())
+        private set
+    /** Something that went wrong where you'd want to know, like the mac's. */
+    var lastError by mutableStateOf<String?>(null)
         private set
 
     /** YouTube id to the day it was first opened on this phone. */
@@ -90,9 +124,24 @@ class AppModel(private val app: Application) {
 
     // Reading the timer
 
-    fun remaining(now: Long) = engine.remaining(now)
-    fun progress(now: Long) = engine.progress(now)
+    // These read the observable [timer] and [config], so whatever draws them
+    // updates when either changes.
+
+    fun remaining(now: Long): Long = when (val s = timer.status) {
+        Status.Idle -> config.duration(timer.phase) * 1000L
+        is Status.Paused -> s.remaining
+        is Status.Running -> maxOf(0, s.endsAt - now)
+    }
+
+    fun progress(now: Long): Float {
+        val duration = config.duration(timer.phase) * 1000L
+        if (duration <= 0) return 0f
+        return (1f - remaining(now).toFloat() / duration).coerceIn(0f, 1f)
+    }
+
     val cyclePosition get() = timer.focusCount % config.longBreakEvery
+    /** A block is under way, running or paused: no updating now. */
+    val isActive get() = timer.status !is Status.Idle
 
     // Intents
 
@@ -103,6 +152,11 @@ class AppModel(private val app: Application) {
         if (starting && engine.phase == Phase.Focus) captureTag()
         Notifier.clearEnded(app)
         changed()
+    }
+
+    /** The notification's "start break" / "start focus": starts only from idle. */
+    fun startNext() {
+        if (engine.isIdle) toggle()
     }
 
     fun skip() {
@@ -162,12 +216,25 @@ class AppModel(private val app: Application) {
         prefs.edit().putStringSet("inspo.seen", watched.map { (id, day) -> "$id:$day" }.toSet()).apply()
     }
 
-    /** Distinct tags, most recently used first. */
-    fun tags(limit: Int = 6): List<String> =
-        sessions.asReversed().mapNotNull { it.tag }.distinct().take(limit)
-
+    /** Reads the year and the recent tags again, as of now. */
     fun reload() {
-        scope.launch { sessions = withContext(Dispatchers.IO) { store.live() } }
+        scope.launch {
+            val day = LocalDate.now()
+            val from = Heatmap.start(day).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            val loaded = withContext(disk) { runCatching { store.since(from) to store.tags(6) } }
+            loaded.onSuccess { (year, tags) ->
+                sessions = year
+                recentTags = tags
+            }.onFailure { Log.e(TAG, "couldn't read sessions", it) }
+            today = day
+        }
+    }
+
+    /** Waits for writes and a running sync, for a receiver that has to say
+     *  when it's done before Android lets the process go. */
+    suspend fun settle() {
+        writes.toList().forEach { it.join() }
+        sync.settle()
     }
 
     // Internals
@@ -179,21 +246,31 @@ class AppModel(private val app: Application) {
     private fun handle(t: Transition) {
         t.record?.let { log(it) }
         if (t.next == Phase.Focus && engine.isRunning) captureTag()
-        if (t.natural) Notifier.ended(app, t.finished, soundOn)
+        if (t.natural) {
+            // Waiting on you when the next phase doesn't start by itself.
+            Notifier.ended(app, t.finished, t.next, config.duration(t.next), waits = engine.isIdle, sound = soundOn)
+        }
     }
 
     private fun log(record: FocusRecord) {
         val session = FocusSession.from(record, blockTag, deviceID, System.currentTimeMillis())
-        // Written at once: after an alarm, the process may not live long.
-        store.save(listOf(session), local = true)
-        reload()
-        sync.syncNow()
+        // Written at once, off the main thread; after an alarm, the receiver
+        // waits for it (settle), since the process may not live long.
+        val job = scope.launch {
+            val saved = withContext(disk) { runCatching { store.save(listOf(session), local = true) } }
+            saved.exceptionOrNull()?.let { Log.e(TAG, "couldn't save a session", it) }
+            lastError = if (saved.isSuccess) null else "couldn't save that session."
+            reload()
+            sync.syncNow()
+        }
+        writes += job
+        job.invokeOnCompletion { scope.launch { writes.remove(job) } }
     }
 
     private fun changed() {
         timer = engine.state
         saveEngine()
-        Notifier.schedule(app, engine.endsAt, engine.phase)
+        Notifier.schedule(app, engine.state, engine.remaining(System.currentTimeMillis()))
     }
 
     private fun loadConfig() = TimerConfig(
@@ -250,4 +327,8 @@ class AppModel(private val app: Application) {
             val day = entry.substring(i + 1).toIntOrNull()
             if (i <= 0 || day == null) null else entry.substring(0, i) to day
         }.toMap()
+
+    private companion object {
+        const val TAG = "drill"
+    }
 }

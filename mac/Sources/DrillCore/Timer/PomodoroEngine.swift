@@ -66,6 +66,25 @@ public struct PomodoroEngine: Equatable, Sendable {
         }
     }
 
+    /// The phase that follows this one when it runs out, and whether it
+    /// will start by itself.
+    public var upcoming: (phase: Phase, autoStarts: Bool) {
+        let next: Phase = phase.isBreak
+            ? .focus
+            : (focusCount + 1) % config.longBreakEvery == 0 ? .longBreak : .shortBreak
+        return (next, next.isBreak ? config.autoStartBreaks : config.autoStartFocus)
+    }
+
+    /// Seconds from `now` until the shown countdown (whole seconds, rounded
+    /// up) next changes, landing just past the boundary. Nil unless running,
+    /// so a host can wake once a second instead of polling.
+    public func untilNextSecond(at now: Date) -> TimeInterval? {
+        guard isRunning else { return nil }
+        let left = remaining(at: now)
+        guard left > 0 else { return 0 }
+        return left - (left - 1e-6).rounded(.down) + 0.004
+    }
+
     public func progress(at now: Date) -> Double {
         guard duration > 0 else { return 0 }
         return min(1, max(0, 1 - remaining(at: now) / duration))
@@ -146,6 +165,7 @@ public struct PomodoroEngine: Equatable, Sendable {
 
     private mutating func finish(endedAt: Date, natural: Bool, now: Date) -> Transition {
         let finished = phase
+        let (next, autoStart) = upcoming
         var record: FocusRecord?
 
         if finished == .focus {
@@ -153,17 +173,13 @@ public struct PomodoroEngine: Equatable, Sendable {
             // A skipped focus block still counts as a round, so skipping
             // keeps building towards the long break like any pomodoro timer.
             focusCount += 1
-            let longDue = focusCount % config.longBreakEvery == 0
-            phase = longDue ? .longBreak : .shortBreak
-        } else {
-            phase = .focus
         }
+        phase = next
         clearBlock()
 
         // Auto-started phases begin at `now`, not at the old deadline, so a
         // Mac that slept through several phases wakes to one transition
         // instead of a chain of phantom sessions.
-        let autoStart = phase.isBreak ? config.autoStartBreaks : config.autoStartFocus
         if natural && autoStart { start(at: now) }
 
         return Transition(finished: finished, next: phase, record: record, natural: natural)

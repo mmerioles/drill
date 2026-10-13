@@ -92,8 +92,13 @@ public class PopupWindow : Window
 
         Activate();
         Native.SetForegroundWindow(_hwnd);
+        // Keyboard users start on the first thing to press.
+        (Content as UIElement)?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
         Slide((int)x, (int)y, dx, dy, opening: true, () => { });
     }
+
+    /// <summary>On its way out (or gone).</summary>
+    public bool IsDismissing => _closing || !IsVisible;
 
     public void Dismiss()
     {
@@ -212,23 +217,48 @@ public sealed class TrayPanel : UserControl
         open.Click += (_, _) => { dismiss(); shell.OpenMain(); };
         quit.Click += (_, _) => shell.Quit();
 
-        _model.PropertyChanged += OnModel;
+        Loaded += (_, _) =>
+        {
+            _model.PropertyChanged -= OnModel; // Loaded can come twice
+            _model.PropertyChanged += OnModel;
+            Show();
+        };
         Unloaded += (_, _) => _model.PropertyChanged -= OnModel;
         Show();
     }
 
-    private void OnModel(object? sender, PropertyChangedEventArgs e) => Show();
+    /// <summary>Only what changed: the clock ticks a dozen properties a second.</summary>
+    private void OnModel(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(AppModel.Clock): ShowClock(); break;
+            case nameof(AppModel.Progress): _ring.Progress = _model.Progress; break;
+            case nameof(AppModel.Status): _status.Text = _model.Status; break;
+            case nameof(AppModel.IsRunning): _glyph.Boiling = _model.IsRunning; break;
+            case nameof(AppModel.PrimaryLabel): _primary.Content = _model.PrimaryLabel; break;
+            case nameof(AppModel.IsActive): _reset.Visibility = _model.IsActive ? Visibility.Visible : Visibility.Collapsed; break;
+            case nameof(AppModel.Heatmap): _today.Text = Copy.Amount(_model.Heatmap.Today); break;
+            case null or "": Show(); break;
+        }
+    }
 
     private void Show()
     {
         _status.Text = _model.Status;
-        _clock.Text = _model.Clock;
+        ShowClock();
         _ring.Progress = _model.Progress;
         _ring.Boiling = false;
         _glyph.Boiling = _model.IsRunning;
         _primary.Content = _model.PrimaryLabel;
         _reset.Visibility = _model.IsActive ? Visibility.Visible : Visibility.Collapsed;
         _today.Text = Copy.Amount(_model.Heatmap.Today);
+    }
+
+    private void ShowClock()
+    {
+        _clock.Text = _model.Clock;
+        System.Windows.Automation.AutomationProperties.SetName(_clock, _model.Spoken);
     }
 }
 

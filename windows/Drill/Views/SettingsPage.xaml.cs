@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -13,6 +14,7 @@ public partial class SettingsPage : UserControl
     private readonly Shell _shell;
     private AppModel Model => _shell.Model;
     private bool _showing;
+    private bool _listening;
 
     public SettingsPage(Shell shell)
     {
@@ -21,13 +23,13 @@ public partial class SettingsPage : UserControl
         Appearance.Items = ["light", "dark"];
 
         Show();
-        Model.PropertyChanged += (_, _) => Show();
-        shell.Sync.PropertyChanged += (_, _) => ShowAccount();
-        shell.Updater.PropertyChanged += (_, _) => ShowUpdate();
+        // The app's objects outlive this page: listen only while it's in a window.
+        Loaded += (_, _) => Listen(true);
+        Unloaded += (_, _) => Listen(false);
         IsVisibleChanged += (_, _) => { if (IsVisible) shell.Updater.CheckIfStale(); };
 
-        Appearance.PropertyChanged(Segmented.SelectedIndexProperty, () =>
-            Change(() => _shell.SetTheme(Appearance.SelectedIndex == 0 ? Theme.Light : Theme.Dark)));
+        Appearance.Changed += () =>
+            Change(() => _shell.SetTheme(Appearance.SelectedIndex == 0 ? Theme.Light : Theme.Dark));
         Bind(FocusMinutes, c => c.Focus / 60, (c, v) => c with { Focus = v * 60 });
         Bind(ShortBreak, c => c.ShortBreak / 60, (c, v) => c with { ShortBreak = v * 60 });
         Bind(LongBreak, c => c.LongBreak / 60, (c, v) => c with { LongBreak = v * 60 });
@@ -46,6 +48,43 @@ public partial class SettingsPage : UserControl
         ShowUpdate();
     }
 
+    private void Listen(bool on)
+    {
+        if (on == _listening) return;
+        _listening = on;
+        if (on)
+        {
+            Model.PropertyChanged += OnModel;
+            _shell.Sync.PropertyChanged += OnSync;
+            _shell.Updater.PropertyChanged += OnUpdater;
+            Show(); // whatever changed while away
+            ShowAccount();
+        }
+        else
+        {
+            Model.PropertyChanged -= OnModel;
+            _shell.Sync.PropertyChanged -= OnSync;
+            _shell.Updater.PropertyChanged -= OnUpdater;
+        }
+    }
+
+    /// <summary>Only what these rows show: not the clock's dozen changes a second.</summary>
+    private void OnModel(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(AppModel.Config) or nameof(AppModel.Theme) or nameof(AppModel.SoundOn) or nameof(AppModel.KeepInTray) or null or "":
+                Show();
+                break;
+            case nameof(AppModel.IsActive):
+                ShowUpdate();
+                break;
+        }
+    }
+
+    private void OnSync(object? sender, PropertyChangedEventArgs e) => ShowAccount();
+    private void OnUpdater(object? sender, PropertyChangedEventArgs e) => ShowUpdate();
+
     /// <summary>Applies a change made here, ignoring the echo while the page is being filled in.</summary>
     private void Change(Action change)
     {
@@ -53,10 +92,10 @@ public partial class SettingsPage : UserControl
     }
 
     private void Bind(Stepper stepper, Func<TimerConfig, double> get, Func<TimerConfig, double, TimerConfig> set) =>
-        stepper.PropertyChanged(Stepper.ValueProperty, () => Change(() => Model.Config = set(Model.Config, stepper.Value)));
+        stepper.Changed += () => Change(() => Model.Config = set(Model.Config, stepper.Value));
 
     private void Toggled(Toggle toggle, Action<bool> set) =>
-        toggle.PropertyChanged(Toggle.IsOnProperty, () => Change(() => set(toggle.IsOn)));
+        toggle.Changed += () => Change(() => set(toggle.IsOn));
 
     private void Show()
     {

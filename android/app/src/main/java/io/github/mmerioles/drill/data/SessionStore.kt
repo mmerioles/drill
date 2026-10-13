@@ -63,10 +63,20 @@ class SessionStore(context: Context) :
         return changed
     }
 
-    /** Live sessions, oldest first. */
+    /** Live sessions started at or after [from] (epoch ms), oldest first:
+     *  just what the year shows, not every session ever. */
     @Synchronized
-    fun live(): List<FocusSession> =
-        query("SELECT * FROM sessions WHERE deletedAt IS NULL ORDER BY startedAt", emptyArray())
+    fun since(from: Long): List<FocusSession> =
+        query("SELECT * FROM sessions WHERE deletedAt IS NULL AND startedAt >= ? ORDER BY startedAt", arrayOf(from.toString()))
+
+    /** Distinct tags, most recently used first. */
+    @Synchronized
+    fun tags(limit: Int): List<String> =
+        readableDatabase.rawQuery(
+            "SELECT tag FROM sessions WHERE deletedAt IS NULL AND tag IS NOT NULL AND tag != '' " +
+                "GROUP BY tag ORDER BY MAX(startedAt) DESC LIMIT ?",
+            arrayOf(limit.toString()),
+        ).use { c -> buildList { while (c.moveToNext()) add(c.getString(0)) } }
 
     /** Rows waiting to be pushed. */
     @Synchronized

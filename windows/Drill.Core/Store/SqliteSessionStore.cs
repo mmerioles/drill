@@ -52,7 +52,11 @@ public sealed class SqliteSessionStore : ISessionStore, IDisposable
     /// <summary>%LOCALAPPDATA%\Drill\drill.sqlite</summary>
     public static string DefaultPath => Path.Combine(Paths.DataFolder, "drill.sqlite");
 
-    public void Dispose() => _db.Dispose();
+    /// <summary>Closes the file, waiting for any read or write in flight (sync runs off the UI thread).</summary>
+    public void Dispose()
+    {
+        lock (_gate) _db.Dispose();
+    }
 
     private void Migrate()
     {

@@ -5,14 +5,17 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
+import java.time.temporal.WeekFields
+import java.util.Locale
 
 // A stretch of days in week columns, ported from web/static/heatmap.js.
-// Days are bucketed in the phone's own time zone, and weeks start on Sunday.
+// Days are bucketed in the phone's own time zone, and weeks start on the
+// locale's first weekday, like the mac.
 
 data class Day(val date: LocalDate, val seconds: Double, val level: Int)
 
 data class Heatmap(
-    /** weeks[column][row]; row 0 is Sunday. Null for days still to come. */
+    /** weeks[column][row]; row 0 is the first weekday. Null for days still to come. */
     val weeks: List<List<Day?>>,
     val today: Double,
     val thisWeek: Double,
@@ -28,11 +31,22 @@ data class Heatmap(
             else -> 4
         }
 
+        /** The locale's first weekday: sunday in the US, monday in most places. */
+        fun firstWeekday(locale: Locale = Locale.getDefault()): DayOfWeek = WeekFields.of(locale).firstDayOfWeek
+
+        /** The first day a grid of [weeks] columns shows, for loading just that much. */
+        fun start(today: LocalDate, weeks: Int = MAX_WEEKS, firstDay: DayOfWeek = firstWeekday()): LocalDate =
+            today.with(TemporalAdjusters.previousOrSame(firstDay)).minusWeeks((weeks - 1).toLong())
+
+        /** The widest grid, a year; a narrow phone shows the last half of it. */
+        const val MAX_WEEKS = 53
+
         fun build(
             sessions: List<FocusSession>,
             weeks: Int,
             today: LocalDate = LocalDate.now(),
             zone: ZoneId = ZoneId.systemDefault(),
+            firstDay: DayOfWeek = firstWeekday(),
         ): Heatmap {
             val totals = HashMap<LocalDate, Double>()
             for (s in sessions) {
@@ -40,8 +54,8 @@ data class Heatmap(
                 totals[day] = (totals[day] ?: 0.0) + s.focusSeconds
             }
 
-            val weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
-            val gridStart = weekStart.minusWeeks((weeks - 1).toLong())
+            val weekStart = today.with(TemporalAdjusters.previousOrSame(firstDay))
+            val gridStart = start(today, weeks, firstDay)
             val columns = List(weeks) { w ->
                 List(7) { d ->
                     val date = gridStart.plusDays((w * 7 + d).toLong())

@@ -223,9 +223,18 @@ button, input { font: inherit; color: inherit; }
   flex: 1; min-width: 0; background: none; border: 0; outline: none;
   text-align: right; color: var(--ink);
 }
-.account .error { color: var(--faint); font-size: 13px; min-height: 18px; margin: -4px 2px 8px; }
-.account-actions { display: flex; align-items: center; justify-content: space-between; }
-.account-actions .capsule:disabled { opacity: .5; }
+.account .message { color: var(--faint); font-size: 13px; min-height: 18px; margin: -4px 2px 8px; }
+#account-waiting .message { margin: 0 2px 8px; }
+#account-waiting h2 { margin-bottom: 10px; }
+.account-actions { display: flex; align-items: center; gap: 16px; }
+.account-actions .spacer { flex: 1; }
+.account-actions .link { font-size: 13px; }
+.account-actions .link:disabled { opacity: .5; cursor: default; }
+.account-actions .capsule { margin-left: -4px; }
+.account-actions .capsule:disabled { opacity: .5; cursor: default; }
+.account-actions .capsule:disabled:active { transform: none; }
+#waiting-actions { transition: opacity .25s ease-in-out; }
+#waiting-actions.gone { opacity: 0; pointer-events: none; }
 
 /* Inspo */
 

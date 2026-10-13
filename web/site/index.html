@@ -19,7 +19,7 @@
     :root {
       --paper: #F2F0ED;
       --ink: #2B2A2F;
-      --faint: rgba(43, 42, 47, .5);
+      --faint: rgba(43, 42, 47, .45);
       --ghost: rgba(43, 42, 47, .12);
       --accent: #CF3A4F;
     }
@@ -27,7 +27,7 @@
       :root {
         --paper: #121211;
         --ink: #F1F0EB;
-        --faint: rgba(241, 240, 235, .5);
+        --faint: rgba(241, 240, 235, .45);
         --ghost: rgba(241, 240, 235, .12);
         --accent: #F1F0EB;
       }
@@ -71,7 +71,7 @@
     /* Each logo shows only where it belongs. */
     .android .mac, .windows .mac,
     body:not(.android) .android-only, body:not(.windows) .windows-only { display: none; }
-    /* The real app, live: a mac window, or a phone on android. */
+    /* The real app, live: a mac or windows window, or a phone on touch screens. */
     .try { color: var(--faint); font-size: 13px; margin-top: 56px; }
     .frame {
       width: 100%;
@@ -92,8 +92,13 @@
     .windows .bar i { display: none; }
     .bar svg { display: none; width: 46px; height: 32px; stroke: var(--faint); stroke-width: 1; fill: none; }
     .windows .bar svg { display: block; }
-    .android .frame { max-width: 360px; border-radius: 32px; }
-    .android .bar { display: none; }
+    /* Phones and tablets: the app in a phone's shape. */
+    .phone .frame { max-width: 360px; border-radius: 32px; }
+    .phone .bar { display: none; }
+    /* No app to download here (iphone, ipad, linux, chromeos): the web app below. */
+    .other { color: var(--faint); font-size: 14px; margin-top: 28px; }
+    .other a { color: var(--ink); }
+    body:not(.none) .other, .none .download, .none .meta { display: none; }
     /* Sized to the app by the script below, so nothing is cut off. */
     .frame iframe {
       display: block;
@@ -139,6 +144,7 @@
       download
     </a>
     <p class="meta" id="meta">&nbsp;</p>
+    <p class="other">on iphone or linux? try it below. <a href="https://github.com/mmerioles/drill/releases">all releases</a></p>
 
     <p class="try">try it</p>
     <div class="frame">
@@ -164,25 +170,36 @@
 
   <script>
     // One page for every app. Android phones get the apk, windows PCs the
-    // installer for their chip (x64, or arm64 on snapdragon PCs), everyone
-    // else the dmg. The button points straight at the newest release's file.
-    // If the API is unreachable, it still links to the latest release page.
+    // installer for their chip (x64, or arm64 on snapdragon PCs), macs the
+    // dmg. The button points straight at the newest release's file. If the
+    // API is unreachable, it still links to the latest release page.
+    // iphones, ipads, linux and chromeos have no app yet: no button, just
+    // the web app below and a link to every release.
     const PLATFORMS = {
       mac: { ext: ".dmg", reach: "the countdown lives in your menu bar." },
       android: { ext: ".apk", reach: "the countdown lives in your notifications." },
       windows: { ext: "_x64.exe", reach: "the countdown lives in your taskbar." },
+      none: { ext: null, reach: "the countdown lives in your tab." },
     };
     const $ = (id) => document.getElementById(id);
     const ua = navigator.userAgent;
+    const platform = navigator.userAgentData?.platform ?? "";
+    // iPadOS says it's a Mac; only the touch screen gives it away.
+    const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
     const name = /android/i.test(ua) ? "android"
-      : navigator.userAgentData?.platform === "Windows" || /Windows NT/.test(ua) ? "windows"
+      : platform === "Windows" || /Windows NT/.test(ua) ? "windows"
+      : ios || /CrOS/.test(ua) || platform === "Chrome OS" || platform === "Linux" || /Linux|X11/.test(ua) ? "none"
       : "mac";
+    // Anything held in the hand tries the app in a phone's shape.
+    const phone = name === "android" || ios || matchMedia("(pointer: coarse) and (hover: none)").matches;
+    document.body.classList.toggle("phone", phone);
     let release = null;
 
     function render() {
       const p = PLATFORMS[name];
-      for (const n of ["android", "windows"]) document.body.classList.toggle(n, name === n);
+      for (const n of ["android", "windows", "none"]) document.body.classList.toggle(n, name === n);
       $("reach").textContent = p.reach;
+      if (!p.ext) return;
       $("download").setAttribute("aria-label", `download for ${name}`);
       const file = release?.assets.find((a) => a.name.endsWith(p.ext));
       $("download").href = file?.browser_download_url ??
@@ -217,7 +234,7 @@
     demo.addEventListener("load", fit);
     if (demo.contentDocument?.readyState === "complete") fit();
 
-    fetch("https://api.github.com/repos/mmerioles/drill/releases/latest")
+    if (name !== "none") fetch("https://api.github.com/repos/mmerioles/drill/releases/latest")
       .then((r) => r.ok ? r.json() : Promise.reject())
       .then((r) => { release = r; render(); })
       .catch(() => {});

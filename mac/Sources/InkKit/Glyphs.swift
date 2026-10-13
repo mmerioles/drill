@@ -48,6 +48,8 @@ public struct Glyph: View {
             }
         }
         .frame(width: size, height: size)
+        // Decoration: the words beside a glyph already say what it means.
+        .accessibilityHidden(true)
     }
 
     /// A tapering corkscrew: a spring seen slightly from above, wide at the

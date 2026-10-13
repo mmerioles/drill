@@ -43,6 +43,7 @@ public struct InkLinkStyle: ButtonStyle {
             .modifier(LinkInk(selected: selected))
             .opacity(configuration.isPressed ? 0.5 : 1)
             .contentShape(Rectangle())
+            .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

@@ -82,7 +82,12 @@ public sealed class AppModel : Observable
         {
             if (e.Mode == PowerModes.Resume) _tick.Dispatcher.BeginInvoke(() => { Tick(); Reload(); });
         };
-        SystemEvents.TimeChanged += (_, _) => _tick.Dispatcher.BeginInvoke(Reload);
+        // The clock was set, or the time zone changed: "today" may have moved.
+        SystemEvents.TimeChanged += (_, _) => _tick.Dispatcher.BeginInvoke(() =>
+        {
+            TimeZoneInfo.ClearCachedData();
+            Reload();
+        });
 
         Reload();
     }
@@ -202,6 +207,8 @@ public sealed class AppModel : Observable
     public int CyclePosition => Engine.CyclePosition;
     public int CycleLength => Config.LongBreakEvery;
     public string Tooltip => Copy.Tooltip(Phase, IsRunning, IsActive, Remaining);
+    /// <summary>The timer for screen readers: "focus, 12 minutes left".</summary>
+    public string Spoken => Copy.Spoken(Phase, IsRunning, IsActive, Remaining);
 
     // Intents
 
@@ -286,6 +293,7 @@ public sealed class AppModel : Observable
         Raise(nameof(CyclePosition));
         Raise(nameof(CycleLength));
         Raise(nameof(Tooltip));
+        Raise(nameof(Spoken));
         Ticked?.Invoke();
     }
 

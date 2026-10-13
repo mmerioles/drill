@@ -65,7 +65,7 @@ private struct TimerCommands: Commands {
 
     var body: some Commands {
         CommandMenu("Timer") {
-            Button(model.isRunning ? "Pause" : "Start", action: model.toggle)
+            Button(model.isRunning ? "Pause" : (model.isActive ? "Resume" : "Start"), action: model.toggle)
                 .keyboardShortcut(.return, modifiers: .command)
             Button("Skip", action: model.skip)
                 .keyboardShortcut(.rightArrow, modifiers: .command)

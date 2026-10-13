@@ -35,6 +35,8 @@ final class AppModel {
         get { engine.config }
         set {
             engine.config = newValue
+            // The banner names the next phase and its length: keep it true.
+            if engine.isRunning { scheduleBanner() }
             if let data = try? JSONEncoder().encode(newValue) {
                 defaults.set(data, forKey: Keys.config)
             }
@@ -76,10 +78,24 @@ final class AppModel {
         self.theme = defaults.string(forKey: Keys.theme).flatMap(Theme.init) ?? .dark
 
         reload()
-        NotificationCenter.default.addObserver(
-            forName: .NSCalendarDayChanged, object: nil, queue: .main
+        notifier.onStart = { [weak self] in self?.startNext() }
+
+        // A new day, time zone or clock, or a wake from sleep: "today", the
+        // week and the streak may have moved, and the countdown should catch up.
+        let center = NotificationCenter.default
+        for name in [Notification.Name.NSCalendarDayChanged, .NSSystemTimeZoneDidChange, .NSSystemClockDidChange] {
+            center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.timeMoved() }
+            }
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reload() }
+            MainActor.assumeIsolated { self?.timeMoved() }
+        }
+        // Quitting mid-focus logs the focus so far, like reset.
+        center.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { if self?.isActive == true { self?.reset() } }
         }
     }
 
@@ -121,19 +137,28 @@ final class AppModel {
             notifier.prepare()
             if engine.phase == .focus { captureTag() }
         }
+        if engine.isRunning { scheduleBanner() } else { notifier.cancel() }
         syncTicking()
     }
 
     func skip() {
         now = Date()
+        notifier.cancel()
         handle(engine.skip(at: now))
         syncTicking()
     }
 
     func reset() {
         now = Date()
+        notifier.cancel()
         if let record = engine.reset(at: now) { log(record) }
         syncTicking()
+    }
+
+    /// The banner's "start break" / "start focus": starts the waiting phase,
+    /// unless you've already started it yourself.
+    private func startNext() {
+        if engine.isIdle { toggle() }
     }
 
     /// Themes are appearances: the Ink palette resolves per appearance, so
@@ -147,27 +172,37 @@ final class AppModel {
 
     // MARK: Clock
 
+    /// Wakes once per shown second, just past the boundary, so everything
+    /// watching `now` redraws once a second; nothing wakes while not running.
+    /// Restarted on every start, pause and phase change to stay aligned.
     private func syncTicking() {
-        if engine.isRunning {
-            guard tickTask == nil else { return }
-            tickTask = Task { [weak self] in
-                while !Task.isCancelled {
-                    try? await Task.sleep(for: .milliseconds(250))
-                    self?.tick()
-                }
+        tickTask?.cancel()
+        tickTask = nil
+        guard engine.isRunning else { return }
+        tickTask = Task { [weak self] in
+            while !Task.isCancelled, let wait = self?.engine.untilNextSecond(at: Date()) {
+                try? await Task.sleep(for: .seconds(wait), tolerance: .milliseconds(20))
+                guard !Task.isCancelled else { return }
+                self?.tick()
             }
-        } else {
-            tickTask?.cancel()
-            tickTask = nil
         }
     }
 
     private func tick() {
         now = Date()
-        if let transition = engine.tick(at: now) {
-            handle(transition)
-            syncTicking()
-        }
+        // Only touch the observed engine when the phase is really over:
+        // a no-op mutation would still redraw everything that reads it.
+        guard case .running(let endsAt) = engine.status, now >= endsAt,
+              let transition = engine.tick(at: now) else { return }
+        handle(transition)
+        syncTicking()
+    }
+
+    /// The clock jumped (wake, time zone, clock change) or a day began.
+    private func timeMoved() {
+        reload()
+        now = Date()
+        if engine.isRunning { tick(); syncTicking() }
     }
 
     private func handle(_ t: Transition) {
@@ -175,9 +210,19 @@ final class AppModel {
         if t.next == .focus && engine.isRunning { captureTag() }
         guard t.natural else { return }
 
-        let copy = Copy.finished(t.finished)
-        notifier.post(title: copy.title, body: copy.body)
+        // The banner itself was scheduled for this moment; an auto-started
+        // phase gets its own.
+        if engine.isRunning { scheduleBanner() }
         if soundOn { NSSound(named: t.finished == .focus ? "Glass" : "Tink")?.play() }
+    }
+
+    /// Schedules the banner for the running phase's end.
+    private func scheduleBanner() {
+        guard case .running(let endsAt) = engine.status else { return }
+        let next = engine.upcoming
+        let copy = Copy.finished(engine.phase, next: config.duration(of: next.phase))
+        notifier.schedule(title: copy.title, body: copy.body, breakEnding: engine.phase.isBreak,
+                          at: endsAt, offering: next.autoStarts ? nil : next.phase)
     }
 
     // MARK: Data
@@ -206,13 +251,14 @@ final class AppModel {
         let range = builder.range(today: Date())
         yearSessions = (try? store.sessions(from: range.from, to: range.to)) ?? []
         recentTags = (try? store.tags(limit: 6)) ?? []
-        if let filter = tagFilter, !recentTags.contains(filter) { tagFilter = nil }
-        rebuildHeatmap()
+        // Clearing the filter rebuilds through its didSet; don't build twice.
+        if let filter = tagFilter, !recentTags.contains(filter) { tagFilter = nil } else { rebuildHeatmap() }
     }
 
     private func rebuildHeatmap() {
         let shown = tagFilter.map { t in yearSessions.filter { $0.tag == t } } ?? yearSessions
-        heatmap = builder.build(shown, today: Date())
+        let built = builder.build(shown, today: Date())
+        if built != heatmap { heatmap = built }
     }
 
     private enum Keys {

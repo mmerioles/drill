@@ -27,7 +27,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,21 +63,26 @@ fun SettingsSheet(model: AppModel, close: () -> Unit, signIn: () -> Unit) {
     val ink = LocalPalette.current
     val c = model.config
     val sync = model.sync
-    val scope = rememberCoroutineScope()
 
     Sheet(close) {
         Group {
             SettingRow("appearance") {
-                Theme.entries.forEach { t ->
-                    Link(t.name.lowercase(), on = model.theme == t) { model.updateTheme(t) }
+                Row(Modifier.selectableGroup()) {
+                    Theme.entries.forEach { t ->
+                        Link(t.name.lowercase(), on = model.theme == t, selectable = true) { model.updateTheme(t) }
+                    }
                 }
             }
         }
         Group {
-            StepperRow("focus", c.focus / 60, 5..120, step = 5, unit = "min") { model.updateConfig(c.copy(focus = it * 60)) }
-            StepperRow("short break", c.shortBreak / 60, 1..30, unit = "min") { model.updateConfig(c.copy(shortBreak = it * 60)) }
-            StepperRow("long break", c.longBreak / 60, 5..60, step = 5, unit = "min") { model.updateConfig(c.copy(longBreak = it * 60)) }
-            StepperRow("long break every", c.longBreakEvery, 2..8) { model.updateConfig(c.copy(longBreakEvery = it)) }
+            StepperRow("focus", c.focus / 60, 5..120, step = 5, unit = "min",
+                less = "fewer focus minutes", more = "more focus minutes") { model.updateConfig(c.copy(focus = it * 60)) }
+            StepperRow("short break", c.shortBreak / 60, 1..30, unit = "min",
+                less = "fewer short break minutes", more = "more short break minutes") { model.updateConfig(c.copy(shortBreak = it * 60)) }
+            StepperRow("long break", c.longBreak / 60, 5..60, step = 5, unit = "min",
+                less = "fewer long break minutes", more = "more long break minutes") { model.updateConfig(c.copy(longBreak = it * 60)) }
+            StepperRow("long break every", c.longBreakEvery, 2..8,
+                less = "fewer blocks before a long break", more = "more blocks before a long break") { model.updateConfig(c.copy(longBreakEvery = it)) }
         }
         Group {
             SwitchRow("auto-start breaks", c.autoStartBreaks) { model.updateConfig(c.copy(autoStartBreaks = it)) }
@@ -79,33 +90,24 @@ fun SettingsSheet(model: AppModel, close: () -> Unit, signIn: () -> Unit) {
             SwitchRow("sound", model.soundOn, model::updateSound)
         }
         Group {
-            val account = sync.account
-            val waiting = sync.waiting
-            if (waiting != null) {
-                SettingRow(waiting.email) {
-                    StatusMark(if (waiting.confirmed) Mark.Done else Mark.Pending, breathing = true)
-                    if (!waiting.confirmed) Link("cancel", action = sync::stopWaiting)
-                }
-            } else if (account == null) {
-                var server by remember { mutableStateOf(sync.customServer.orEmpty()) }
-                var problem by remember { mutableStateOf<String?>(null) }
-                SettingRow("server") {
-                    Field(
-                        server, { server = it; problem = null }, Modifier.width(170.dp),
-                        placeholder = "ours", keyboard = KeyboardType.Uri, weight = FontWeight.Normal,
-                        done = { problem = sync.setServer(server) },
-                    )
-                }
-                problem?.let { Words(it, Modifier.padding(bottom = 10.dp), size = 13.sp, color = ink.accent) }
-                SettingRow("sync") {
-                    Link("sign in") {
-                        problem = sync.setServer(server)
-                        if (problem == null) signIn()
-                    }
-                }
-            } else {
-                SettingRow(account.email) { Link("sign out", action = sync::signOut) }
-            }
+            AccountRow(sync, signIn)
+            ServerRow(sync)
+        }
+        UpdateRow(model)
+        Spacer(Modifier.height(18.dp))
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Capsule("done", small = true, action = close) }
+    }
+}
+
+/** Who you're syncing as, with a way in or out, like the mac's AccountRow. */
+@Composable
+private fun AccountRow(sync: Sync, signIn: () -> Unit) {
+    val ink = LocalPalette.current
+    val waiting = sync.waiting
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.weight(1f)) {
+            Words(sync.account?.email ?: waiting?.email ?: "sync")
             val note = if (waiting != null) {
                 if (waiting.confirmed) "you're in." else "check your inbox for the link."
             } else when (sync.state) {
@@ -115,36 +117,87 @@ fun SettingsSheet(model: AppModel, close: () -> Unit, signIn: () -> Unit) {
                 Sync.State.Offline -> "offline. your sessions are safe here."
                 Sync.State.Unconfirmed -> "confirm your email to start syncing."
             }
-            Words(note, Modifier.padding(bottom = 12.dp), size = 13.sp, color = ink.faint)
+            Words(note, size = 13.sp, color = ink.faint)
         }
+        if (waiting != null) StatusMark(if (waiting.confirmed) Mark.Done else Mark.Pending, breathing = true)
+        when {
+            waiting?.confirmed == false -> Link("cancel", action = sync::stopWaiting)
+            sync.isSignedIn -> Link("sign out", action = sync::signOut)
+            else -> Link("sign in", action = signIn)
+        }
+    }
+}
 
-        val updater = model.updater
-        LaunchedEffect(Unit) { updater.checkIfStale() }
-        Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-            Words("version ${BuildConfig.VERSION_NAME}", Modifier.weight(1f), size = 13.sp, color = ink.faint)
-            UpdateMark(updater.state)
-            Spacer(Modifier.width(8.dp))
-            AnimatedContent(
-                updater.state,
-                transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
-                contentKey = { it::class },
-                label = "update",
-            ) { s ->
-                when (s) {
-                    Updater.State.Checking -> Words("checking…", size = 13.sp, color = ink.faint)
-                    Updater.State.Downloading -> Words("downloading…", size = 13.sp, color = ink.faint)
-                    is Updater.State.Available ->
-                        Link("update to ${s.release.version}", size = 13.sp, on = true, action = updater::install)
-                    is Updater.State.Failed -> Link(s.message, size = 13.sp) {
-                        if (updater.available != null) updater.install() else scope.launch { updater.check(manual = true) }
-                    }
-                    Updater.State.UpToDate -> Link("up to date", size = 13.sp) { scope.launch { updater.check(manual = true) } }
-                    Updater.State.Idle -> Link("check", size = 13.sp) { scope.launch { updater.check(manual = true) } }
-                }
+/** Our server by default; self-hosters put their own address here. Only
+ *  while signed out: a token only works where it was made. */
+@Composable
+private fun ServerRow(sync: Sync) {
+    val ink = LocalPalette.current
+    var server by rememberSaveable { mutableStateOf(sync.customServer.orEmpty()) }
+    var problem by remember { mutableStateOf<String?>(null) }
+    // Leaving with an address typed but not entered still keeps it.
+    DisposableEffect(Unit) { onDispose { if (!sync.isSignedIn) sync.setServer(server) } }
+    Column(Modifier.padding(bottom = 10.dp)) {
+        SettingRow("server") {
+            Field(
+                server, { server = it; problem = null }, Modifier.weight(1.3f).widthIn(max = 170.dp),
+                placeholder = "drill's", keyboard = KeyboardType.Uri, weight = FontWeight.Normal,
+                enabled = !sync.isSignedIn, label = "server",
+                done = {
+                    problem = sync.setServer(server)
+                    if (problem == null) server = sync.customServer.orEmpty()
+                },
+            )
+        }
+        val note = problem ?: if (sync.isSignedIn) "sign out to change servers." else "leave blank to use ours, or add your own."
+        Words(note, size = 13.sp, color = if (problem != null) ink.accent else ink.faint)
+    }
+}
+
+/** The version you're on, and one link that does the next sensible thing,
+ *  like the mac's UpdateRow. Updating restarts the app, so not mid-block. */
+@Composable
+private fun UpdateRow(model: AppModel) {
+    val ink = LocalPalette.current
+    val updater = model.updater
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) { updater.checkIfStale() }
+    val state = updater.state
+    val note = when (state) {
+        Updater.State.UpToDate -> "you're up to date."
+        is Updater.State.Available ->
+            if (model.isActive) "finish this block first. updating restarts the app." else "an update is available."
+        is Updater.State.Failed -> state.message
+        else -> null
+    }
+    Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Words("version ${BuildConfig.VERSION_NAME}", size = 13.sp, color = ink.faint)
+            AnimatedContent(note, transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) }, label = "note") { n ->
+                if (n != null) Words(n, size = 12.sp, color = ink.faint)
             }
         }
-        Spacer(Modifier.height(18.dp))
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Capsule("done", small = true, action = close) }
+        UpdateMark(state)
+        Spacer(Modifier.width(8.dp))
+        AnimatedContent(
+            state,
+            transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
+            contentKey = { it::class },
+            label = "update",
+        ) { s ->
+            when (s) {
+                Updater.State.Checking -> Words("checking…", size = 13.sp, color = ink.faint)
+                Updater.State.Downloading -> Words("updating…", size = 13.sp, color = ink.faint)
+                is Updater.State.Available ->
+                    Link("update to ${s.release.version}", size = 13.sp, on = !model.isActive,
+                        enabled = !model.isActive, action = updater::install)
+                is Updater.State.Failed -> Link(if (updater.available != null) "try again" else "check", size = 13.sp,
+                    enabled = !(updater.available != null && model.isActive)) {
+                    if (updater.available != null) updater.install() else scope.launch { updater.check(manual = true) }
+                }
+                else -> Link("check", size = 13.sp) { scope.launch { updater.check(manual = true) } }
+            }
+        }
     }
 }
 
@@ -156,8 +209,10 @@ fun AccountSheet(model: AppModel, close: () -> Unit) {
     val ink = LocalPalette.current
     val sync = model.sync
     val scope = rememberCoroutineScope()
-    var creating by remember { mutableStateOf(false) }
-    var email by remember { mutableStateOf(sync.waiting?.email.orEmpty()) }
+    // Kept across a rotation or Android ending the process; the password
+    // stays in memory only, never in saved state.
+    var creating by rememberSaveable { mutableStateOf(false) }
+    var email by rememberSaveable { mutableStateOf(sync.waiting?.email.orEmpty()) }
     var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
@@ -175,11 +230,10 @@ fun AccountSheet(model: AppModel, close: () -> Unit) {
         }
     }
 
+    val ready = email.contains("@") && password.length >= 8
+
     fun submit() {
-        if (email.isBlank() || password.length < 8) {
-            error = if (email.isBlank()) "enter your email." else "password needs 8+ characters."
-            return
-        }
+        if (!ready) return
         working {
             note = ""
             val problem = if (creating) sync.createAccount(email, password) else sync.signIn(email, password)
@@ -211,16 +265,15 @@ fun AccountSheet(model: AppModel, close: () -> Unit) {
             Column {
                 val w = sync.waiting
                 if (!linkStep || w == null) {
-                    Words(if (creating) "make an account" else "sign in", Modifier.padding(bottom = 14.dp),
-                        size = 18.sp, weight = FontWeight.Bold)
+                    SheetTitle(if (creating) "make an account" else "sign in", Modifier.padding(bottom = 14.dp))
                     Group {
                         SettingRow("email") {
-                            Field(email, { email = it; error = "" }, Modifier.width(190.dp), keyboard = KeyboardType.Email,
-                                weight = FontWeight.Normal)
+                            Field(email, { email = it; error = "" }, Modifier.weight(1.3f).widthIn(max = 190.dp), keyboard = KeyboardType.Email,
+                                weight = FontWeight.Normal, label = "email")
                         }
                         SettingRow("password") {
-                            Field(password, { password = it; error = "" }, Modifier.width(190.dp), password = true,
-                                weight = FontWeight.Normal, done = ::submit)
+                            Field(password, { password = it; error = "" }, Modifier.weight(1.3f).widthIn(max = 190.dp), password = true,
+                                weight = FontWeight.Normal, label = "password", done = ::submit)
                         }
                     }
                     if (error.isNotEmpty()) {
@@ -230,14 +283,16 @@ fun AccountSheet(model: AppModel, close: () -> Unit) {
                             Modifier.padding(bottom = 10.dp), size = 13.sp, color = ink.faint)
                     }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Link(if (creating) "have an account?" else "new here?") { creating = !creating; error = "" }
+                        Link(if (creating) "have an account?" else "new here?", size = 13.sp) { creating = !creating; error = "" }
                         Spacer(Modifier.weight(1f))
-                        Capsule(if (creating) "create" else "sign in", small = true, enabled = !busy, action = ::submit)
+                        Link("cancel", size = 13.sp, action = close)
+                        Spacer(Modifier.width(8.dp))
+                        Capsule(if (creating) "create" else "sign in", small = true, enabled = ready && !busy, action = ::submit)
                     }
                 } else {
                     Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Crossfade(w.confirmed, Modifier.weight(1f), animationSpec = tween(220), label = "title") { done ->
-                            Words(if (done) "you're in" else "check your inbox", size = 18.sp, weight = FontWeight.Bold)
+                            SheetTitle(if (done) "you're in" else "check your inbox")
                         }
                         StatusMark(if (w.confirmed) Mark.Done else Mark.Pending, breathing = true, size = 21.dp)
                     }
@@ -246,7 +301,7 @@ fun AccountSheet(model: AppModel, close: () -> Unit) {
                             when {
                                 done -> "syncing now."
                                 note.isNotEmpty() -> note
-                                else -> "tap the link we sent to ${w.email}."
+                                else -> "click the link we sent to ${w.email}."
                             },
                             Modifier.padding(bottom = 10.dp), size = 13.sp, color = ink.faint,
                         )
@@ -254,9 +309,9 @@ fun AccountSheet(model: AppModel, close: () -> Unit) {
                     Words(error, Modifier.padding(bottom = 10.dp), size = 13.sp, color = ink.accent)
                     val links by animateFloatAsState(if (w.confirmed) 0f else 1f, tween(250), label = "links")
                     Row(Modifier.fillMaxWidth().graphicsLayer { alpha = links }, verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Link("wrong email?", size = 13.sp) { sync.stopWaiting(); error = "" }
-                        Link("resend", size = 13.sp) { resend() }
+                        Link("resend", size = 13.sp, enabled = !busy) { resend() }
                         Spacer(Modifier.weight(1f))
                         // Closing keeps waiting; settings shows how it's going.
                         Link("close", size = 13.sp, action = close)
@@ -272,7 +327,7 @@ fun AccountSheet(model: AppModel, close: () -> Unit) {
 fun InspoSheet(model: AppModel, close: () -> Unit) {
     val ink = LocalPalette.current
     val context = LocalContext.current
-    var all by remember { mutableStateOf(false) }
+    var all by rememberSaveable { mutableStateOf(false) }
     val seen = model.watched
     val today = remember { Inspo.day() }
     val list = if (all) Inspo.videos
@@ -284,19 +339,23 @@ fun InspoSheet(model: AppModel, close: () -> Unit) {
     }
 
     Sheet(close) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Words("inspo", size = 18.sp, weight = FontWeight.Bold)
-            Link("today", on = !all) { all = false }
-            Link("all", on = all) { all = true }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            SheetTitle("inspo", Modifier.padding(end = 8.dp))
+            Row(Modifier.selectableGroup()) {
+                Link("today", on = !all, selectable = true) { all = false }
+                Link("all", on = all, selectable = true) { all = true }
+            }
         }
         Spacer(Modifier.height(12.dp))
         if (all) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Inspo.videos.forEach { v ->
+                    val watched = v.youtube in seen
                     Spacer(
                         Modifier.size(9.dp).clip(RoundedCornerShape(2.dp))
-                            .background(if (v.youtube in seen) ink.accent.copy(alpha = 0.62f) else ink.wash)
-                            .clickable(role = Role.Button) { watch(v) },
+                            .background(if (watched) ink.accent.copy(alpha = 0.62f) else ink.wash)
+                            .clickable(role = Role.Button) { watch(v) }
+                            .semantics { contentDescription = "${v.number}. ${v.title}" + if (watched) ", watched" else "" },
                     )
                 }
             }
@@ -309,10 +368,15 @@ fun InspoSheet(model: AppModel, close: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 if (all) Words("%03d".format(v.number), Modifier.widthIn(min = 28.dp), size = 12.sp, color = ink.faint)
-                Column {
-                    Words(v.title, weight = if (v.youtube in seen) FontWeight.Normal else FontWeight.SemiBold,
-                        color = if (v.youtube in seen) ink.faint else ink.ink)
-                    Words(v.japanese, size = 12.sp, color = ink.faint)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Words(v.title, Modifier.weight(1f, fill = false), size = 14.sp, weight = FontWeight.Medium)
+                        if (v.youtube in seen) {
+                            Spacer(Modifier.size(5.dp).background(ink.accent, CircleShape)
+                                .semantics { contentDescription = "watched" })
+                        }
+                    }
+                    Words(v.japanese, size = 13.sp, color = ink.faint)
                 }
             }
         }

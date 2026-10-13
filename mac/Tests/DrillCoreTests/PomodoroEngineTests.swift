@@ -83,4 +83,29 @@ import Testing
         #expect(e.remaining(at: t0 + 300) == 25 * 60)
         #expect(e.phase == .focus)
     }
+
+    @Test func upcomingNamesTheNextPhaseAndWhetherItStartsItself() {
+        var e = PomodoroEngine(config: config)
+        #expect(e.upcoming.phase == .shortBreak)
+        #expect(e.upcoming.autoStarts)
+        e.start(at: t0)
+        _ = e.tick(at: t0 + 100)
+        #expect(e.upcoming.phase == .focus)
+        #expect(!e.upcoming.autoStarts)
+        _ = e.tick(at: t0 + 110)
+        #expect(e.upcoming.phase == .longBreak) // the 2nd focus ends in a long break
+    }
+
+    @Test func wakesOncePerShownSecondJustPastTheBoundary() throws {
+        var e = PomodoroEngine(config: config)
+        #expect(e.untilNextSecond(at: t0) == nil) // idle: no wakeups
+        e.start(at: t0)
+        let first = try #require(e.untilNextSecond(at: t0))
+        #expect(abs(first - 1.004) < 1e-6) // 100 → 99 after a whole second
+        let mid = try #require(e.untilNextSecond(at: t0 + 10.7))
+        #expect(abs(mid - 0.304) < 1e-6) // shows 90 until 89.0 left
+        #expect(e.untilNextSecond(at: t0 + 200) == 0)
+        e.pause(at: t0 + 20)
+        #expect(e.untilNextSecond(at: t0 + 20) == nil)
+    }
 }

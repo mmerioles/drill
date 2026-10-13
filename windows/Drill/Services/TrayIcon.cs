@@ -31,6 +31,9 @@ public sealed class TrayIcon : IDisposable
     private (bool Live, int Bucket, bool Paused, bool Light, int Size) _drawn;
     private (bool Live, double Progress, bool Paused) _state;
     private bool _added;
+    /// <summary>The taskbar's mode and the icon size, read once and again only when Windows says they changed — not every tick.</summary>
+    private bool _light;
+    private int _size;
 
     public TrayIcon()
     {
@@ -43,6 +46,7 @@ public sealed class TrayIcon : IDisposable
         });
         _window.AddHook(Hook);
         _taskbarCreated = Native.RegisterWindowMessageW("TaskbarCreated");
+        ReadSystem();
         Add();
     }
 
@@ -139,17 +143,29 @@ public sealed class TrayIcon : IDisposable
         }
         else if (msg is 0x001A /* WM_SETTINGCHANGE */ or 0x007E /* WM_DISPLAYCHANGE */ or 0x02E0 /* WM_DPICHANGED */)
         {
+            // This hidden window hears the broadcasts for the whole app:
+            // the animation setting too, which the drawn controls read.
+            if (msg == 0x001A) Motion.Refresh();
+            ReadSystem();
             if (Redraw()) Modify(); // taskbar theme or scale changed
         }
         return 0;
     }
 
+    private void ReadSystem()
+    {
+        _light = Native.TaskbarIsLight();
+        var dpi = Native.GetDpiForWindow(_window.Handle);
+        if (dpi == 0) dpi = Native.GetDpiForSystem();
+        _size = Native.GetSystemMetricsForDpi(Native.SM_CXSMICON, dpi);
+        if (_size <= 0) _size = 16;
+    }
+
     /// <summary>Draws a new icon when the pixels would differ; true if it did.</summary>
     private bool Redraw()
     {
-        var size = Native.GetSystemMetricsForDpi(Native.SM_CXSMICON, Native.GetDpiForSystem());
-        if (size <= 0) size = 16;
-        var light = Native.TaskbarIsLight();
+        var size = _size;
+        var light = _light;
         // One step per pixel of the ring's circumference.
         var steps = (int)Math.Ceiling(Math.PI * size * 0.75);
         var bucket = _state.Live ? (int)Math.Round(_state.Progress * steps) : 0;

@@ -8,6 +8,7 @@ session sync.
     POST /v1/signin          { "email", "password" } -> { "token", "email", "confirmed" }
     POST /v1/signout         revokes the token it's called with
     GET  /v1/account         -> { "email", "confirmed" }
+    POST /v1/resend          sends the confirmation email again
     POST /v1/sessions/push   { "deviceID", "sessions": [...] } -> { "accepted" }
     GET  /v1/sessions/pull?cursor=N -> { "sessions", "cursor", "more" }
     GET  /confirm?token=...  the link in the confirmation email
@@ -32,6 +33,7 @@ import hashlib
 import hmac
 import html
 import json
+import math
 import mimetypes
 import os
 import re
@@ -84,7 +86,13 @@ def format_date(ts: float) -> str:
 def number(value, name: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise BadSession(f"{name} must be a number")
-    return float(value)
+    try:
+        value = float(value)
+    except OverflowError:
+        value = math.inf
+    if not math.isfinite(value):
+        raise BadSession(f"{name} is out of range")  # 1e400 parses as inf
+    return value
 
 
 def row_from_json(s) -> tuple:
@@ -288,11 +296,12 @@ class Store:
     def create_user(self, email: str, password: str) -> tuple[int, str] | None:
         """Returns (user id, confirm token), or None if the email is taken."""
         confirm = secrets.token_urlsafe(24)
+        hashed = hash_password(password)  # slow on purpose, so outside the lock
         with self.lock:
             try:
                 cur = self.db.execute(
                     "INSERT INTO users (email, password, created_at, confirm_token) VALUES (?, ?, ?, ?)",
-                    (email, hash_password(password), time.time(), confirm))
+                    (email, hashed, time.time(), confirm))
             except sqlite3.IntegrityError:
                 return None
         return cur.lastrowid, confirm
@@ -310,6 +319,17 @@ class Store:
             email, confirmed = self.db.execute(
                 "SELECT email, confirmed_at FROM users WHERE id = ?", (user_id,)).fetchone()
         return email, confirmed is not None
+
+    def confirm_token(self, user_id: int) -> str | None:
+        """The unused link token, or None once the email is confirmed."""
+        with self.lock:
+            row = self.db.execute("SELECT confirm_token FROM users WHERE id = ?", (user_id,)).fetchone()
+        return row[0] if row else None
+
+    def can_confirm(self, token: str) -> bool:
+        with self.lock:
+            row = self.db.execute("SELECT 1 FROM users WHERE confirm_token = ?", (token,)).fetchone()
+        return row is not None
 
     def confirm(self, token: str) -> bool:
         with self.lock:
@@ -400,6 +420,11 @@ CONFIRM_PAGE = """<!doctype html><meta charset="utf-8">
 """
 
 
+def no_constants(name: str):
+    # json.loads takes NaN and Infinity by default; SQLite can't store them.
+    raise ValueError(f"{name} isn't a number")
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "drill"
     store: Store
@@ -414,7 +439,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_text(HTTPStatus.OK, "ok\n")
         if url.path == "/confirm":
             token = parse_qs(url.query).get("token", [""])[0]
-            ok = bool(token) and self.store.confirm(token)
+            # HEAD only looks: mail scanners check links before anyone clicks.
+            check = self.store.can_confirm if self.command == "HEAD" else self.store.confirm
+            ok = bool(token) and check(token)
             return self.send_page(
                 HTTPStatus.OK if ok else HTTPStatus.NOT_FOUND,
                 "email confirmed" if ok else "link expired",
@@ -443,14 +470,22 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urlparse(self.path).path
         routes = {"/v1/accounts": self.sign_up, "/v1/signin": self.sign_in,
-                  "/v1/signout": self.sign_out, "/v1/sessions/push": self.push}
+                  "/v1/signout": self.sign_out, "/v1/resend": self.resend,
+                  "/v1/sessions/push": self.push}
         if path not in routes:
             return self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
-        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = -1
+        if length < 0:
+            self.close_connection = True  # the body's end is unknown
+            return self.send_json(HTTPStatus.BAD_REQUEST, {"error": "bad Content-Length"})
         if length > MAX_BODY:
+            self.close_connection = True
             return self.send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": "too large"})
         try:
-            body = json.loads(self.rfile.read(length) or b"{}")
+            body = json.loads(self.rfile.read(length) or b"{}", parse_constant=no_constants)
             if not isinstance(body, dict):
                 raise ValueError
         except (ValueError, UnicodeDecodeError):
@@ -470,10 +505,7 @@ class Handler(BaseHTTPRequestHandler):
         if created is None:
             return self.send_json(HTTPStatus.CONFLICT, {"error": "there's already an account with that email"})
         user, confirm = created
-        self.mailer.send(email, "confirm your drill account",
-                         f"welcome to drill.\n\nconfirm your email here:\n"
-                         f"{self.base_url()}/confirm?token={confirm}\n\n"
-                         f"if you didn't sign up, you can ignore this.\n")
+        self.send_confirmation(email, confirm)
         self.send_account(HTTPStatus.CREATED, user)
 
     def sign_in(self, body: dict):
@@ -491,6 +523,15 @@ class Handler(BaseHTTPRequestHandler):
             self.store.revoke_token(token)
         self.send_json(HTTPStatus.OK, {})
 
+    def resend(self, body: dict):
+        if (user := self.signed_in()) is None:
+            return
+        if not self.attempts.allow(self.client_address[0]):
+            return self.send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "too many tries. wait a bit."})
+        if (confirm := self.store.confirm_token(user)) is not None:
+            self.send_confirmation(self.store.user(user)[0], confirm)
+        self.send_json(HTTPStatus.OK, {})
+
     def push(self, body: dict):
         if (user := self.syncing()) is None:
             return
@@ -501,6 +542,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json(HTTPStatus.OK, {"accepted": self.store.push(user, rows)})
 
     # Helpers
+
+    def send_confirmation(self, email: str, confirm: str):
+        self.mailer.send(email, "confirm your drill account",
+                         f"welcome to drill.\n\nconfirm your email here:\n"
+                         f"{self.base_url()}/confirm?token={confirm}\n\n"
+                         f"if you didn't sign up, you can ignore this.\n")
 
     def send_account(self, status, user: int):
         email, confirmed = self.store.user(user)

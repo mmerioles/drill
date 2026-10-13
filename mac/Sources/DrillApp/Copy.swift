@@ -15,8 +15,35 @@ enum Copy {
         }
     }
 
-    static func finished(_ phase: Phase) -> (title: String, body: String) {
-        phase == .focus ? ("focus done", "time for a break") : ("break over", "back to focus")
+    /// The banner when a phase runs out. `next` is the phase that follows,
+    /// and its length, for "take a break · 5 min".
+    static func finished(_ phase: Phase, next: TimeInterval) -> (title: String, body: String) {
+        let minutes = max(1, Int((next / 60).rounded()))
+        return phase == .focus ? ("focus done", "take a break · \(minutes) min") : ("break over", "back to focus")
+    }
+
+    /// The banner's one action, when the next phase won't start by itself.
+    static func startNext(_ next: Phase) -> String {
+        next.isBreak ? "start break" : "start focus"
+    }
+
+    /// What VoiceOver says for the countdown: "12 minutes left".
+    static func spokenLeft(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds.rounded(.up))
+        if total >= 60 {
+            let m = Int((Double(total) / 60).rounded(.up))
+            return m == 1 ? "1 minute left" : "\(m) minutes left"
+        }
+        return total == 1 ? "1 second left" : "\(total) seconds left"
+    }
+
+    /// The ring's spoken name: the phase, whether or not it's running.
+    static func phaseName(_ phase: Phase) -> String {
+        switch phase {
+        case .focus: "focus"
+        case .shortBreak: "break"
+        case .longBreak: "long break"
+        }
     }
 
     static func clock(_ seconds: TimeInterval) -> String {

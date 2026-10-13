@@ -11,7 +11,7 @@
         <Border Style="{StaticResource Card}">
             <DockPanel Height="48" Margin="16,0">
                 <TextBlock Text="appearance" Style="{StaticResource RowLabel}" />
-                <ink:Segmented x:Name="Appearance" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                <ink:Segmented x:Name="Appearance" AutomationProperties.Name="appearance" HorizontalAlignment="Right" VerticalAlignment="Center" />
             </DockPanel>
         </Border>
 
@@ -19,22 +19,22 @@
             <StackPanel>
                 <DockPanel Height="48" Margin="16,0,6,0">
                     <TextBlock Text="focus" Style="{StaticResource RowLabel}" />
-                    <ink:Stepper x:Name="FocusMinutes" Minimum="5" Maximum="120" Step="5" Unit="min" HorizontalAlignment="Right" />
+                    <ink:Stepper x:Name="FocusMinutes" AutomationProperties.Name="focus minutes" Minimum="5" Maximum="120" Step="5" Unit="min" HorizontalAlignment="Right" />
                 </DockPanel>
                 <Rectangle Style="{StaticResource Rule}" />
                 <DockPanel Height="48" Margin="16,0,6,0">
                     <TextBlock Text="short break" Style="{StaticResource RowLabel}" />
-                    <ink:Stepper x:Name="ShortBreak" Minimum="1" Maximum="30" Unit="min" HorizontalAlignment="Right" />
+                    <ink:Stepper x:Name="ShortBreak" AutomationProperties.Name="short break minutes" Minimum="1" Maximum="30" Unit="min" HorizontalAlignment="Right" />
                 </DockPanel>
                 <Rectangle Style="{StaticResource Rule}" />
                 <DockPanel Height="48" Margin="16,0,6,0">
                     <TextBlock Text="long break" Style="{StaticResource RowLabel}" />
-                    <ink:Stepper x:Name="LongBreak" Minimum="5" Maximum="60" Step="5" Unit="min" HorizontalAlignment="Right" />
+                    <ink:Stepper x:Name="LongBreak" AutomationProperties.Name="long break minutes" Minimum="5" Maximum="60" Step="5" Unit="min" HorizontalAlignment="Right" />
                 </DockPanel>
                 <Rectangle Style="{StaticResource Rule}" />
                 <DockPanel Height="48" Margin="16,0,6,0">
                     <TextBlock Text="long break every" Style="{StaticResource RowLabel}" />
-                    <ink:Stepper x:Name="Every" Minimum="2" Maximum="8" HorizontalAlignment="Right" />
+                    <ink:Stepper x:Name="Every" AutomationProperties.Name="long break every" Minimum="2" Maximum="8" HorizontalAlignment="Right" />
                 </DockPanel>
             </StackPanel>
         </Border>
@@ -43,22 +43,22 @@
             <StackPanel>
                 <DockPanel Height="48" Margin="16,0">
                     <TextBlock Text="auto-start breaks" Style="{StaticResource RowLabel}" />
-                    <ink:Toggle x:Name="AutoBreaks" HorizontalAlignment="Right" />
+                    <ink:Toggle x:Name="AutoBreaks" AutomationProperties.Name="auto-start breaks" HorizontalAlignment="Right" />
                 </DockPanel>
                 <Rectangle Style="{StaticResource Rule}" />
                 <DockPanel Height="48" Margin="16,0">
                     <TextBlock Text="auto-start focus" Style="{StaticResource RowLabel}" />
-                    <ink:Toggle x:Name="AutoFocus" HorizontalAlignment="Right" />
+                    <ink:Toggle x:Name="AutoFocus" AutomationProperties.Name="auto-start focus" HorizontalAlignment="Right" />
                 </DockPanel>
                 <Rectangle Style="{StaticResource Rule}" />
                 <DockPanel Height="48" Margin="16,0">
                     <TextBlock Text="sound" Style="{StaticResource RowLabel}" />
-                    <ink:Toggle x:Name="Sound" HorizontalAlignment="Right" />
+                    <ink:Toggle x:Name="Sound" AutomationProperties.Name="sound" HorizontalAlignment="Right" />
                 </DockPanel>
                 <Rectangle Style="{StaticResource Rule}" />
                 <DockPanel Height="48" Margin="16,0">
                     <TextBlock Text="keep running in the tray" Style="{StaticResource RowLabel}" />
-                    <ink:Toggle x:Name="Tray" HorizontalAlignment="Right" />
+                    <ink:Toggle x:Name="Tray" AutomationProperties.Name="keep running in the tray" HorizontalAlignment="Right" />
                 </DockPanel>
             </StackPanel>
         </Border>
@@ -79,7 +79,7 @@
                     <Grid DockPanel.Dock="Right" Width="160" VerticalAlignment="Center">
                         <TextBlock x:Name="ServerHint" Text="drill's" FontSize="14" Foreground="{DynamicResource Hint}"
                                    FontFamily="{DynamicResource Text}" IsHitTestVisible="False" Margin="0,0,0,4" />
-                        <TextBox x:Name="Server" Style="{StaticResource Bare}" FontSize="14" Margin="0,0,0,4" />
+                        <TextBox x:Name="Server" AutomationProperties.Name="server" Style="{StaticResource Bare}" FontSize="14" Margin="0,0,0,4" />
                         <Rectangle x:Name="ServerLine" Height="1" VerticalAlignment="Bottom" Fill="{DynamicResource Ghost}" />
                     </Grid>
                     <StackPanel VerticalAlignment="Center" Margin="0,8,12,8">

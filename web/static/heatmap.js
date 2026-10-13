@@ -12,9 +12,22 @@ export function level(seconds) {
 
 const startOfDay = (ms) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
 const addDays = (ms, n) => { const d = new Date(ms); d.setDate(d.getDate() + n); return d.getTime(); };
-const startOfWeek = (ms) => addDays(startOfDay(ms), -new Date(ms).getDay());
 
-export function buildHeatmap(sessions, weeks = 53, now = Date.now()) {
+/** The locale's first weekday as Date#getDay counts (0 is sunday). Intl
+ *  says 1 for monday through 7 for sunday; browsers without it get sunday. */
+export function firstWeekday(language = navigator.language) {
+  try {
+    const locale = new Intl.Locale(language);
+    const info = locale.getWeekInfo?.() ?? locale.weekInfo;
+    if (info?.firstDay >= 1 && info.firstDay <= 7) return info.firstDay % 7;
+  } catch {}
+  return 0;
+}
+
+const startOfWeek = (ms, first) => addDays(startOfDay(ms), -((new Date(ms).getDay() - first + 7) % 7));
+
+/** Row 0 is the locale's first weekday, like the mac's calendar. */
+export function buildHeatmap(sessions, weeks = 53, now = Date.now(), first = firstWeekday()) {
   const totals = new Map();
   for (const s of sessions) {
     const day = startOfDay(Date.parse(s.startedAt));
@@ -22,7 +35,7 @@ export function buildHeatmap(sessions, weeks = 53, now = Date.now()) {
   }
 
   const today = startOfDay(now);
-  const weekStart = startOfWeek(now);
+  const weekStart = startOfWeek(now, first);
   const gridStart = addDays(weekStart, -7 * (weeks - 1));
 
   const columns = [...Array(weeks)].map((_, w) =>

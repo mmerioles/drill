@@ -77,7 +77,8 @@ class Updater(private val context: Context, private val scope: CoroutineScope) {
     }
 
     /** A check you asked for ([manual]) spins a moment even when GitHub
-     *  answers at once, so the answer reads as an answer. */
+     *  answers at once, so the answer reads as an answer. Background checks
+     *  fail quietly; only one you asked for says it couldn't check. */
     suspend fun check(manual: Boolean = false) {
         if (state is State.Checking || state is State.Downloading) return
         state = State.Checking
@@ -90,7 +91,13 @@ class Updater(private val context: Context, private val scope: CoroutineScope) {
                 lastFound = r
                 if (r != null) State.Available(r) else State.UpToDate
             },
-            onFailure = { State.Failed("can't check for updates.") },
+            onFailure = {
+                when {
+                    manual -> State.Failed("couldn't check for updates.")
+                    lastFound != null -> State.Available(lastFound!!)
+                    else -> State.Idle
+                }
+            },
         )
     }
 

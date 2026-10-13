@@ -20,6 +20,10 @@ struct HeatmapSection: View {
             }
 
             HeatGrid(heatmap: model.heatmap, hovered: $hovered)
+                // The grid is a picture; VoiceOver gets its summary.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("your year")
+                .accessibilityValue(summary)
 
             caption
                 .font(Ink.text(13))
@@ -47,6 +51,11 @@ struct HeatmapSection: View {
                 Legend()
             }
         }
+    }
+
+    private var summary: String {
+        let h = model.heatmap
+        return "today \(Copy.amount(h.today)), this week \(Copy.amount(h.thisWeek)), streak \(Copy.streak(h.streak))"
     }
 
     private func stat(_ label: String, _ value: String) -> some View {
@@ -183,5 +192,6 @@ private struct Legend: View {
             Text("more")
         }
         .font(Ink.text(11))
+        .accessibilityHidden(true)
     }
 }

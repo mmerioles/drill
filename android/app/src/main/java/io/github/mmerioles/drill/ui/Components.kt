@@ -13,12 +13,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
@@ -28,7 +31,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,8 +45,13 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -65,24 +75,57 @@ fun Words(
     size: TextUnit = 15.sp,
     weight: FontWeight = FontWeight.Normal,
     color: Color = LocalPalette.current.ink,
+    align: TextAlign = TextAlign.Unspecified,
 ) {
-    BasicText(text, modifier, style = TextStyle(color = color, fontSize = size, fontWeight = weight))
+    BasicText(text, modifier, style = TextStyle(color = color, fontSize = size, fontWeight = weight, textAlign = align))
 }
 
-/** A faint word that does something; [on] marks the chosen one in a row. */
+/** Fingers need about 48dp, however small the word: the touch area grows,
+ *  the word stays put in the middle of it. */
+val TouchTarget = 48.dp
+
+/** A faint word that does something; [on] marks the chosen one in a row.
+ *  A [selectable] link is one of a set, like a tab, and says whether it's
+ *  the chosen one; [description] is what TalkBack says instead of [text]. */
 @Composable
-fun Link(text: String, modifier: Modifier = Modifier, size: TextUnit = 14.sp, on: Boolean = false, action: () -> Unit) {
+fun Link(
+    text: String,
+    modifier: Modifier = Modifier,
+    size: TextUnit = 14.sp,
+    on: Boolean = false,
+    selectable: Boolean = false,
+    enabled: Boolean = true,
+    description: String? = null,
+    action: () -> Unit,
+) {
     val ink = LocalPalette.current
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    val color by animateColorAsState(if (on || pressed) ink.ink else ink.faint, label = "link")
-    BasicText(
-        text,
-        modifier
-            .clickable(source, indication = null, role = Role.Button, onClick = action)
-            .padding(vertical = 6.dp),
-        style = TextStyle(color = color, fontSize = size, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal),
+    val color by animateColorAsState(
+        when {
+            !enabled -> ink.ghost
+            on || pressed -> ink.ink
+            else -> ink.faint
+        },
+        label = "link",
     )
+    val touch = if (selectable) {
+        Modifier.selectable(on, source, indication = null, enabled = enabled, role = Role.Tab, onClick = action)
+    } else {
+        Modifier.clickable(source, indication = null, enabled = enabled, role = Role.Button, onClick = action)
+    }
+    Box(
+        modifier
+            .then(touch)
+            .then(if (description != null) Modifier.semantics { contentDescription = description } else Modifier)
+            .defaultMinSize(minWidth = TouchTarget, minHeight = TouchTarget),
+        contentAlignment = Alignment.Center,
+    ) {
+        BasicText(
+            text,
+            style = TextStyle(color = color, fontSize = size, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal),
+        )
+    }
 }
 
 @Composable
@@ -97,6 +140,7 @@ fun Capsule(text: String, modifier: Modifier = Modifier, small: Boolean = false,
             .clip(CircleShape)
             .background(if (enabled) ink.ink else ink.faint)
             .clickable(source, indication = null, enabled = enabled, role = Role.Button, onClick = action)
+            .defaultMinSize(minHeight = TouchTarget)
             .widthIn(min = if (small) 0.dp else 128.dp)
             .padding(horizontal = if (small) 28.dp else 42.dp, vertical = if (small) 10.dp else 14.dp),
         contentAlignment = Alignment.Center,
@@ -105,17 +149,24 @@ fun Capsule(text: String, modifier: Modifier = Modifier, small: Boolean = false,
     }
 }
 
-/** The drill mark, boiling while [tick] moves. */
+/** The drill mark, boiling while [tick] moves. Read while drawing, so a
+ *  boil step only redraws. */
 @Composable
-fun DrillMark(tick: Long, modifier: Modifier = Modifier, size: Dp = 22.dp) {
+fun DrillMark(tick: () -> Long, modifier: Modifier = Modifier, size: Dp = 22.dp) {
     val accent = LocalPalette.current.accent
     Canvas(modifier.size(size)) {
         val s = this.size.minDimension
         drawPath(
-            Doodle.drill(s, tick), accent,
+            Doodle.drill(s, tick()), accent,
             style = Stroke(width = s * 1.8f / 22, cap = StrokeCap.Round, join = StrokeJoin.Round),
         )
     }
+}
+
+/** A sheet's name at its top. */
+@Composable
+fun SheetTitle(text: String, modifier: Modifier = Modifier) {
+    Words(text, modifier.semantics { heading() }, size = 20.sp, weight = FontWeight.Bold)
 }
 
 /** A card over the screen, like the web app's dialogs. */
@@ -171,7 +222,7 @@ fun SwitchRow(label: String, on: Boolean, change: (Boolean) -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
-            .clickable(remember { MutableInteractionSource() }, null, role = Role.Switch) { change(!on) },
+            .toggleable(on, remember { MutableInteractionSource() }, null, role = Role.Switch, onValueChange = change),
     ) {
         SettingRow(label) {
             Canvas(Modifier.size(width = 40.dp, height = 24.dp)) {
@@ -187,14 +238,19 @@ fun SwitchRow(label: String, on: Boolean, change: (Boolean) -> Unit) {
     }
 }
 
-/** A number with a faint − and + either side. */
+/** A number with a faint − and + either side. [less] and [more] are what
+ *  TalkBack calls the two, like "fewer focus minutes". */
 @Composable
-fun StepperRow(label: String, value: Int, range: IntRange, step: Int = 1, unit: String = "", change: (Int) -> Unit) {
+fun StepperRow(
+    label: String, value: Int, range: IntRange, step: Int = 1, unit: String = "",
+    less: String = "less $label", more: String = "more $label",
+    change: (Int) -> Unit,
+) {
     SettingRow(label) {
-        Link("−", size = 18.sp) { change((value - step).coerceIn(range)) }
+        Link("−", size = 18.sp, enabled = value > range.first, description = less) { change((value - step).coerceIn(range)) }
         Words(if (unit.isEmpty()) "$value" else "$value $unit", Modifier.widthIn(min = 56.dp),
-            weight = FontWeight.Medium)
-        Link("+", size = 18.sp) { change((value + step).coerceIn(range)) }
+            weight = FontWeight.Medium, align = TextAlign.Center)
+        Link("+", size = 18.sp, enabled = value < range.last, description = more) { change((value + step).coerceIn(range)) }
     }
 }
 
@@ -208,18 +264,25 @@ fun Field(
     password: Boolean = false,
     keyboard: KeyboardType = KeyboardType.Text,
     weight: FontWeight = FontWeight.Medium,
+    enabled: Boolean = true,
+    label: String? = null,
     done: () -> Unit = {},
 ) {
     val ink = LocalPalette.current
     val focus = LocalFocusManager.current
+    var had by remember { mutableStateOf(false) }
     BasicTextField(
         value, change,
-        modifier.drawBehind {
-            val y = size.height
-            drawLine(ink.ghost, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
-        }.padding(bottom = 4.dp),
+        modifier
+            .onFocusChanged { if (it.isFocused) Typing.active = true else if (had) Typing.active = false; had = it.isFocused }
+            .then(if (label != null) Modifier.semantics { contentDescription = label } else Modifier)
+            .drawBehind {
+                val y = size.height
+                drawLine(ink.ghost, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
+            }.padding(bottom = 4.dp),
+        enabled = enabled,
         singleLine = true,
-        textStyle = TextStyle(color = ink.ink, fontSize = 15.sp, fontWeight = weight),
+        textStyle = TextStyle(color = if (enabled) ink.ink else ink.faint, fontSize = 15.sp, fontWeight = weight),
         cursorBrush = SolidColor(ink.ink),
         visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else keyboard, autoCorrectEnabled = false),
@@ -231,4 +294,10 @@ fun Field(
             }
         },
     )
+}
+
+/** Whether a text field has the keyboard, so space and enter type rather
+ *  than start the timer. Only one field has focus at a time. */
+object Typing {
+    var active = false
 }

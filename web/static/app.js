@@ -1,5 +1,5 @@
 import { Engine, Phase, defaultConfig, isBreak } from "./engine.js";
-import { buildHeatmap } from "./heatmap.js";
+import { buildHeatmap, firstWeekday } from "./heatmap.js";
 import { BOIL_MS, drill, ring, square } from "./ink.js";
 import { VIDEOS, markWatched, today as inspoToday, watched, watchedBefore } from "./inspo.js";
 import { Store } from "./store.js";
@@ -29,7 +29,7 @@ if (!["light", "dark"].includes(settings.theme)) {
 }
 settings.config = { ...defaultConfig, ...settings.config };
 
-const store = new Store();
+const store = new Store({ offline: demo });
 let saved = load(KEY.timer, null);
 const engine = new Engine(settings.config, saved?.engine);
 /** The tag in effect for the running focus block, captured when it starts. */
@@ -47,6 +47,22 @@ function statusWord() {
   if (engine.phase === Phase.focus && engine.isIdle) return "";
   if (!engine.isIdle && !engine.isRunning) return "paused";
   return { focus: "focus", shortBreak: "break", longBreak: "long break" }[engine.phase];
+}
+
+/** What a screen reader says for the countdown: "focus, 12 minutes left". */
+function spoken(ms) {
+  const total = Math.ceil(ms / 1000);
+  const name = { focus: "focus", shortBreak: "break", longBreak: "long break" }[engine.phase];
+  const m = Math.ceil(total / 60);
+  const left = total >= 60 ? (m === 1 ? "1 minute left" : `${m} minutes left`)
+    : total === 1 ? "1 second left" : `${total} seconds left`;
+  return `${name}${!engine.isIdle && !engine.isRunning ? ", paused" : ""}, ${left}`;
+}
+
+/** The banner when a phase runs out, as in Copy.finished. */
+function finished(phase, next) {
+  if (phase !== Phase.focus) return ["break over", "back to focus"];
+  return ["focus done", `take a break · ${Math.max(1, Math.round(engine.config[next] / 60))} min`];
 }
 
 function clock(ms) {
@@ -74,6 +90,7 @@ function toggle() {
     askForNotifications();
     if (engine.phase === Phase.focus) captureTag();
   }
+  wakeAudio();
   changed();
 }
 
@@ -97,9 +114,9 @@ function handle(t) {
   if (t.record) store.log(t.record, blockTag);
   if (t.next === Phase.focus && engine.isRunning) captureTag();
   if (!t.natural) return;
-  const [title, body] = t.finished === Phase.focus
-    ? ["focus done", "time for a break"] : ["break over", "back to focus"];
-  notify(title, body);
+  const [title, body] = finished(t.finished, t.next);
+  // Offer the next phase when it won't start by itself.
+  notify(title, body, engine.isRunning ? null : t.next);
   if (settings.sound) chime(t.finished === Phase.focus);
 }
 
@@ -111,54 +128,100 @@ function changed() {
 
 // MARK: Clock
 
-let ticker = null;
+/** Moves the timer on, in one tab only: with several open, the first to get
+ *  the lock takes the transition, and the rest pick up its saved state, so
+ *  a phase end chimes, notifies and logs once. */
+function advance() {
+  const run = () => {
+    const stored = load(KEY.timer, null);
+    if (stored) {
+      Object.assign(engine, stored.engine);
+      blockTag = stored.blockTag ?? null;
+    }
+    const t = engine.tick(Date.now());
+    if (t) { handle(t); persistTimer(); }
+    schedule();
+    renderTimer();
+  };
+  if (navigator.locks) navigator.locks.request("drill.timer", run).catch(run);
+  else run();
+}
+
+const visible = () => document.visibilityState === "visible";
+
+// While visible: a wakeup as each displayed second turns over, plus the
+// ink's boil. While hidden, the browser throttles timers anyway, so it's one
+// wakeup a minute for the tab title, or at the phase end if that's sooner.
+let ticker = null, boiler = null;
 function schedule() {
-  if (engine.isRunning && !ticker) {
-    ticker = setInterval(() => {
-      const t = engine.tick(Date.now());
-      if (t) { handle(t); persistTimer(); schedule(); }
-      renderTimer();
-    }, 250);
-  } else if (!engine.isRunning && ticker) {
-    clearInterval(ticker);
-    ticker = null;
+  clearTimeout(ticker);
+  ticker = null;
+  if (engine.isRunning) {
+    const left = engine.status.endsAt - Date.now();
+    // +5ms lands just past the boundary, so the clock has already turned.
+    const wait = visible() ? (left % 1000 || 1000) + 5 : Math.min(left, left % 60_000 || 60_000) + 5;
+    ticker = setTimeout(advance, Math.max(5, wait));
   }
+  const boil = engine.isRunning && visible() && !reduceMotion.matches;
+  if (boil && !boiler) boiler = setInterval(renderRing, BOIL_MS);
+  else if (!boil && boiler) { clearInterval(boiler); boiler = null; }
 }
 
 // MARK: Rendering
 
-let lastBoil = -1;
+const view = {
+  status: $("status"), clock: $("clock"), toggle: $("toggle"), reset: $("reset"), dots: $("dots"),
+  track: $("ring").querySelector(".track"), arc: $("ring").querySelector(".arc"),
+  tip: $("ring").querySelector(".tip"), mark: $("mark").querySelector("path"),
+};
+const shown = {};
+/** Writes to the page only what changed since the last render. */
+function put(key, value, write) {
+  if (shown[key] === value) return;
+  shown[key] = value;
+  write(value);
+}
+
 function renderTimer() {
+  const now = Date.now(), left = engine.remaining(now);
+  const text = clock(left);
+  // A background tab shows only its title, and that in minutes: it's
+  // redrawn once a minute there.
+  put("title", engine.isIdle ? "drill" : visible() ? `${text} · ${statusWord()}`
+    : `${Math.ceil(left / 60_000)} min · ${statusWord()}`, (v) => { document.title = v; });
+  if (!visible()) return;
+
+  put("status", statusWord() || "\u00a0", (v) => { view.status.textContent = v; });
+  put("clock", text, (v) => { view.clock.textContent = v; });
+  put("spoken", spoken(left), (v) => view.clock.setAttribute("aria-label", v));
+  put("toggle", engine.isRunning ? "pause" : engine.isIdle ? "start" : "resume",
+      (v) => { view.toggle.textContent = v; });
+  put("reset", engine.isIdle, (v) => { view.reset.hidden = v; });
+  put("dots", `${engine.config.longBreakEvery}:${engine.cyclePosition}`, () => {
+    const dots = view.dots;
+    if (dots.children.length !== engine.config.longBreakEvery) {
+      dots.replaceChildren(...[...Array(engine.config.longBreakEvery)].map(() => document.createElement("i")));
+    }
+    [...dots.children].forEach((d, i) => d.classList.toggle("on", i < engine.cyclePosition));
+  });
+  renderRing();
+}
+
+/** The ring and the mark. Boiling, they're redrawn every boil step; still,
+ *  only when the arc would visibly move. */
+function renderRing() {
   const now = Date.now();
   const boiling = engine.isRunning && !reduceMotion.matches;
   const tick = boiling ? Math.floor(now / BOIL_MS) : 0;
-
-  $("status").textContent = statusWord() || " ";
-  const text = clock(engine.remaining(now));
-  if ($("clock").textContent !== text) $("clock").textContent = text;
-  document.title = engine.isIdle ? "drill" : `${text} · ${statusWord()}`;
-
-  const toggleLabel = engine.isRunning ? "pause" : engine.isIdle ? "start" : "resume";
-  $("toggle").textContent = toggleLabel;
-  $("reset").hidden = engine.isIdle;
-
-  const dots = $("dots");
-  if (dots.children.length !== engine.config.longBreakEvery) {
-    dots.replaceChildren(...[...Array(engine.config.longBreakEvery)].map(() => document.createElement("i")));
-  }
-  [...dots.children].forEach((d, i) => d.classList.toggle("on", i < engine.cyclePosition));
-
-  if (tick !== lastBoil || !boiling) {
-    lastBoil = tick;
-    const r = ring(270, engine.progress(now), tick);
-    const svg = $("ring");
-    svg.querySelector(".track").setAttribute("d", r.track);
-    svg.querySelector(".arc").setAttribute("d", r.arc);
-    const tip = svg.querySelector(".tip");
-    tip.style.display = r.tip ? "" : "none";
-    if (r.tip) { tip.setAttribute("cx", r.tip[0]); tip.setAttribute("cy", r.tip[1]); }
-    $("mark").querySelector("path").setAttribute("d", drill(22, tick));
-  }
+  const progress = engine.progress(now);
+  put("ring", `${tick}:${Math.round(progress * 720)}`, () => {
+    const r = ring(270, progress, tick);
+    view.track.setAttribute("d", r.track);
+    view.arc.setAttribute("d", r.arc);
+    view.tip.style.display = r.tip ? "" : "none";
+    if (r.tip) { view.tip.setAttribute("cx", r.tip[0]); view.tip.setAttribute("cy", r.tip[1]); }
+  });
+  put("mark", tick, (t) => view.mark.setAttribute("d", drill(22, t)));
 }
 
 /** Tags to offer, most recent first; the demo's sample classes come after yours. */
@@ -168,12 +231,17 @@ function tagList() {
   return tags;
 }
 
-let filterTags = null;
+let filterTags = null, tagsDrawn = null;
+/** The suggestions under the field and the tabs over the year. Skipped
+ *  when neither the tags, the filter nor the field changed. */
 function renderTags() {
   const tags = tagList();
   if (tagFilter && !tags.includes(tagFilter)) tagFilter = null;
 
   const current = $("tag").value.trim().toLowerCase();
+  const key = JSON.stringify([tags, tagFilter, current]);
+  if (key === tagsDrawn) return;
+  tagsDrawn = key;
   $("suggest").replaceChildren(...tags.filter((t) => t !== current).slice(0, 4).map((t) =>
     button(t, () => { $("tag").value = t; save(KEY.tag, t); renderTags(); })));
 
@@ -188,18 +256,29 @@ function renderTags() {
   }
   const buttons = [...filter.querySelectorAll(".link")];
   buttons.forEach((b, i) => b.setAttribute("aria-pressed", String((i === 0 ? null : tags[i - 1]) === tagFilter)));
-  const on = buttons[tagFilter === null ? 0 : tags.indexOf(tagFilter) + 1];
-  const line = filter.querySelector(".underline");
-  line.style.width = `${on.offsetWidth}px`;
-  line.style.transform = `translateX(${on.offsetLeft}px)`;
-  fadeEdge();
+  const on = placeUnderline();
   // A chosen tab under a faded edge slides to the middle of the row. Only
   // the row scrolls, never the page around it.
   const fade = 28, left = filter.scrollLeft, right = left + filter.clientWidth;
   if (filter.scrollWidth > filter.clientWidth &&
       (on.offsetLeft + on.offsetWidth > right - fade || on.offsetLeft < left + fade)) {
-    filter.scrollTo({ left: on.offsetLeft + on.offsetWidth / 2 - filter.clientWidth / 2, behavior: "smooth" });
+    filter.scrollTo({ left: on.offsetLeft + on.offsetWidth / 2 - filter.clientWidth / 2,
+                      behavior: reduceMotion.matches ? "auto" : "smooth" });
   }
+}
+
+/** Puts the underline under the chosen tab; also after a resize. */
+function placeUnderline() {
+  const filter = $("filter");
+  const buttons = filter.querySelectorAll(".link");
+  const on = buttons[tagFilter === null ? 0 : (filterTags ?? []).indexOf(tagFilter) + 1];
+  const line = filter.querySelector(".underline");
+  if (on && line) {
+    line.style.width = `${on.offsetWidth}px`;
+    line.style.transform = `translateX(${on.offsetLeft}px)`;
+  }
+  fadeEdge();
+  return on;
 }
 
 function fadeEdge() {
@@ -253,6 +332,7 @@ const INK = [0, 0.16, 0.36, 0.62, 0.92];
 let heat = null, metrics = null;
 
 let cells = [], drawn = "";
+const weekStart = firstWeekday();
 
 const cellFill = (level) =>
   level > 0 ? `color-mix(in srgb, var(--accent) ${INK[level] * 100}%, transparent)` : "var(--wash)";
@@ -265,12 +345,12 @@ function renderYear(fade = false) {
   const weeks = width < 520 ? 26 : 53;
   const sessions = [...(demo ? sampleYear() : []), ...store.live()]
     .filter((s) => !tagFilter || s.tag === tagFilter);
-  heat = buildHeatmap(sessions, weeks);
+  heat = buildHeatmap(sessions, weeks, Date.now(), weekStart);
 
   const shape = `${width}:${weeks}:${new Date().toDateString()}`;
   if (shape === drawn && cells.length) {
     heat.weeks.flat().filter(Boolean).forEach((day, i) => { cells[i].style.fill = cellFill(day.level); });
-    if (fade) $("caption").animate([{ opacity: 0.2 }, { opacity: 1 }], { duration: 420, easing: "ease-out" });
+    if (fade && !reduceMotion.matches) $("caption").animate([{ opacity: 0.2 }, { opacity: 1 }], { duration: 420, easing: "ease-out" });
     renderHover();
     return;
   }
@@ -368,11 +448,14 @@ function renderCaption() {
     legend.append(sq);
   });
   legend.append("more");
+  const streak = heat.streak === 1 ? "1 day" : `${heat.streak} days`;
   cap.replaceChildren(
     stat("today", amount(heat.today)),
     stat("this week", amount(heat.thisWeek)),
-    stat("streak", heat.streak === 1 ? "1 day" : `${heat.streak} days`),
+    stat("streak", streak),
     legend);
+  $("grid").setAttribute("aria-label", `your year${tagFilter ? `, ${tagFilter}` : ""}: ` +
+    `today ${amount(heat.today)}, this week ${amount(heat.thisWeek)}, streak ${streak}`);
 }
 
 function el2(tag, className, text) {
@@ -393,72 +476,126 @@ function dayAt(event) {
 let lastSyncState = store.syncState;
 let syncedFlash = null;
 
-/** The header word, the settings row, and a brief "synced" after a sync. */
+/** The header word, the settings row, and a brief "synced" after a sync.
+ *  Copy as in the mac's MainView and AccountRow. */
 function renderSync() {
-  const state = store.syncState, account = store.account;
+  const state = store.syncState, account = store.account, waiting = store.waiting;
   if (lastSyncState === "syncing" && state === "synced") {
     clearTimeout(syncedFlash);
     syncedFlash = setTimeout(() => { syncedFlash = null; renderSync(); }, 2000);
   }
   lastSyncState = state;
-  $("sync").textContent = {
+  $("sync").textContent = waiting && !waiting.confirmed ? "check email" : {
     signedOut: "sync", syncing: "syncing…", offline: "offline", unconfirmed: "confirm email",
     synced: syncedFlash ? "synced" : "sync",
   }[state];
   $("account-line").textContent = account?.email ?? "sync";
-  $("account-action").textContent = account ? "sign out" : "sign in";
-  $("sync-note").textContent = {
-    signedOut: "sign in to keep your sessions on every device.",
-    syncing: "syncing…",
-    synced: "synced.",
-    offline: "can't reach the server. sessions stay here until it's back.",
-    unconfirmed: "confirm your email to start syncing. check your inbox.",
-  }[state];
+  $("account-action").textContent = waiting && !waiting.confirmed ? "cancel" : account ? "sign out" : "sign in";
+  $("sync-note").textContent = waiting
+    ? (waiting.confirmed ? "you're in." : "check your inbox for the link.")
+    : {
+      signedOut: "sign in to sync across devices.",
+      syncing: "syncing…",
+      synced: "synced.",
+      offline: "offline. your sessions are safe here.",
+      unconfirmed: "confirm your email to start syncing.",
+    }[state];
+  if ($("account").open) renderAccount();
+  syncLoop();
 }
 
-// MARK: Account dialog
+// MARK: Account dialog (AccountSheet.swift)
 
-let creating = false;
+let creating = false, working = false, problem = "", sentNote = "";
 
 function openAccount() {
   creating = false;
+  problem = sentNote = "";
   $("account-form").reset();
   renderAccount();
   $("account").showModal();
+  if (!store.waiting) $("email").focus();
 }
 
-function renderAccount(error = "") {
-  $("account-title").textContent = creating ? "create an account" : "sign in to sync";
-  $("account-submit").textContent = creating ? "create" : "sign in";
-  $("account-switch").textContent = creating ? "i have an account" : "create an account";
-  $("password").autocomplete = creating ? "new-password" : "current-password";
-  $("account-error").textContent = error;
-}
-
-async function submitAccount(e) {
-  e.preventDefault();
-  const button = $("account-submit");
-  button.disabled = true;
-  try {
-    await store.signIn($("email").value, $("password").value, creating);
-    $("account").close();
-  } catch (err) {
-    renderAccount(err.message);
-  } finally {
-    button.disabled = false;
+function renderAccount() {
+  const waiting = store.waiting;
+  $("account-form").hidden = !!waiting;
+  $("account-waiting").hidden = !waiting;
+  if (waiting) {
+    $("waiting-title").textContent = waiting.confirmed ? "you're in" : "check your inbox";
+    $("waiting-note").textContent = waiting.confirmed
+      ? "syncing now." : sentNote || `click the link we sent to ${waiting.email}.`;
+    $("waiting-error").textContent = problem || " ";
+    $("waiting-actions").classList.toggle("gone", waiting.confirmed);
+    $("resend").disabled = working;
+    return;
   }
+  const ready = $("email").value.includes("@") && $("password").value.length >= 8;
+  $("account-title").textContent = creating ? "make an account" : "sign in";
+  $("account-submit").textContent = creating ? "create" : "sign in";
+  $("account-submit").disabled = !ready || working;
+  $("account-switch").textContent = creating ? "have an account?" : "new here?";
+  $("password").autocomplete = creating ? "new-password" : "current-password";
+  $("account-error").textContent = problem || (creating ? "password needs 8+ characters." : " ");
 }
+
+/** Runs one call at a time, and shows what went wrong. */
+async function run(work) {
+  if (working) return;
+  working = true;
+  problem = "";
+  renderAccount();
+  try {
+    await work();
+  } catch (err) {
+    problem = err.message || "something went wrong. try again.";
+  }
+  working = false;
+  renderAccount();
+}
+
+function submitAccount(e) {
+  e.preventDefault();
+  if ($("account-submit").disabled) return;
+  run(async () => {
+    sentNote = "";
+    await store.signIn($("email").value.trim(), $("password").value, creating);
+    if (!store.waiting) $("account").close();
+  });
+}
+
+// Once the link is clicked: a beat on "you're in", then out.
+let wasConfirmed = false;
+store.addEventListener("sync", () => {
+  const confirmed = store.waiting?.confirmed === true;
+  if (confirmed && !wasConfirmed) setTimeout(() => $("account").close(), 1400);
+  wasConfirmed = confirmed;
+});
 
 // MARK: Theme, sound, notifications
 
 function applyTheme() {
   document.documentElement.dataset.theme = settings.theme;
+  for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
+    meta.content = settings.theme === "light" ? "#F2F0ED" : "#121211";
+  }
 }
 
 let audio = null;
+/** Safari only lets sound start from a click: so the chime's audio is made,
+ *  or woken, by the start button, ready for when the phase ends. */
+function wakeAudio() {
+  if (!settings.sound) return;
+  try {
+    audio ??= new (window.AudioContext || window.webkitAudioContext)();
+    if (audio.state === "suspended") audio.resume().catch(() => {});
+  } catch {}
+}
+
 function chime(focusDone) {
   try {
-    audio ??= new AudioContext();
+    audio ??= new (window.AudioContext || window.webkitAudioContext)();
+    if (audio.state === "suspended") audio.resume().catch(() => {});
     const notes = focusDone ? [880, 1318.5] : [659.3];
     notes.forEach((freq, i) => {
       const t = audio.currentTime + i * 0.16;
@@ -482,10 +619,37 @@ function askForNotifications() {
   }
 }
 
-function notify(title, body) {
+/** Shows the banner through the service worker where there is one (the only
+ *  way on Android Chrome), with "start break" / "start focus" when `next`
+ *  won't start by itself; else the plain kind. */
+async function notify(title, body, next) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
-  if (document.visibilityState === "visible" && document.hasFocus()) return;
-  try { new Notification(title, { body, icon: "icon.png", tag: "drill" }); } catch {}
+  if (visible() && document.hasFocus()) return;
+  const options = { body, icon: "icon-192.png", tag: "drill", renotify: true };
+  try {
+    const sw = await navigator.serviceWorker?.getRegistration();
+    if (sw) {
+      if (next) {
+        options.actions = [{ action: "start", title: isBreak(next) ? "start break" : "start focus" }];
+        options.data = { next };
+      }
+      return await sw.showNotification(title, options);
+    }
+  } catch {}
+  try { new Notification(title, options); } catch {}
+}
+
+/** The banner's start button: start the phase it offered, if it's still next. */
+function startFromBanner(next) {
+  if (engine.isIdle && engine.phase === next) toggle();
+}
+
+function registerWorker() {
+  if (demo || !("serviceWorker" in navigator) || !isSecureContext) return;
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+  navigator.serviceWorker.addEventListener("message", (e) => {
+    if (e.data?.start) startFromBanner(e.data.start);
+  });
 }
 
 // MARK: Inspo dialog
@@ -550,19 +714,31 @@ function openSettings() {
 }
 
 function markTheme() {
-  for (const b of $("theme").children) b.setAttribute("aria-checked", String(b.value === settings.theme));
+  for (const b of $("theme").children) {
+    const on = b.value === settings.theme;
+    b.setAttribute("aria-checked", String(on));
+    b.tabIndex = on ? 0 : -1; // one stop for the group; arrows move within it
+  }
+}
+
+function pickTheme(theme) {
+  settings.theme = theme;
+  save(KEY.settings, settings);
+  markTheme();
+  applyTheme();
 }
 
 function saveSettings() {
-  const clamp = (id, min, max) => {
-    const n = Math.round(Number($(id).value));
+  // The mac's steppers: focus 5–120 and long breaks 5–60 in fives.
+  const clamp = (id, min, max, step = 1) => {
+    const n = Math.round(Number($(id).value) / step) * step;
     return Math.min(max, Math.max(min, Number.isFinite(n) && n > 0 ? n : min));
   };
   settings.config = {
     ...settings.config,
-    focus: clamp("focus", 1, 120) * 60,
+    focus: clamp("focus", 5, 120, 5) * 60,
     shortBreak: clamp("shortBreak", 1, 30) * 60,
-    longBreak: clamp("longBreak", 1, 60) * 60,
+    longBreak: clamp("longBreak", 5, 60, 5) * 60,
     longBreakEvery: clamp("longBreakEvery", 2, 8),
     autoStartBreaks: $("autoStartBreaks").checked,
     autoStartFocus: $("autoStartFocus").checked,
@@ -601,9 +777,11 @@ tagInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" || e.key === "Escape") tagInput.blur();
 });
 
+// Space, or a plain Enter, starts and pauses, unless you're typing or on a
+// button, which has its own.
 document.addEventListener("keydown", (e) => {
-  if (e.key !== " " || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
-  if (e.target.closest?.("input, button, dialog")) return;
+  if ((e.key !== " " && e.key !== "Enter") || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+  if (e.target.closest?.("input, textarea, select, button, a, dialog, [contenteditable]")) return;
   e.preventDefault();
   toggle();
 });
@@ -613,20 +791,37 @@ dialog.addEventListener("change", saveSettings);
 dialog.addEventListener("close", saveSettings);
 dialog.addEventListener("click", (e) => { if (e.target === dialog) dialog.close(); });
 $("theme").addEventListener("click", (e) => {
-  if (!e.target.value) return;
-  settings.theme = e.target.value;
-  save(KEY.settings, settings);
-  markTheme();
-  applyTheme();
+  if (e.target.value) pickTheme(e.target.value);
+});
+$("theme").addEventListener("keydown", (e) => {
+  if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) return;
+  e.preventDefault();
+  pickTheme(settings.theme === "light" ? "dark" : "light");
+  [...$("theme").children].find((b) => b.value === settings.theme).focus();
 });
 $("sync").addEventListener("click", () => (store.account ? store.sync() : openAccount()));
 $("account-action").addEventListener("click", () => {
-  if (store.account) return store.signOut();
+  if (store.account) return store.signOut(); // also "cancel" while waiting on the link
   $("settings").close();
   openAccount();
 });
-$("account-switch").addEventListener("click", () => { creating = !creating; renderAccount(); });
+$("account-switch").addEventListener("click", () => { creating = !creating; problem = ""; renderAccount(); });
 $("account-form").addEventListener("submit", submitAccount);
+$("account-form").addEventListener("input", () => renderAccount());
+$("wrong-email").addEventListener("click", () => {
+  store.signOut();
+  problem = sentNote = "";
+  renderAccount();
+  $("email").focus();
+});
+$("resend").addEventListener("click", () => run(async () => {
+  await store.resend();
+  sentNote = "sent another one.";
+}));
+// Closing while waiting keeps waiting; settings shows how it's going.
+for (const b of $("account").querySelectorAll("[data-close]")) {
+  b.addEventListener("click", () => $("account").close());
+}
 $("account").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 
 const grid = $("grid");
@@ -637,7 +832,11 @@ grid.addEventListener("pointermove", (e) => {
   renderHover();
 });
 grid.addEventListener("pointerleave", () => { hovered = null; renderHover(); });
-new ResizeObserver(() => { renderYear(); renderTags(); }).observe(grid);
+// At most once a frame, however many resizes arrive.
+let resizing = 0;
+new ResizeObserver(() => {
+  resizing ||= requestAnimationFrame(() => { resizing = 0; renderYear(); placeUnderline(); });
+}).observe(grid);
 
 store.addEventListener("change", () => { renderTags(); renderYear(); });
 store.addEventListener("sync", renderSync);
@@ -652,21 +851,54 @@ addEventListener("storage", (e) => {
   renderTimer();
 });
 
-// Catch up on sessions from other devices now and then, and whenever the
-// tab comes back.
-setInterval(() => store.sync(), 60_000);
+// Sync every five minutes while signed in and looking, never while the tab
+// is hidden. Coming back syncs too, unless one started in the last 20s.
+let syncTimer = null;
+function syncLoop() {
+  const on = !demo && !!store.account && visible();
+  if (on && !syncTimer) syncTimer = setInterval(() => store.sync(), 5 * 60_000);
+  else if (!on && syncTimer) { clearInterval(syncTimer); syncTimer = null; }
+}
+
+// The year turns over at midnight: one wakeup then, not a poll.
+let midnight = null;
+function scheduleMidnight() {
+  clearTimeout(midnight);
+  const next = new Date();
+  next.setHours(24, 0, 1, 0);
+  midnight = setTimeout(() => { renderYear(); scheduleMidnight(); }, next - Date.now());
+}
+
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") { store.sync(); renderTimer(); }
+  if (visible()) {
+    // Catch up: the phase may have ended, the day turned, or the computer slept.
+    advance();
+    renderYear();
+    scheduleMidnight();
+    if (!demo && store.account && Date.now() - store.lastStarted > 20_000) store.sync();
+  } else {
+    schedule();
+    renderTimer();
+  }
+  syncLoop();
 });
-// Day rollover and relative stats.
-setInterval(() => renderYear(), 5 * 60_000);
+// Back from the back/forward cache, or the clock or time zone moved: redraw today.
+addEventListener("pageshow", () => { renderYear(); scheduleMidnight(); });
+addEventListener("focus", () => renderYear());
 
 applyTheme();
+registerWorker();
 // A phase may have ended while the tab was closed.
-const missed = engine.tick(Date.now());
-if (missed) handle(missed);
+advance();
 changed();
 renderTags();
 renderYear();
 renderSync();
+scheduleMidnight();
 if (!demo) store.sync();
+// Opened by a banner's start button when no tab was open.
+const startParam = new URLSearchParams(location.search).get("start");
+if (startParam) {
+  history.replaceState(null, "", location.pathname);
+  startFromBanner(startParam);
+}

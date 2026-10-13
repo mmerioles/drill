@@ -19,6 +19,7 @@
         android:theme="@style/Drill"
         android:allowBackup="true"
         android:supportsRtl="true"
+        android:enableOnBackInvokedCallback="true"
         android:usesCleartextTraffic="true">
         <!-- Cleartext: a self-hosted server on a home network is often plain http. -->
 
@@ -35,6 +36,7 @@
         </activity>
 
         <receiver android:name=".timer.PhaseEndReceiver" android:exported="false" />
+        <receiver android:name=".timer.TimerActionReceiver" android:exported="false" />
         <receiver android:name=".data.InstallReceiver" android:exported="false" />
         <receiver android:name=".timer.BootReceiver" android:exported="false">
             <intent-filter>

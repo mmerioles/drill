@@ -63,7 +63,7 @@
                 <ink:DoodleRing Progress="{Binding Model.Progress}" Boiling="{Binding Model.IsRunning}" />
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,4,0,0">
                     <ink:FadingText x:Name="Status" FontSize="13" Opacity="0.52" HorizontalAlignment="Center" Height="18" />
-                    <ink:RollingText x:Name="Clock" FontSize="60" HorizontalAlignment="Center" Margin="0,2,0,6" />
+                    <ink:RollingText x:Name="Clock" AutomationProperties.HelpText="space or enter starts and pauses" FontSize="60" HorizontalAlignment="Center" Margin="0,2,0,6" />
                     <ink:CycleDots Filled="{Binding Model.CyclePosition}" Count="{Binding Model.CycleLength}" HorizontalAlignment="Center" />
                 </StackPanel>
             </Grid>
@@ -74,7 +74,7 @@
                 <Grid Width="150">
                     <TextBlock x:Name="Hint" Text="anything" FontSize="15" Foreground="{DynamicResource Hint}"
                                FontFamily="{DynamicResource Text}" IsHitTestVisible="False" Margin="0,0,0,4" VerticalAlignment="Bottom" />
-                    <TextBox x:Name="TagBox" Style="{StaticResource Bare}" FontSize="15" Margin="0,0,0,4" MaxLength="40"
+                    <TextBox x:Name="TagBox" AutomationProperties.Name="studying" Style="{StaticResource Bare}" FontSize="15" Margin="0,0,0,4" MaxLength="40"
                              Text="{Binding Model.Tag, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Bottom" />
                     <Rectangle x:Name="Underline" Height="1" VerticalAlignment="Bottom" Fill="{DynamicResource Ghost}" />
                 </Grid>

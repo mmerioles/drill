@@ -16,10 +16,11 @@ public static class Copy
         _ => "long break",
     };
 
+    /// <summary>The toast when a phase runs out: "focus done" / "take a break · 5 min", or "break over" / "back to focus".</summary>
     public static (string Title, string Body) Finished(Phase finished, Phase next, double nextSeconds) =>
         finished == Phase.Focus
-            ? ("focus done", $"take a break · {Amount(nextSeconds)}")
-            : ("break's over", "back to it.");
+            ? ("focus done", $"take a break · {Math.Max(1, (int)Math.Round(nextSeconds / 60))} min")
+            : ("break over", "back to focus");
 
     public static string Clock(double seconds)
     {
@@ -49,12 +50,32 @@ public static class Copy
     public static string Month(DateTime date) =>
         date.ToString("MMM", CultureInfo.InvariantCulture).ToLowerInvariant();
 
-    /// <summary>The tray's tooltip.</summary>
+    /// <summary>
+    /// The tray's tooltip, to the minute ("focus · 12 min left"), so the
+    /// icon is touched about once a minute rather than every second.
+    /// </summary>
     public static string Tooltip(Phase phase, bool running, bool active, double remaining)
     {
         if (!active) return "drill";
-        var clock = Clock(remaining);
-        if (!running) return $"paused · {clock}";
-        return $"{(phase.IsBreak() ? "break" : "focus")} · {clock} left";
+        var left = $"{MinutesLeft(remaining)} min left";
+        if (!running) return $"paused · {left}";
+        return $"{(phase.IsBreak() ? "break" : "focus")} · {left}";
     }
+
+    /// <summary>What a screen reader says for the timer: "focus, 12 minutes left".</summary>
+    public static string Spoken(Phase phase, bool running, bool active, double remaining)
+    {
+        var what = Status(phase, running, active) ?? "focus";
+        var seconds = (int)Math.Ceiling(Math.Round(remaining, 6));
+        if (seconds < 60) return $"{what}, {seconds} {(seconds == 1 ? "second" : "seconds")} left";
+        var minutes = MinutesLeft(remaining);
+        return $"{what}, {minutes} {(minutes == 1 ? "minute" : "minutes")} left";
+    }
+
+    /// <summary>What a screen reader says for the year: "your year. today 1h 15m, this week 5h, streak 13 days."</summary>
+    public static string YearSummary(double today, double week, int streak) =>
+        $"your year. today {Amount(today)}, this week {Amount(week)}, streak {Streak(streak)}.";
+
+    /// <summary>Whole minutes left, rounded up: 11:01 is "12".</summary>
+    private static int MinutesLeft(double remaining) => (int)Math.Ceiling(Math.Round(remaining, 6) / 60);
 }

@@ -106,7 +106,9 @@ public sealed class Sync : Observable
     /// <summary>Syncs at launch, every few minutes, and whenever you come back to the app.</summary>
     public void Start()
     {
-        _loop.Start();
+        // The loop only runs while there's an account to sync: no wakeups signed out.
+        _loop.IsEnabled = IsSignedIn;
+        PropertyChanged += (_, e) => { if (e.PropertyName == nameof(IsSignedIn)) _loop.IsEnabled = IsSignedIn; };
         SyncNow();
         Application.Current.Activated += (_, _) => CameBack();
     }

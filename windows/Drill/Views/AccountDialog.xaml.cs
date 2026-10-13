@@ -34,10 +34,13 @@ public partial class AccountDialog : UserControl
         Password.PasswordChanged += (_, _) => { PasswordHint.Visibility = Password.Password.Length == 0 ? Visibility.Visible : Visibility.Collapsed; ShowReady(); };
         Underline(Email, EmailLine, "CardLine");
         Underline(Password, PasswordLine, null);
-        sync.PropertyChanged += OnSync;
+        // Sync outlives the dialog: listen only while it's showing.
         Unloaded += (_, _) => sync.PropertyChanged -= OnSync;
         Loaded += (_, _) =>
         {
+            sync.PropertyChanged -= OnSync; // Loaded can come twice
+            sync.PropertyChanged += OnSync;
+            Show();
             if (sync.WaitingFor is { } waiting) Email.Text = waiting.Email;
             else Keyboard.Focus(Email);
         };

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -30,6 +31,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -41,7 +47,7 @@ import io.github.mmerioles.drill.core.Day
 import io.github.mmerioles.drill.core.Heatmap
 import io.github.mmerioles.drill.ink.Doodle
 import io.github.mmerioles.drill.ink.LocalPalette
-import java.time.LocalDate
+import android.text.format.DateFormat
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle as DateStyle
 import java.util.Locale
@@ -58,28 +64,35 @@ fun YearView(model: AppModel) {
     val ink = LocalPalette.current
     var filter by rememberSaveable { mutableStateOf<String?>(null) }
     var picked by remember { mutableStateOf<Day?>(null) }
-    val tags = model.tags(6)
+    val tags = model.recentTags
     if (filter != null && filter !in tags) filter = null
 
     Column(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Words("your year", size = 18.sp, weight = FontWeight.Bold)
+            Words("your year", Modifier.semantics { heading() }, size = 18.sp, weight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Link("all", size = 13.sp, on = filter == null) { filter = null }
-                tags.forEach { t -> Link(t, size = 13.sp, on = filter == t) { filter = t } }
+            Row(Modifier.horizontalScroll(rememberScrollState()).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                Link("all", size = 13.sp, on = filter == null, selectable = true) { filter = null }
+                tags.forEach { t -> Link(t, size = 13.sp, on = filter == t, selectable = true) { filter = t } }
             }
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(2.dp))
 
         BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val weeks = if (maxWidth < 520.dp) 26 else 53
-            val today = LocalDate.now()
-            val sessions = model.sessions.filter { filter == null || it.tag == filter }
-            val heat = remember(sessions, weeks, today) { Heatmap.build(sessions, weeks, today) }
+            val weeks = if (maxWidth < 520.dp) 26 else Heatmap.MAX_WEEKS
+            // The model's day, not the clock's: it moves on at midnight even
+            // when nothing else changes.
+            val today = model.today
+            val all = model.sessions
+            val heat = remember(all, filter, weeks, today) {
+                Heatmap.build(all.filter { filter == null || it.tag == filter }, weeks, today)
+            }
+            val summary = "your year. today ${amount(heat.today)}, this week ${amount(heat.thisWeek)}, " +
+                "streak ${streak(heat.streak)}"
             val measurer = rememberTextMeasurer()
             val monthStyle = TextStyle(color = ink.faint, fontSize = 10.sp)
-            val monthRow = 16.dp
+            // Room for the month names, more when the words are large.
+            val monthRow = with(LocalDensity.current) { maxOf(16.dp, monthStyle.fontSize.toDp() * 1.5f) }
             val pitchDp = maxWidth / (weeks - GAP)
             val height = monthRow + pitchDp * 7 - pitchDp * GAP
 
@@ -87,6 +100,7 @@ fun YearView(model: AppModel) {
                 Modifier
                     .fillMaxWidth()
                     .height(height)
+                    .semantics { contentDescription = summary }
                     .pointerInput(heat) {
                         detectTapGestures { at ->
                             val pitch = size.width / (weeks - GAP)
@@ -141,7 +155,13 @@ fun YearView(model: AppModel) {
     }
 }
 
-private val dayFormat = DateTimeFormatter.ofPattern("EEE, MMM d")
+private fun streak(days: Int) = if (days == 1) "1 day" else "$days days"
+
+/** "wed, oct 7" in english, and the locale's own order elsewhere. */
+private fun dayFormat(): DateTimeFormatter {
+    val locale = Locale.getDefault()
+    return DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(locale, "EEEMMMd"), locale)
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -149,27 +169,30 @@ private fun Caption(heat: Heatmap, picked: Day?, modifier: Modifier) {
     val ink = LocalPalette.current
     if (picked != null) {
         Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Words(dayFormat.format(picked.date).lowercase(), size = 13.sp, weight = FontWeight.Medium)
+            Words(dayFormat().format(picked.date).lowercase(), size = 13.sp, weight = FontWeight.Medium)
             Words("— " + if (picked.seconds > 0) amount(picked.seconds) else "nothing logged.", size = 13.sp, color = ink.faint)
         }
         return
     }
     FlowRow(
         modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(18.dp),
+        horizontalArrangement = Arrangement.spacedBy(22.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Stat("today", amount(heat.today))
         Stat("this week", amount(heat.thisWeek))
-        Stat("streak", if (heat.streak == 1) "1 day" else "${heat.streak} days")
+        Stat("streak", streak(heat.streak))
         Spacer(Modifier.weight(1f))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            Words("less", size = 12.sp, color = ink.faint)
+        Row(
+            Modifier.clearAndSetSemantics {},
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Words("less", size = 11.sp, color = ink.faint)
             INK.forEachIndexed { i, a ->
                 val color = if (i == 0) ink.wash else ink.accent.copy(alpha = a)
                 Spacer(Modifier.size(9.dp).background(color, RoundedCornerShape(2.dp)))
             }
-            Words("more", size = 12.sp, color = ink.faint)
+            Words("more", size = 11.sp, color = ink.faint)
         }
     }
 }
@@ -179,6 +202,6 @@ private fun Stat(label: String, value: String) {
     val ink = LocalPalette.current
     Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
         Words(label, size = 13.sp, color = ink.faint)
-        Words(value, size = 13.sp, weight = FontWeight.SemiBold)
+        Words(value, size = 13.sp, weight = FontWeight.Medium)
     }
 }

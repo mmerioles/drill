@@ -62,6 +62,13 @@ public static partial class Native
     public const int SW_RESTORE = 9;
 
     [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool AllowSetForegroundWindow(uint processId);
+
+    /// <summary>Any process may take the foreground next: for handing it to the drill already running.</summary>
+    public const uint ASFW_ANY = unchecked((uint)-1);
+
+    [LibraryImport("user32.dll")]
     public static partial int GetWindowLongW(nint hwnd, int index);
 
     [LibraryImport("user32.dll")]
@@ -132,6 +139,19 @@ public static partial class Native
     public static (RECT Monitor, RECT Work, double Scale) MonitorAround(RECT rect)
     {
         var monitor = MonitorFromRect(ref rect, 2 /* MONITOR_DEFAULTTONEAREST */);
+        var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+        GetMonitorInfo(monitor, ref info);
+        var scale = GetDpiForMonitor(monitor, 0, out var dpi, out _) == 0 ? dpi / 96.0 : 1;
+        return (info.rcMonitor, info.rcWork, scale);
+    }
+
+    [LibraryImport("user32.dll")]
+    private static partial nint MonitorFromWindow(nint hwnd, uint flags);
+
+    /// <summary>The monitor and work area (in pixels) a window is on (or nearest), and its scale.</summary>
+    public static (RECT Monitor, RECT Work, double Scale) MonitorOf(nint hwnd)
+    {
+        var monitor = MonitorFromWindow(hwnd, 2 /* MONITOR_DEFAULTTONEAREST */);
         var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
         GetMonitorInfo(monitor, ref info);
         var scale = GetDpiForMonitor(monitor, 0, out var dpi, out _) == 0 ? dpi / 96.0 : 1;

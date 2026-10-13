@@ -165,9 +165,28 @@ public sealed class Updater : Observable
         return new Release(version, new Uri((string)asset["browser_download_url"]!), new Uri((string)json["html_url"]!));
     }
 
+    private static string Downloads => Path.Combine(Path.GetTempPath(), "drill-update");
+
+    /// <summary>
+    /// Throws away installers from earlier updates (or half-finished
+    /// downloads), off the UI thread. One still running stays, locked, till next time.
+    /// </summary>
+    public static void SweepDownloads() => Task.Run(() =>
+    {
+        try
+        {
+            if (!Directory.Exists(Downloads)) return;
+            foreach (var file in Directory.EnumerateFiles(Downloads))
+            {
+                try { File.Delete(file); } catch (Exception) { } // in use
+            }
+        }
+        catch (Exception) { }
+    });
+
     private static async Task<string> Download(Release release)
     {
-        var folder = Path.Combine(Path.GetTempPath(), "drill-update");
+        var folder = Downloads;
         Directory.CreateDirectory(folder);
         var path = Path.Combine(folder, $"drill_{release.Version}{ArchSuffix}");
         var partial = path + ".part";

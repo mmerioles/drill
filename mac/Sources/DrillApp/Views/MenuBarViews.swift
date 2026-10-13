@@ -8,12 +8,19 @@ struct MenuBarLabel: View {
 
     var body: some View {
         if model.isActive {
-            Text("\(model.phase.isBreak ? "break" : "") \(Copy.clock(model.remaining))"
-                .trimmingCharacters(in: .whitespaces))
+            Text("\(word) \(Copy.clock(model.remaining))".trimmingCharacters(in: .whitespaces))
                 .monospacedDigit()
         } else {
             Image(nsImage: Self.drill)
+                .accessibilityLabel("drill")
         }
+    }
+
+    /// "paused" while paused, "break" through either break, and nothing
+    /// for a running focus block: the countdown says enough.
+    private var word: String {
+        if !model.isRunning { return Copy.status(model.phase, running: false, active: true) ?? "" }
+        return model.phase.isBreak ? "break" : ""
     }
 
     /// The drill glyph rendered once as a template image, so it tints like a
@@ -23,6 +30,7 @@ struct MenuBarLabel: View {
         renderer.scale = 2
         let image = renderer.nsImage ?? NSImage(systemSymbolName: "timer", accessibilityDescription: nil)!
         image.isTemplate = true
+        image.accessibilityDescription = "drill"
         image.size = NSSize(width: 18, height: 18)
         return image
     }()
@@ -51,9 +59,11 @@ struct MenuBarPanel: View {
                     .foregroundStyle(Ink.ink)
                     .contentTransition(.numericText(countsDown: true))
                     .animation(.snappy, value: Int(model.remaining.rounded(.up)))
+                    .modifier(SpokenTimer())
                 Spacer()
                 DoodleRing(progress: model.progress, lineWidth: 2, boiling: false)
                     .frame(width: 34, height: 34)
+                    .accessibilityHidden(true)
             }
 
             HStack(spacing: 16) {

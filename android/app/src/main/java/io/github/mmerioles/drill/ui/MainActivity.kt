@@ -1,11 +1,16 @@
 package io.github.mmerioles.drill.ui
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Color as AndroidColor
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -17,6 +22,8 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -25,6 +32,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -37,18 +45,26 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import io.github.mmerioles.drill.AppModel
 import io.github.mmerioles.drill.DrillApp
 import io.github.mmerioles.drill.Theme
+import io.github.mmerioles.drill.core.Copy
 import io.github.mmerioles.drill.core.Status
 import io.github.mmerioles.drill.data.Sync
 import io.github.mmerioles.drill.data.Updater
@@ -60,22 +76,61 @@ import kotlinx.coroutines.delay
 class MainActivity : ComponentActivity() {
     private val model by lazy { DrillApp.model(this) }
 
+    /** Midnight, a new time zone, or the clock set by hand: the year's
+     *  "today", week and streak move with it. */
+    private val clockChanged = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = model.reload()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Edge to edge from the first frame, in drill's own light or dark.
+        enableEdgeToEdge(bars(model.theme), bars(model.theme))
         super.onCreate(savedInstanceState)
         model.updater.start()
         model.pinNightMode()
         setContent { App(model) }
     }
 
+    override fun onStart() {
+        super.onStart()
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_DATE_CHANGED)
+            addAction(Intent.ACTION_TIME_CHANGED)
+            addAction(Intent.ACTION_TIMEZONE_CHANGED)
+        }
+        ContextCompat.registerReceiver(this, clockChanged, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+    }
+
+    override fun onStop() {
+        unregisterReceiver(clockChanged)
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
         model.catchUp()
-        model.sync.syncNow()
+        model.sync.cameBack()
         model.reload()
         model.updater.resume()
         model.updater.checkIfStale(15 * 60_000L)
     }
+
+    /** With a keyboard: space or enter starts and pauses, unless typing. */
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        val key = keyCode == KeyEvent.KEYCODE_SPACE || keyCode == KeyEvent.KEYCODE_ENTER ||
+            keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
+        if (key && !Typing.active && event.hasNoModifiers()) {
+            model.toggle()
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
+    }
 }
+
+/** Status and navigation bars see-through, with icons for drill's theme,
+ *  not the phone's: dark icons on light paper even when the phone is dark. */
+fun bars(theme: Theme) = if (theme == Theme.Dark) SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+else SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
 
 enum class Open { None, Settings, Account, Inspo }
 
@@ -83,11 +138,7 @@ enum class Open { None, Settings, Account, Inspo }
 fun App(model: AppModel) {
     val dark = model.theme == Theme.Dark
     val activity = LocalContext.current as ComponentActivity
-    SideEffect {
-        val bars = if (dark) SystemBarStyle.dark(AndroidColor.TRANSPARENT)
-        else SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
-        activity.enableEdgeToEdge(bars, bars)
-    }
+    SideEffect { activity.enableEdgeToEdge(bars(model.theme), bars(model.theme)) }
     CompositionLocalProvider(LocalPalette provides if (dark) Palette.dark else Palette.light) {
         Screen(model)
     }
@@ -97,34 +148,63 @@ fun App(model: AppModel) {
 fun Screen(model: AppModel) {
     val ink = LocalPalette.current
     val context = LocalContext.current
-    var open by remember { mutableStateOf(Open.None) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var open by rememberSaveable { mutableStateOf(Open.None) }
 
-    // The clock: a quarter-second beat while running, enough for the digits
-    // and the boil. When the phase runs out on screen, catch up at once
-    // rather than waiting on the alarm.
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    // The clock: one beat each time the shown second changes, on the
+    // boundary, while running and on screen. Only the ring and the digits
+    // read it. When the phase runs out on screen, catch up at once rather
+    // than waiting on the alarm.
+    val clock = remember { mutableLongStateOf(System.currentTimeMillis()) }
     val running = model.timer.status as? Status.Running
     LaunchedEffect(running) {
-        now = System.currentTimeMillis()
-        while (running != null) {
-            delay(250)
-            now = System.currentTimeMillis()
-            if (now >= running.endsAt) model.catchUp()
-        }
-    }
-    // Catch up on other devices now and then while open.
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(60_000)
-            model.sync.syncNow()
-            model.reload() // day rollover
+        clock.longValue = System.currentTimeMillis()
+        if (running == null) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                val now = System.currentTimeMillis()
+                clock.longValue = now
+                if (now >= running.endsAt) {
+                    model.catchUp()
+                    break
+                }
+                delay(Copy.untilNextSecond(running.endsAt - now) + 4)
+            }
         }
     }
 
+    // The hand-drawn boil, its own slower beat, drawn but never recomposed.
     val still = remember {
         Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
     }
-    val tick = if (running != null && !still) now / Doodle.BOIL_MS else 0L
+    val boil = remember { mutableLongStateOf(0L) }
+    val boiling = running != null && !still
+    LaunchedEffect(boiling) {
+        if (!boiling) {
+            boil.longValue = 0L
+            return@LaunchedEffect
+        }
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                val now = System.currentTimeMillis()
+                boil.longValue = now / Doodle.BOIL_MS
+                delay(Doodle.BOIL_MS - now % Doodle.BOIL_MS)
+            }
+        }
+    }
+
+    // Catch up on other devices every few minutes, while signed in and on
+    // screen. Coming back to the app syncs too (MainActivity.onResume).
+    val signedIn = model.sync.isSignedIn
+    LaunchedEffect(signedIn) {
+        if (!signedIn) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                delay(5 * 60_000L)
+                model.sync.syncNow()
+            }
+        }
+    }
 
     // Once allowed, put up the countdown for the block that just started.
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -152,12 +232,12 @@ fun Screen(model: AppModel) {
                 .widthIn(max = 780.dp)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 16.dp),
+                .padding(horizontal = 24.dp, vertical = 8.dp),
         ) {
-            Header(model, tick) { open = it }
-            Spacer(Modifier.height(36.dp))
-            TimerView(model, now, tick, toggle)
-            Spacer(Modifier.height(56.dp))
+            Header(model, { boil.longValue }) { open = it }
+            Spacer(Modifier.height(28.dp))
+            TimerView(model, { clock.longValue }, { boil.longValue }, toggle)
+            Spacer(Modifier.height(48.dp))
             YearView(model)
         }
     }
@@ -170,13 +250,20 @@ fun Screen(model: AppModel) {
     }
 }
 
+/** The mark and name, then the links, which wrap under each other when
+ *  the words are large or the phone is narrow. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Header(model: AppModel, tick: Long, open: (Open) -> Unit) {
+private fun Header(model: AppModel, boil: () -> Long, open: (Open) -> Unit) {
+    val ink = LocalPalette.current
     val sync = model.sync
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        DrillMark(tick)
-        Words("drill", size = 20.sp, weight = FontWeight.Bold)
-        Spacer(Modifier.weight(1f))
+    Row(verticalAlignment = Alignment.Top) {
+        Row(Modifier.height(TouchTarget), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            DrillMark(boil)
+            Words("drill", Modifier.semantics { heading() }, size = 20.sp, weight = FontWeight.Bold)
+        }
+        Spacer(Modifier.width(12.dp))
         val word = if (sync.waiting?.confirmed == false) "check email" else when (sync.state) {
             Sync.State.SignedOut -> "sync"
             Sync.State.Syncing -> "syncing…"
@@ -184,19 +271,24 @@ private fun Header(model: AppModel, tick: Long, open: (Open) -> Unit) {
             Sync.State.Unconfirmed -> "confirm email"
             Sync.State.Idle -> if (sync.justSynced) "synced" else "sync"
         }
-        // A newer version, offered between blocks: installing restarts the app.
-        val updater = model.updater
-        if (updater.state is Updater.State.Downloading) {
-            Words("updating…", size = 14.sp, color = LocalPalette.current.faint)
-            Spacer(Modifier.padding(start = 6.dp))
-        } else if (updater.available != null && model.timer.status is Status.Idle) {
-            Link("update", on = true, action = updater::install)
-            Spacer(Modifier.padding(start = 6.dp))
+        FlowRow(
+            Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
+        ) {
+            model.lastError?.let {
+                Words(it, Modifier.align(Alignment.CenterVertically).padding(end = 4.dp), size = 13.sp, color = ink.faint)
+            }
+            // A newer version, offered between blocks: installing restarts the app.
+            val updater = model.updater
+            val release = updater.available
+            if (updater.state is Updater.State.Downloading) {
+                Words("updating…", Modifier.align(Alignment.CenterVertically), size = 14.sp, color = ink.faint)
+            } else if (release != null && !model.isActive) {
+                Link("update to ${release.version}", on = true, action = updater::install)
+            }
+            Link(word) { if (sync.isSignedIn) sync.syncNow() else open(Open.Account) }
+            Link("inspo") { open(Open.Inspo) }
+            Link("settings") { open(Open.Settings) }
         }
-        Link(word) { if (sync.isSignedIn) sync.syncNow() else open(Open.Account) }
-        Spacer(Modifier.padding(start = 6.dp))
-        Link("inspo") { open(Open.Inspo) }
-        Spacer(Modifier.padding(start = 6.dp))
-        Link("settings") { open(Open.Settings) }
     }
 }

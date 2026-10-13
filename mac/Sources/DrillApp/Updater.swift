@@ -58,7 +58,7 @@ final class Updater {
         loop = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.check(quietly: true)
-                try? await Task.sleep(for: Self.every)
+                try? await Task.sleep(for: Self.every, tolerance: .seconds(360))
             }
         }
         NotificationCenter.default.addObserver(
@@ -106,6 +106,8 @@ final class Updater {
             try swap(in: staged)
             relaunch()
         } catch {
+            // Don't leave a half-copied app lying next to this one.
+            try? FileManager.default.removeItem(at: stagedURL)
             state = .failed("update didn't finish. try again, or grab the dmg.")
         }
     }
@@ -144,7 +146,11 @@ final class Updater {
         try fm.createDirectory(at: work, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: work) }
 
-        let (download, _) = try await URLSession.shared.download(from: release.dmg)
+        let (download, response) = try await URLSession.shared.download(from: release.dmg)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            try? fm.removeItem(at: download)
+            throw URLError(.badServerResponse)
+        }
         let dmg = work.appending(path: "update.dmg")
         try fm.moveItem(at: download, to: dmg)
 
@@ -153,7 +159,8 @@ final class Updater {
                            "-mountpoint", mount.path, dmg.path)
         do {
             let staged = try await copyApp(from: mount)
-            try await Self.run("/usr/bin/hdiutil", "detach", "-force", mount.path)
+            // The copy is done; a stuck mount mustn't sink the update.
+            try? await Self.run("/usr/bin/hdiutil", "detach", "-force", mount.path)
             return staged
         } catch {
             try? await Self.run("/usr/bin/hdiutil", "detach", "-force", mount.path)
@@ -168,10 +175,17 @@ final class Updater {
               Bundle(url: app)?.bundleIdentifier == Bundle.main.bundleIdentifier
         else { throw CocoaError(.fileReadCorruptFile) }
 
-        let staged = bundle.deletingLastPathComponent().appending(path: ".Drill-update.app")
+        let staged = stagedURL
         try? fm.removeItem(at: staged)
         try await Self.run("/usr/bin/ditto", app.path, staged.path)
+        // Ad-hoc signed is fine; a damaged or tampered bundle is not.
+        try await Self.run("/usr/bin/codesign", "--verify", "--strict", staged.path)
         return staged
+    }
+
+    /// Where the new app waits, next to this one, before the swap.
+    private var stagedURL: URL {
+        bundle.deletingLastPathComponent().appending(path: ".Drill-update.app")
     }
 
     /// Moves this app aside, puts the new one in its place, then throws the

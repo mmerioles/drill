@@ -15,14 +15,14 @@
                     <Grid Height="40">
                         <TextBlock x:Name="EmailHint" Text="email" FontSize="14" Foreground="{DynamicResource Hint}"
                                    FontFamily="{DynamicResource Text}" VerticalAlignment="Center" Margin="12,0" IsHitTestVisible="False" />
-                        <TextBox x:Name="Email" Style="{StaticResource Bare}" FontSize="14" VerticalAlignment="Center" Margin="12,0"
+                        <TextBox x:Name="Email" AutomationProperties.Name="email" Style="{StaticResource Bare}" FontSize="14" VerticalAlignment="Center" Margin="12,0"
                                  InputScope="EmailSmtpAddress" />
                         <Rectangle x:Name="EmailLine" Height="1" VerticalAlignment="Bottom" Fill="{DynamicResource CardLine}" />
                     </Grid>
                     <Grid Height="40">
                         <TextBlock x:Name="PasswordHint" Text="password" FontSize="14" Foreground="{DynamicResource Hint}"
                                    FontFamily="{DynamicResource Text}" VerticalAlignment="Center" Margin="12,0" IsHitTestVisible="False" />
-                        <PasswordBox x:Name="Password" Style="{StaticResource BarePassword}" FontSize="14" VerticalAlignment="Center" Margin="12,0" />
+                        <PasswordBox x:Name="Password" AutomationProperties.Name="password" Style="{StaticResource BarePassword}" FontSize="14" VerticalAlignment="Center" Margin="12,0" />
                         <Rectangle x:Name="PasswordLine" Height="1" VerticalAlignment="Bottom" Fill="Transparent" />
                     </Grid>
                 </StackPanel>

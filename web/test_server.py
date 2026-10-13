@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import threading
 import unittest
@@ -235,6 +236,86 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(self.call("/%2e%2e/server.py", raw=True)[0], 404)
 
 
+    def raw_post(self, path, body: bytes, length: str):
+        conn = http.client.HTTPConnection("127.0.0.1", self.srv.server_address[1], timeout=5)
+        try:
+            conn.putrequest("POST", path)
+            conn.putheader("Content-Type", "application/json")
+            conn.putheader("Content-Length", length)
+            conn.endheaders()
+            conn.send(body)
+            r = conn.getresponse()
+            return r.status, r.read()
+        finally:
+            conn.close()
+
+    def test_head_does_not_use_up_the_link(self):
+        self.sign_up()
+        (_, _, text), = self.outbox.sent
+        path = next(line for line in text.splitlines()
+                    if line.startswith("https://teto.example/")).removeprefix("https://teto.example")
+        head = urllib.request.Request(self.base + path, method="HEAD")
+        with urllib.request.urlopen(head) as r:
+            self.assertEqual((r.status, r.read()), (200, b""))
+        self.assertEqual(self.call("/v1/account")[1]["confirmed"], False)
+        self.assertEqual(self.call(path, raw=True)[0], 200)
+        self.assertEqual(self.call("/v1/account")[1]["confirmed"], True)
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(head)
+        self.assertEqual(e.exception.code, 404)
+
+    def test_bad_content_length(self):
+        self.assertEqual(self.raw_post("/v1/signin", b"{}", "-1")[0], 400)
+        self.assertEqual(self.raw_post("/v1/signin", b"{}", "abc")[0], 400)
+
+    def test_nan_and_infinity_are_rejected(self):
+        self.sign_up()
+        for number in (b"NaN", b"Infinity", b"-Infinity", b"1e400", b"1" + b"0" * 400):
+            body = (b'{"deviceID": "mac", "sessions": [' +
+                    json.dumps(session()).replace('1500', number.decode(), 1).encode() + b"]}")
+            status, data = self.raw_post_signed("/v1/sessions/push", body)
+            self.assertEqual(status, 400, number)
+            self.assertIn(b"error", data)
+
+    def raw_post_signed(self, path, body: bytes):
+        req = urllib.request.Request(self.base + path, data=body,
+                                     headers={"Authorization": f"Bearer {self.token}"})
+        try:
+            with urllib.request.urlopen(req) as r:
+                return r.status, r.read()
+        except urllib.error.HTTPError as e:
+            return e.code, e.read()
+
+    def test_resend(self):
+        self.assertEqual(self.call("/v1/resend", {})[0], 401)
+        self.sign_up()
+        self.assertEqual(self.call("/v1/resend", {})[0], 200)
+        self.assertEqual(len(self.outbox.sent), 2)
+        self.assertEqual(self.outbox.sent[0], self.outbox.sent[1])  # the same link, still good
+        path = next(line for line in self.outbox.sent[1][2].splitlines()
+                    if line.startswith("https://teto.example/")).removeprefix("https://teto.example")
+        self.assertEqual(self.call(path, raw=True)[0], 200)
+        self.assertEqual(self.call("/v1/resend", {})[0], 200)
+        self.assertEqual(len(self.outbox.sent), 2)  # confirmed: nothing more to send
+
+    def test_password_hashing_happens_outside_the_lock(self):
+        store = server.Store(":memory:")
+        seen = []
+        real = server.hash_password
+
+        def spy(password):
+            seen.append(store.lock.locked())
+            return real(password)
+
+        server.hash_password = spy
+        try:
+            store.create_user("b@example.com", "password1")
+            store.check_password("nobody@example.com", "password1")
+        finally:
+            server.hash_password = real
+        self.assertEqual(seen, [False, False])
+
+
 class ConfirmedOnlyTests(HTTPTests):
     def setUp(self):
         super().setUp(require_confirmed=True)
@@ -246,6 +327,9 @@ class ConfirmedOnlyTests(HTTPTests):
 
     def test_bad_input(self):
         pass
+
+    def test_nan_and_infinity_are_rejected(self):
+        pass  # sync is closed until the email is confirmed
 
 
 if __name__ == "__main__":

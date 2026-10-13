@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Shapes;
 using Drill.Core;
@@ -15,6 +17,9 @@ public partial class MainPage : UserControl
 {
     private readonly Shell _shell;
     private AppModel Model => _shell.Model;
+    private bool _listening;
+    /// <summary>Something changed while the window was hidden in the tray; caught up when it's back.</summary>
+    private bool _stale;
 
     public MainPage(Shell shell)
     {
@@ -22,8 +27,15 @@ public partial class MainPage : UserControl
         DataContext = shell;
         InitializeComponent();
 
-        Model.PropertyChanged += OnModel;
-        shell.Updater.PropertyChanged += (_, _) => ShowUpdate();
+        // The app's objects outlive this page: listen only while it's in a window.
+        Loaded += (_, _) => Listen(true);
+        Unloaded += (_, _) => Listen(false);
+        IsVisibleChanged += (_, _) =>
+        {
+            if (!IsVisible || !_stale) return;
+            _stale = false;
+            Show();
+        };
         TagBox.GotKeyboardFocus += (_, _) => Underline.SetResourceReference(Shape.FillProperty, "Faint");
         TagBox.LostKeyboardFocus += (_, _) => Underline.SetResourceReference(Shape.FillProperty, "Ghost");
         TagBox.KeyDown += (_, e) =>
@@ -36,7 +48,7 @@ public partial class MainPage : UserControl
         };
         // Clicking empty paper ends tag editing.
         Paper.MouseLeftButtonDown += (_, _) => Focus();
-        Year.PropertyChanged(HeatGrid.HoveredProperty, ShowCaption);
+        Year.HoveredChanged += ShowCaption;
         Loaded += (_, _) => Focus();
 
         for (var level = 0; level < 5; level++)
@@ -46,21 +58,45 @@ public partial class MainPage : UserControl
             else swatch.Fill = new SolidAccent(HeatGrid.Levels[level]).Brush;
             Swatches.Children.Add(swatch);
         }
-        Palette.Changed += Recolor;
 
         Show();
     }
 
-    // Keys: space starts and pauses (not while typing a tag), and the
-    // menu-less shortcuts the mac keeps in its Timer menu.
+    private void Listen(bool on)
+    {
+        if (on == _listening) return;
+        _listening = on;
+        if (on)
+        {
+            Model.PropertyChanged += OnModel;
+            _shell.Updater.PropertyChanged += OnUpdater;
+            Palette.Changed += Recolor;
+            Recolor();
+            Show(); // whatever changed while away
+        }
+        else
+        {
+            Model.PropertyChanged -= OnModel;
+            _shell.Updater.PropertyChanged -= OnUpdater;
+            Palette.Changed -= Recolor;
+        }
+    }
+
+    private void OnUpdater(object? sender, PropertyChangedEventArgs e) => ShowUpdate();
+
+    // Keys: space and Enter start and pause (not while typing a tag, nor
+    // on a focused button, which they press), and the menu-less shortcuts
+    // the mac keeps in its Timer menu.
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
         base.OnPreviewKeyDown(e);
         var ctrl = Keyboard.Modifiers == ModifierKeys.Control;
-        var typing = TagBox.IsKeyboardFocusWithin;
+        var plain = Keyboard.Modifiers == ModifierKeys.None;
+        var typing = TagBox.IsKeyboardFocusWithin || Keyboard.FocusedElement is TextBoxBase or PasswordBox;
+        var onButton = Keyboard.FocusedElement is ButtonBase;
         switch (e.Key)
         {
-            case Key.Space when Keyboard.Modifiers == ModifierKeys.None && !typing && Keyboard.FocusedElement is not InkLink and not Capsule:
+            case Key.Space or Key.Enter when plain && !typing && !onButton:
             case Key.Enter when ctrl:
                 Model.Toggle();
                 break;
@@ -81,10 +117,19 @@ public partial class MainPage : UserControl
 
     private void OnModel(object? sender, PropertyChangedEventArgs e)
     {
+        // Hidden in the tray: no clock work every second, just one catch-up on return.
+        if (!IsVisible)
+        {
+            _stale = true;
+            return;
+        }
         switch (e.PropertyName)
         {
             case nameof(AppModel.Clock):
                 Clock.Text = Model.Clock;
+                break;
+            case nameof(AppModel.Spoken):
+                AutomationProperties.SetName(Clock, Model.Spoken);
                 break;
             case nameof(AppModel.Status):
                 Status.Text = Model.Status;
@@ -106,12 +151,16 @@ public partial class MainPage : UserControl
             case nameof(AppModel.Heatmap):
                 ShowStats();
                 break;
+            case null or "":
+                Show();
+                break;
         }
     }
 
     private void Show()
     {
         Clock.Text = Model.Clock;
+        AutomationProperties.SetName(Clock, Model.Spoken);
         Status.Text = Model.Status;
         ResetLink.Opacity = Model.IsActive ? 1 : 0;
         ResetLink.IsEnabled = ResetLink.IsTabStop = Model.IsActive;
@@ -152,6 +201,7 @@ public partial class MainPage : UserControl
         Today.Text = Copy.Amount(h.Today);
         Week.Text = Copy.Amount(h.ThisWeek);
         Streak.Text = Copy.Streak(h.Streak);
+        AutomationProperties.SetName(Year, Copy.YearSummary(h.Today, h.ThisWeek, h.Streak));
     }
 
     private void ShowCaption()
@@ -210,11 +260,4 @@ public partial class MainPage : UserControl
 internal readonly record struct SolidAccent(double Alpha)
 {
     public System.Windows.Media.Brush Brush => Palette.Brush(Palette.WithAlpha(Palette.Current.Accent, Alpha));
-}
-
-internal static class DependencyObjectExtensions
-{
-    /// <summary>Calls `changed` whenever a dependency property changes.</summary>
-    public static void PropertyChanged(this DependencyObject target, DependencyProperty property, Action changed) =>
-        DependencyPropertyDescriptor.FromProperty(property, target.GetType()).AddValueChanged(target, (_, _) => changed());
 }

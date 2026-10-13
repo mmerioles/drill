@@ -1,4 +1,7 @@
 using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Automation.Peers;
+using System.Windows.Automation.Provider;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
@@ -213,7 +216,10 @@ public sealed class Toggle : FrameworkElement
 {
     public static readonly DependencyProperty IsOnProperty = DependencyProperty.Register(
         nameof(IsOn), typeof(bool), typeof(Toggle),
-        new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, (d, _) => ((Toggle)d).Move()));
+        new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, (d, e) => ((Toggle)d).Flipped((bool)e.OldValue, (bool)e.NewValue)));
+
+    /// <summary>IsOn changed, by a click, a key, a screen reader, or code.</summary>
+    public event Action? Changed;
 
     private static readonly DependencyProperty PositionProperty = DependencyProperty.Register(
         "Position", typeof(double), typeof(Toggle), new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
@@ -267,7 +273,35 @@ public sealed class Toggle : FrameworkElement
         }
     }
 
-    private void Move() => Animate.To(this, PositionProperty, IsOn ? 1 : 0, 167, BezierEase.Decelerate);
+    private void Flipped(bool was, bool on)
+    {
+        Animate.To(this, PositionProperty, on ? 1 : 0, 167, BezierEase.Decelerate);
+        (UIElementAutomationPeer.FromElement(this) as Peer)?.RaisePropertyChangedEvent(
+            TogglePatternIdentifiers.ToggleStateProperty, Peer.State(was), Peer.State(on));
+        Changed?.Invoke();
+    }
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new Peer(this);
+
+    /// <summary>A switch to screen readers: a button with the toggle pattern, as Windows' own ToggleSwitch.</summary>
+    private sealed class Peer(Toggle owner) : FrameworkElementAutomationPeer(owner), IToggleProvider
+    {
+        public static ToggleState State(bool on) => on ? ToggleState.On : ToggleState.Off;
+
+        protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Button;
+        protected override string GetClassNameCore() => "ToggleSwitch";
+
+        public override object GetPattern(PatternInterface pattern) =>
+            pattern == PatternInterface.Toggle ? this : base.GetPattern(pattern);
+
+        public ToggleState ToggleState => State(owner.IsOn);
+
+        public void Toggle()
+        {
+            if (!IsEnabled()) throw new ElementNotEnabledException();
+            owner.IsOn = !owner.IsOn;
+        }
+    }
 
     private void Size()
     {
@@ -308,7 +342,10 @@ public sealed class Stepper : UserControl
 {
     public static readonly DependencyProperty ValueProperty = DependencyProperty.Register(
         nameof(Value), typeof(int), typeof(Stepper),
-        new FrameworkPropertyMetadata(0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, (d, _) => ((Stepper)d).Show()));
+        new FrameworkPropertyMetadata(0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, (d, e) => ((Stepper)d).Stepped((int)e.OldValue, (int)e.NewValue)));
+
+    /// <summary>Value changed, by a click, a key, the wheel, a screen reader, or code.</summary>
+    public event Action? Changed;
 
     public int Minimum { get; set; }
     public int Maximum { get; set; } = 100;
@@ -325,6 +362,8 @@ public sealed class Stepper : UserControl
         IsTabStop = true;
         _less = Make("", -1); // Remove
         _more = Make("", +1); // Add
+        AutomationProperties.SetName(_less, "less");
+        AutomationProperties.SetName(_more, "more");
         _label.SetResourceReference(TextBlock.ForegroundProperty, "Ink");
         _label.SetResourceReference(TextBlock.FontFamilyProperty, "Text");
         _label.FontSize = 14;
@@ -378,6 +417,41 @@ public sealed class Stepper : UserControl
 
     private void Nudge(int direction) => Value = Math.Clamp(Value + direction * Step, Minimum, Maximum);
 
+    private void Stepped(int was, int now)
+    {
+        Show();
+        (UIElementAutomationPeer.FromElement(this) as Peer)?.RaisePropertyChangedEvent(
+            RangeValuePatternIdentifiers.ValueProperty, (double)was, (double)now);
+        Changed?.Invoke();
+    }
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new Peer(this);
+
+    /// <summary>A number in a range to screen readers, stepped like the arrow keys step it.</summary>
+    private sealed class Peer(Stepper owner) : UserControlAutomationPeer(owner), IRangeValueProvider
+    {
+        protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Spinner;
+        protected override string GetClassNameCore() => "Stepper";
+        protected override List<AutomationPeer>? GetChildrenCore() => null; // the label and ± are this one control
+
+        public override object GetPattern(PatternInterface pattern) =>
+            pattern == PatternInterface.RangeValue ? this : base.GetPattern(pattern);
+
+        public double Value => owner.Value;
+        public double Minimum => owner.Minimum;
+        public double Maximum => owner.Maximum;
+        public double SmallChange => owner.Step;
+        public double LargeChange => owner.Step;
+        public bool IsReadOnly => !owner.IsEnabled;
+
+        public void SetValue(double value)
+        {
+            if (!IsEnabled()) throw new ElementNotEnabledException();
+            if (value < owner.Minimum || value > owner.Maximum) throw new ArgumentOutOfRangeException(nameof(value));
+            owner.Value = (int)Math.Round(value);
+        }
+    }
+
     private void Show()
     {
         _label.Text = Unit.Length > 0 ? $"{Value} {Unit}" : $"{Value}";
@@ -408,7 +482,10 @@ public sealed class Segmented : FrameworkElement
 {
     public static readonly DependencyProperty SelectedIndexProperty = DependencyProperty.Register(
         nameof(SelectedIndex), typeof(int), typeof(Segmented),
-        new FrameworkPropertyMetadata(0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, (d, _) => ((Segmented)d).Glide()));
+        new FrameworkPropertyMetadata(0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, (d, e) => ((Segmented)d).Selected((int)e.OldValue, (int)e.NewValue)));
+
+    /// <summary>SelectedIndex changed, by a click, a key, a screen reader, or code.</summary>
+    public event Action? Changed;
 
     private static readonly DependencyProperty SlideProperty = DependencyProperty.Register(
         "Slide", typeof(double), typeof(Segmented), new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
@@ -434,7 +511,117 @@ public sealed class Segmented : FrameworkElement
 
     protected override Size MeasureOverride(Size available) => new(Segment * Items.Count + 4, Tall + 4);
 
-    private void Glide() => Animate.To(this, SlideProperty, SelectedIndex, 250, BezierEase.Glide);
+    private void Selected(int was, int now)
+    {
+        Animate.To(this, SlideProperty, now, 250, BezierEase.Glide);
+        if (UIElementAutomationPeer.FromElement(this) is Peer peer) peer.Moved(was, now);
+        Changed?.Invoke();
+    }
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new Peer(this);
+
+    /// <summary>To screen readers, a tab list: each choice an item that says whether it's selected.</summary>
+    private sealed class Peer(Segmented owner) : FrameworkElementAutomationPeer(owner), ISelectionProvider
+    {
+        private List<ItemPeer>? _items;
+
+        internal Segmented Control => owner;
+
+        protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Tab;
+        protected override string GetClassNameCore() => "Segmented";
+
+        public override object GetPattern(PatternInterface pattern) =>
+            pattern == PatternInterface.Selection ? this : base.GetPattern(pattern);
+
+        private List<ItemPeer> Items()
+        {
+            if (_items is null || _items.Count != owner.Items.Count)
+                _items = owner.Items.Select((_, i) => new ItemPeer(this, i)).ToList();
+            return _items;
+        }
+
+        protected override List<AutomationPeer> GetChildrenCore() => [.. Items()];
+
+        internal IRawElementProviderSimple Provider(AutomationPeer peer) => ProviderFromPeer(peer);
+
+        public bool CanSelectMultiple => false;
+        public bool IsSelectionRequired => true;
+
+        public IRawElementProviderSimple[] GetSelection()
+        {
+            var items = Items();
+            var i = owner.SelectedIndex;
+            return i >= 0 && i < items.Count ? [ProviderFromPeer(items[i])] : [];
+        }
+
+        internal void Moved(int was, int now)
+        {
+            if (_items is not { } items) return;
+            if (was >= 0 && was < items.Count)
+                items[was].RaisePropertyChangedEvent(SelectionItemPatternIdentifiers.IsSelectedProperty, true, false);
+            if (now >= 0 && now < items.Count)
+            {
+                items[now].RaisePropertyChangedEvent(SelectionItemPatternIdentifiers.IsSelectedProperty, false, true);
+                items[now].RaiseAutomationEvent(AutomationEvents.SelectionItemPatternOnElementSelected);
+            }
+        }
+    }
+
+    /// <summary>One choice, drawn rather than an element of its own.</summary>
+    private sealed class ItemPeer(Peer parent, int index) : AutomationPeer, ISelectionItemProvider
+    {
+        private Segmented Owner => parent.Control;
+
+        public override object? GetPattern(PatternInterface pattern) => pattern == PatternInterface.SelectionItem ? this : null;
+
+        public bool IsSelected => Owner.SelectedIndex == index;
+        public IRawElementProviderSimple SelectionContainer => parent.Provider(parent);
+
+        public void Select()
+        {
+            if (!Owner.IsEnabled) throw new ElementNotEnabledException();
+            Owner.SelectedIndex = index;
+        }
+
+        public void AddToSelection() => Select();
+        public void RemoveFromSelection() => throw new InvalidOperationException(); // one is always chosen
+
+        protected override string GetNameCore() => index < Owner.Items.Count ? Owner.Items[index] : "";
+        protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.TabItem;
+        protected override string GetClassNameCore() => "SegmentedItem";
+        protected override List<AutomationPeer>? GetChildrenCore() => null;
+        protected override string GetAcceleratorKeyCore() => "";
+        protected override string GetAccessKeyCore() => "";
+        protected override string GetAutomationIdCore() => "";
+        protected override string GetHelpTextCore() => "";
+        protected override string GetItemStatusCore() => "";
+        protected override string GetItemTypeCore() => "";
+        protected override AutomationPeer? GetLabeledByCore() => null;
+        protected override AutomationOrientation GetOrientationCore() => AutomationOrientation.None;
+        protected override bool HasKeyboardFocusCore() => Owner.IsKeyboardFocused && IsSelected;
+        protected override bool IsContentElementCore() => true;
+        protected override bool IsControlElementCore() => true;
+        protected override bool IsEnabledCore() => Owner.IsEnabled;
+        protected override bool IsKeyboardFocusableCore() => Owner.Focusable;
+        protected override bool IsOffscreenCore() => !Owner.IsVisible;
+        protected override bool IsPasswordCore() => false;
+        protected override bool IsRequiredForFormCore() => false;
+        protected override void SetFocusCore() => Owner.Focus();
+
+        protected override Rect GetBoundingRectangleCore()
+        {
+            if (!Owner.IsVisible || PresentationSource.FromVisual(Owner) is null) return Rect.Empty;
+            var a = Owner.PointToScreen(new Point(2 + index * Segment, 2));
+            var b = Owner.PointToScreen(new Point(2 + (index + 1) * Segment, 2 + Tall));
+            return new Rect(a, b);
+        }
+
+        protected override Point GetClickablePointCore()
+        {
+            var r = GetBoundingRectangleCore();
+            return r.IsEmpty ? new Point(double.NaN, double.NaN) : new Point(r.X + r.Width / 2, r.Y + r.Height / 2);
+        }
+    }
 
     protected override void OnMouseMove(MouseEventArgs e)
     {

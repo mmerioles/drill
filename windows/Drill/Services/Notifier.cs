@@ -17,13 +17,13 @@ public sealed class Notifier
     public const string AppId = "mmerioles.drill";
 
     private ToastNotifier? _notifier;
-    private bool _unavailable;
 
-    /// <summary>When the toast's one button is pressed.</summary>
+    /// <summary>When the toast's one button ("start") or its body ("open") is pressed.</summary>
     public event Action<string>? Acted;
 
     /// <param name="action">A button, like ("start break", "start").</param>
-    public void Post(string title, string body, (string Label, string Argument)? action = null)
+    /// <returns>Whether the toast went out.</returns>
+    public bool Post(string title, string body, (string Label, string Argument)? action = null)
     {
         try
         {
@@ -33,7 +33,7 @@ public sealed class Notifier
                 : "";
             var xml = new XmlDocument();
             xml.LoadXml($"""
-                <toast>
+                <toast launch="open">
                   <visual><binding template="ToastGeneric"><text>{Escape(title)}</text><text>{Escape(body)}</text></binding></visual>
                   <audio silent="true"/>
                   {actions}
@@ -45,16 +45,15 @@ public sealed class Notifier
                 if (args is ToastActivatedEventArgs e && e.Arguments.Length > 0) Acted?.Invoke(e.Arguments);
             };
             _notifier.Show(toast);
+            // Turned off for drill (or all apps): nothing shows, though Show didn't complain.
+            return _notifier.Setting == NotificationSetting.Enabled;
         }
         catch (Exception)
         {
             // No shortcut with our id (a dev build), or notifications are off.
-            _unavailable = true;
+            return false;
         }
     }
-
-    /// <summary>Whether toasts went out; when they can't, the tray tooltip still tells.</summary>
-    public bool Unavailable => _unavailable;
 
     private static string Escape(string s) => SecurityElement.Escape(s) ?? "";
 }

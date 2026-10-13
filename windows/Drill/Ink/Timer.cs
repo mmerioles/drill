@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Windows;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
@@ -58,8 +59,9 @@ public sealed class RollingText : FrameworkElement
 
     private void Change(string old, string text)
     {
-        // A different shape (25:00 → 1:00:00): rebuild without a roll.
-        if (old.Length != text.Length || _cells.Count != text.Length || !Motion.Enabled || !IsLoaded)
+        // A different shape (25:00 → 1:00:00): rebuild without a roll. Off
+        // screen (the window hidden in the tray), nothing animates either.
+        if (old.Length != text.Length || _cells.Count != text.Length || !Motion.Enabled || !IsLoaded || !IsVisible)
         {
             Rebuild(text);
             return;
@@ -68,6 +70,21 @@ public sealed class RollingText : FrameworkElement
         {
             if (old[i] != text[i]) Roll(_cells[i], text[i]);
         }
+    }
+
+    /// <summary>
+    /// One piece of text to screen readers, not a run of single digits. Its
+    /// name is AutomationProperties.Name when set ("focus, 12 minutes left"),
+    /// else the digits.
+    /// </summary>
+    protected override AutomationPeer OnCreateAutomationPeer() => new Peer(this);
+
+    private sealed class Peer(RollingText owner) : FrameworkElementAutomationPeer(owner)
+    {
+        protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Text;
+        protected override string GetClassNameCore() => "RollingText";
+        protected override List<AutomationPeer>? GetChildrenCore() => null;
+        protected override string GetNameCore() => base.GetNameCore() is { Length: > 0 } name ? name : owner.Text;
     }
 
     private void Rebuild(string text)
@@ -135,6 +152,9 @@ public sealed class CycleDots : FrameworkElement
     public static readonly DependencyProperty CountProperty = DependencyProperty.Register(
         nameof(Count), typeof(int), typeof(CycleDots), new FrameworkPropertyMetadata(4, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender));
 
+    /// <summary>Decorative: the cycle isn't read out.</summary>
+    protected override AutomationPeer OnCreateAutomationPeer() => new HiddenPeer(this);
+
     public CycleDots()
     {
         Loaded += (_, _) => Palette.Changed += InvalidateVisual;
@@ -180,14 +200,26 @@ public sealed class HeatGrid : FrameworkElement
 {
     public static readonly DependencyProperty HeatmapProperty = DependencyProperty.Register(
         nameof(Heatmap), typeof(Heatmap), typeof(HeatGrid),
-        new FrameworkPropertyMetadata(Heatmap.Empty, FrameworkPropertyMetadataOptions.AffectsRender));
+        new FrameworkPropertyMetadata(Heatmap.Empty, FrameworkPropertyMetadataOptions.AffectsRender | FrameworkPropertyMetadataOptions.AffectsMeasure));
 
     public static readonly DependencyProperty HoveredProperty = DependencyProperty.Register(
         nameof(Hovered), typeof(HeatmapDay), typeof(HeatGrid),
-        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender | FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender, (d, _) => ((HeatGrid)d).HoveredChanged?.Invoke()));
+
+    /// <summary>The day under the pointer changed.</summary>
+    public event Action? HoveredChanged;
 
     public static readonly double[] Levels = [0, 0.16, 0.36, 0.62, 0.92];
     private const double GapRatio = 0.24, MonthRow = 16, Margin_ = 3;
+
+    /// <summary>
+    /// The cells and month labels, drawn once per heatmap, width, scale and
+    /// palette; a hover only adds an outline on top.
+    /// </summary>
+    private (Heatmap Map, double Width, double Scale, Palette Palette, DrawingGroup Drawing)? _drawn;
+    private (Palette Palette, Brush[] Brushes)? _brushes;
+    /// <summary>Where the hovered day is in the grid.</summary>
+    private (int Week, int Day) _hoverAt = (-1, -1);
 
     public HeatGrid()
     {
@@ -210,33 +242,57 @@ public sealed class HeatGrid : FrameworkElement
         set => SetValue(HoveredProperty, value);
     }
 
+    /// <summary>A picture to screen readers, named by the page with the year's summary.</summary>
+    protected override AutomationPeer OnCreateAutomationPeer() => new Peer(this);
+
+    private sealed class Peer(HeatGrid owner) : FrameworkElementAutomationPeer(owner)
+    {
+        protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Image;
+        protected override string GetClassNameCore() => "HeatGrid";
+        protected override List<AutomationPeer>? GetChildrenCore() => null;
+    }
+
     /// <summary>
     /// The exact pitch, and the cell size in whole device pixels. Each column
     /// is placed by <see cref="Column"/>, rounded on its own, so the grid's
     /// outer edges land exactly on the content's and gaps differ by at most a pixel.
     /// </summary>
-    private (double Pitch, double Cell) Metrics(double width)
+    private (double Pitch, double Cell) Metrics(double width, double scale)
     {
-        var scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
         var n = Math.Max(Heatmap.Weeks.Count, 1);
         var pitch = (width - Margin_ * 2) / (n - GapRatio);
         return (pitch, Math.Round(pitch * (1 - GapRatio) * scale) / scale);
     }
 
-    private double Column(int w, double pitch) => Snap(Margin_ + w * pitch);
-    private double Row(int d, double pitch) => Snap(MonthRow + d * pitch);
+    private static double Column(int w, double pitch, double scale) => Snap(Margin_ + w * pitch, scale);
+    private static double Row(int d, double pitch, double scale) => Snap(MonthRow + d * pitch, scale);
+    private static double Snap(double dip, double scale) => Math.Round(dip * scale) / scale;
 
-    private double Snap(double dip)
-    {
-        var scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
-        return Math.Round(dip * scale) / scale;
-    }
+    private double Scale => VisualTreeHelper.GetDpi(this).DpiScaleX;
 
     protected override Size MeasureOverride(Size available)
     {
         var width = double.IsInfinity(available.Width) ? 706 : available.Width;
-        var (pitch, cell) = Metrics(width);
+        var (pitch, cell) = Metrics(width, Scale);
         return new Size(width, MonthRow + 6 * pitch + cell + Margin_);
+    }
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        InvalidateMeasure();
+        InvalidateVisual();
+    }
+
+    /// <summary>The five fills, made once per palette.</summary>
+    private Brush[] LevelBrushes(Palette p)
+    {
+        if (_brushes is { } b && b.Palette == p) return b.Brushes;
+        var brushes = new Brush[Levels.Length];
+        brushes[0] = Palette.Brush(Palette.WithAlpha(p.Ink, 0.055));
+        for (var i = 1; i < Levels.Length; i++) brushes[i] = Palette.Brush(Palette.WithAlpha(p.Accent, Levels[i]));
+        _brushes = (p, brushes);
+        return brushes;
     }
 
     protected override void OnRender(DrawingContext dc)
@@ -244,61 +300,95 @@ public sealed class HeatGrid : FrameworkElement
         var p = Palette.Current;
         dc.DrawRectangle(Background, null, new Rect(RenderSize)); // hit-testable everywhere
         var map = Heatmap;
-        var (pitch, cell) = Metrics(ActualWidth);
-        // Today is the grid's last day, whatever this machine's clock says.
-        var today = map.Weeks.Count > 0 ? map.Weeks[^1].LastOrDefault(d => d is not null)?.Date : null;
-        var empty = Palette.Brush(Palette.WithAlpha(p.Ink, 0.055));
-        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-
-        // Month labels at each month's first full column, not the half-column at the grid's left edge.
-        var lastMonth = -1;
-        var face = Segmented.Typeface("Small", FontWeights.Normal);
-        for (var w = 0; w < map.Weeks.Count; w++)
+        var scale = Scale;
+        var width = ActualWidth;
+        if (_drawn is not { } d || d.Map != map || d.Width != width || d.Scale != scale || d.Palette != p)
         {
-            var first = map.Weeks[w].FirstOrDefault(d => d is not null);
-            if (first is null) continue;
-            if (first.Date.Month == lastMonth) continue;
-            if (lastMonth != -1 || first.Date.Day <= 7)
-            {
-                var label = new FormattedText(Copy.Month(first.Date), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-                                              face, 10, Palette.Brush(p.Faint), dpi);
-                dc.DrawText(label, new Point(Column(w, pitch), 0));
-            }
-            lastMonth = first.Date.Month;
+            d = (map, width, scale, p, Cells(map, width, scale, p));
+            _drawn = d;
         }
+        dc.DrawDrawing(d.Drawing);
 
-        for (var w = 0; w < map.Weeks.Count; w++)
+        var (w, day) = _hoverAt;
+        if (Hovered is { } hovered && w >= 0 && w < map.Weeks.Count && day is >= 0 and < 7 && map.Weeks[w][day] == hovered)
         {
-            for (var d = 0; d < 7; d++)
+            var (pitch, cell) = Metrics(width, scale);
+            var outline = new Rect(Column(w, pitch, scale), Row(day, pitch, scale), cell, cell);
+            outline.Inflate(1.75, 1.75);
+            var isToday = w == map.Weeks.Count - 1 && map.Weeks[w].LastOrDefault(x => x is not null) == hovered;
+            if (!isToday) dc.DrawRoundedRectangle(null, new Pen(Palette.Brush(p.Faint), 1.1), outline, 2.5, 2.5);
+        }
+    }
+
+    /// <summary>Every cell (each wobbling by its own fixed seed), today's outline, and the month labels.</summary>
+    private DrawingGroup Cells(Heatmap map, double width, double scale, Palette p)
+    {
+        var group = new DrawingGroup();
+        using (var dc = group.Open())
+        {
+            var (pitch, cell) = Metrics(width, scale);
+            // Today is the grid's last day, whatever this machine's clock says.
+            var today = map.Weeks.Count > 0 ? map.Weeks[^1].LastOrDefault(d => d is not null)?.Date : null;
+            var brushes = LevelBrushes(p);
+            var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+
+            // Month labels at each month's first full column, not the half-column at the grid's left edge.
+            var lastMonth = -1;
+            var face = Segmented.Typeface("Small", FontWeights.Normal);
+            var faint = Palette.Brush(p.Faint);
+            for (var w = 0; w < map.Weeks.Count; w++)
             {
-                if (map.Weeks[w][d] is not { } day) continue;
-                var r = new Rect(Column(w, pitch), Row(d, pitch), cell, cell);
-                var square = Doodle.Polygon([r.TopLeft, r.TopRight, r.BottomRight, r.BottomLeft],
-                                            unchecked((ulong)(w * 7 + d) * 31 + 7), 0.35);
-                dc.DrawGeometry(day.Level > 0 ? Palette.Brush(Palette.WithAlpha(p.Accent, Levels[day.Level])) : empty, null, square);
-                var isToday = day.Date == today;
-                if (isToday || day == Hovered)
+                var first = map.Weeks[w].FirstOrDefault(d => d is not null);
+                if (first is null) continue;
+                if (first.Date.Month == lastMonth) continue;
+                if (lastMonth != -1 || first.Date.Day <= 7)
                 {
-                    var outline = r;
-                    outline.Inflate(1.75, 1.75);
-                    dc.DrawRoundedRectangle(null, new Pen(Palette.Brush(isToday ? p.Ink : p.Faint), isToday ? 1.5 : 1.1), outline, 2.5, 2.5);
+                    var label = new FormattedText(Copy.Month(first.Date), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+                                                  face, 10, faint, dpi);
+                    dc.DrawText(label, new Point(Column(w, pitch, scale), 0));
+                }
+                lastMonth = first.Date.Month;
+            }
+
+            for (var w = 0; w < map.Weeks.Count; w++)
+            {
+                for (var d = 0; d < 7; d++)
+                {
+                    if (map.Weeks[w][d] is not { } day) continue;
+                    var r = new Rect(Column(w, pitch, scale), Row(d, pitch, scale), cell, cell);
+                    var square = Doodle.Polygon([r.TopLeft, r.TopRight, r.BottomRight, r.BottomLeft],
+                                                unchecked((ulong)(w * 7 + d) * 31 + 7), 0.35);
+                    dc.DrawGeometry(brushes[Math.Clamp(day.Level, 0, brushes.Length - 1)], null, square);
+                    if (day.Date == today)
+                    {
+                        var outline = r;
+                        outline.Inflate(1.75, 1.75);
+                        dc.DrawRoundedRectangle(null, new Pen(Palette.Brush(p.Ink), 1.5), outline, 2.5, 2.5);
+                    }
                 }
             }
         }
+        group.Freeze();
+        return group;
     }
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
         var at = e.GetPosition(this);
-        var (pitch, _) = Metrics(ActualWidth);
+        var (pitch, _) = Metrics(ActualWidth, Scale);
         var w = (int)Math.Floor((at.X - Margin_) / pitch);
         var d = (int)Math.Floor((at.Y - MonthRow) / pitch);
         HeatmapDay? day = null;
         if (at.Y >= MonthRow && w >= 0 && w < Heatmap.Weeks.Count && d is >= 0 and < 7) day = Heatmap.Weeks[w][d];
+        _hoverAt = day is null ? (-1, -1) : (w, d);
         if (day != Hovered) Hovered = day;
     }
 
-    protected override void OnMouseLeave(MouseEventArgs e) => Hovered = null;
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        _hoverAt = (-1, -1);
+        Hovered = null;
+    }
 }
 
 /// <summary>
@@ -325,6 +415,9 @@ public sealed class StatusMark : FrameworkElement
 
     private static readonly Color Green = Color.FromRgb(0x2F, 0xA8, 0x4F);
     private static readonly Color Yellow = Color.FromRgb(0xF2, 0xC2, 0x1B);
+
+    /// <summary>Decorative: the note beside it says the same in words.</summary>
+    protected override AutomationPeer OnCreateAutomationPeer() => new HiddenPeer(this);
 
     public StatusMark()
     {

@@ -170,10 +170,16 @@ public class InkWindow : Window
         Native.SetBorder(hwnd, p.Theme == Theme.Dark ? Color.FromRgb(0x2A, 0x2A, 0x29) : Color.FromRgb(0xDC, 0xDA, 0xD6));
     }
 
-    /// <summary>Shrinks the whole layout on screens too short for it (1366×768 at 100%, say).</summary>
+    /// <summary>
+    /// Shrinks the whole layout on screens too short for it (1366×768 at
+    /// 100%, say): the screen the window opens on, at that screen's scale.
+    /// </summary>
     private void FitScreen()
     {
-        var work = SystemParameters.WorkArea;
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == 0) return;
+        var (_, pixels, dpiScale) = Native.MonitorOf(hwnd);
+        var work = Native.ToDips(pixels, dpiScale);
         Frame.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var want = Frame.DesiredSize;
         var scale = Math.Min(1, Math.Min((work.Height - 16) / want.Height, (work.Width - 16) / want.Width));

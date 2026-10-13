@@ -10,15 +10,23 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.drawable.Icon
 import android.os.Build
 import io.github.mmerioles.drill.R
 import io.github.mmerioles.drill.DrillApp
+import io.github.mmerioles.drill.core.Copy
+import io.github.mmerioles.drill.core.EngineState
 import io.github.mmerioles.drill.core.Phase
+import io.github.mmerioles.drill.core.Status
 import io.github.mmerioles.drill.ui.MainActivity
+import io.github.mmerioles.drill.ui.clock
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * The phone side of the timer. While a phase runs, an exact alarm waits for
- * its end and a quiet notification counts down. When the alarm fires, the
+ * its end and a quiet notification counts down, with pause, skip and reset;
+ * while paused it stays, still, to resume from. When the alarm fires, the
  * app catches up (AppModel.catchUp), which logs the block, says so, and
  * schedules the next phase if it auto-starts.
  */
@@ -47,53 +55,72 @@ object Notifier {
         ))
     }
 
-    /** Waits for the running phase to end, or stops waiting when [endsAt] is null. */
-    fun schedule(context: Context, endsAt: Long?, phase: Phase) {
+    /** Waits for the running phase to end and shows the countdown; shows a
+     *  paused phase without a clock; clears both when idle. */
+    fun schedule(context: Context, state: EngineState, remaining: Long) {
         val alarms = context.getSystemService(AlarmManager::class.java)
         val pending = PendingIntent.getBroadcast(
             context, 0, Intent(context, PhaseEndReceiver::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val nm = context.getSystemService(NotificationManager::class.java)
-        if (endsAt == null) {
-            alarms.cancel(pending)
+        val status = state.status
+        if (status !is Status.Running) alarms.cancel(pending)
+        if (status is Status.Idle) {
             nm.cancel(RUNNING_ID)
             return
         }
-        val exact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()
-        if (exact) alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, endsAt, pending)
-        else alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, endsAt, pending)
+        if (status is Status.Running) {
+            val exact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()
+            if (exact) alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, status.endsAt, pending)
+            else alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, status.endsAt, pending)
+        }
 
         if (!allowed(context)) return
-        val title = if (phase == Phase.Focus) "focus" else if (phase == Phase.LongBreak) "long break" else "break"
-        nm.notify(RUNNING_ID, Notification.Builder(context, TIMER)
+        val builder = Notification.Builder(context, TIMER)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(title)
-            .setWhen(endsAt)
-            .setShowWhen(true)
-            .setUsesChronometer(true)
-            .setChronometerCountDown(true)
-            .setOngoing(true)
+            .setContentTitle(Copy.phaseName(state.phase))
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_STOPWATCH)
             .setContentIntent(openApp(context))
-            .build())
+        if (status is Status.Running) {
+            builder
+                .setWhen(status.endsAt)
+                .setShowWhen(true)
+                .setUsesChronometer(true)
+                .setChronometerCountDown(true)
+                .setOngoing(true)
+                // The countdown would carry on below zero if the alarm runs
+                // late; it goes at zero instead, and the "done" takes over.
+                .setTimeoutAfter(maxOf(1, remaining))
+                .addAction(action(context, "pause", TimerActionReceiver.TOGGLE))
+        } else {
+            builder
+                .setContentText("paused · ${clock(remaining)}")
+                .setShowWhen(false)
+                .setOngoing(false)
+                .addAction(action(context, "resume", TimerActionReceiver.TOGGLE))
+        }
+        builder
+            .addAction(action(context, "skip", TimerActionReceiver.SKIP))
+            .addAction(action(context, "reset", TimerActionReceiver.RESET))
+        nm.notify(RUNNING_ID, builder.build())
     }
 
-    /** Says a phase is over. */
-    fun ended(context: Context, finished: Phase, sound: Boolean) {
+    /** Says a phase is over: "focus done · take a break · 5 min". When the
+     *  next phase [waits] on you, the one button starts it. */
+    fun ended(context: Context, finished: Phase, next: Phase, nextSeconds: Int, waits: Boolean, sound: Boolean) {
         if (!allowed(context)) return
-        val (title, body) = if (finished == Phase.Focus) "focus done" to "time for a break"
-        else "break over" to "back to focus"
-        context.getSystemService(NotificationManager::class.java).notify(ENDED_ID,
-            Notification.Builder(context, if (sound) ENDS else ENDS_QUIET)
-                .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle(title)
-                .setContentText(body)
-                .setAutoCancel(true)
-                .setCategory(Notification.CATEGORY_ALARM)
-                .setContentIntent(openApp(context))
-                .build())
+        val (title, body) = Copy.finished(finished, nextSeconds)
+        val builder = Notification.Builder(context, if (sound) ENDS else ENDS_QUIET)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setAutoCancel(true)
+            .setCategory(Notification.CATEGORY_ALARM)
+            .setContentIntent(openApp(context))
+        if (waits) builder.addAction(action(context, Copy.startNext(next), TimerActionReceiver.START))
+        context.getSystemService(NotificationManager::class.java).notify(ENDED_ID, builder.build())
     }
 
     fun clearEnded(context: Context) {
@@ -109,12 +136,54 @@ object Notifier {
         Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
+
+    private fun action(context: Context, title: String, what: String): Notification.Action {
+        val intent = Intent(context, TimerActionReceiver::class.java).setAction(what)
+        val pending = PendingIntent.getBroadcast(
+            context, what.hashCode(), intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        return Notification.Action.Builder(Icon.createWithResource(context, R.drawable.ic_notification), title, pending).build()
+    }
+}
+
+/** Runs [work] on the model, then keeps the process alive until its writes
+ *  and sync are done (or ten seconds pass), as a receiver must. */
+private fun BroadcastReceiver.withModel(context: Context, work: (io.github.mmerioles.drill.AppModel) -> Unit) {
+    val result = goAsync()
+    val model = DrillApp.model(context)
+    work(model)
+    model.scope.launch {
+        try {
+            withTimeoutOrNull(9_000L) { model.settle() }
+        } finally {
+            result.finish()
+        }
+    }
 }
 
 /** The running phase's alarm went off. */
 class PhaseEndReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
-        DrillApp.model(context).catchUp()
+    override fun onReceive(context: Context, intent: Intent) = withModel(context) { it.catchUp() }
+}
+
+/** The notifications' buttons. */
+class TimerActionReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) = withModel(context) { model ->
+        model.catchUp()
+        when (intent.action) {
+            TOGGLE -> model.toggle()
+            SKIP -> model.skip()
+            RESET -> model.reset()
+            START -> model.startNext()
+        }
+    }
+
+    companion object {
+        const val TOGGLE = "io.github.mmerioles.drill.TOGGLE"
+        const val SKIP = "io.github.mmerioles.drill.SKIP"
+        const val RESET = "io.github.mmerioles.drill.RESET"
+        const val START = "io.github.mmerioles.drill.START"
     }
 }
 

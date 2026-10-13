@@ -6,21 +6,13 @@
   <title>drill</title>
   <meta name="description" content="a quiet pomodoro timer.">
   <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#F2F0ED" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121211" media="(prefers-color-scheme: dark)">
   <link rel="icon" href="icon.png">
-  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="apple-touch-icon" href="icon-maskable-192.png">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="style.css">
-  <script>
-    // The theme before first paint, so dark doesn't flash in after light.
-    // app.js makes the same choice: the saved one, else the visitor's own
-    // mode in the site's demo, else dark.
-    try {
-      const saved = JSON.parse(localStorage.getItem("drill.settings") || "{}").theme;
-      const light = saved === "light" || (saved !== "dark" && location.search.includes("demo")
-        && matchMedia("(prefers-color-scheme: light)").matches);
-      document.documentElement.dataset.theme = light ? "light" : "dark";
-    } catch { document.documentElement.dataset.theme = "dark"; }
-  </script>
+  <script src="theme.js"></script>
   <script type="module" src="app.js"></script>
 </head>
 <body>
@@ -41,7 +33,7 @@
         </svg>
         <div class="readout">
           <p class="status" id="status">&nbsp;</p>
-          <p class="clock" id="clock" role="timer" aria-live="off">25:00</p>
+          <p class="clock" id="clock" role="timer" aria-live="off" aria-label="focus, 25 minutes left">25:00</p>
           <div class="dots" id="dots" aria-hidden="true"></div>
         </div>
       </div>
@@ -66,7 +58,7 @@
         <h2>your year</h2>
         <div class="filter" id="filter"></div>
       </div>
-      <svg class="grid" id="grid" role="img" aria-label="focus time per day"></svg>
+      <svg class="grid" id="grid" role="img" aria-label="your year"></svg>
       <div class="caption" id="caption"></div>
     </section>
   </main>
@@ -76,9 +68,9 @@
       <div class="group">
         <div class="row">
           <span>appearance</span>
-          <div class="segmented" id="theme" role="radiogroup">
-            <button type="button" value="light">light</button>
-            <button type="button" value="dark">dark</button>
+          <div class="segmented" id="theme" role="radiogroup" aria-label="appearance">
+            <button type="button" role="radio" value="light">light</button>
+            <button type="button" role="radio" value="dark">dark</button>
           </div>
         </div>
       </div>
@@ -101,19 +93,32 @@
     </form>
   </dialog>
 
-  <dialog class="settings account" id="account">
-    <form id="account-form">
-      <h2 id="account-title">sign in to sync</h2>
+  <dialog class="settings account" id="account" aria-labelledby="account-title">
+    <form id="account-form" novalidate>
+      <h2 id="account-title">sign in</h2>
       <div class="group">
-        <label class="row"><span>email</span><input type="email" id="email" autocomplete="username" required spellcheck="false"></label>
-        <label class="row"><span>password</span><input type="password" id="password" autocomplete="current-password" required minlength="8"></label>
+        <label class="row"><span>email</span><input type="email" id="email" autocomplete="username" spellcheck="false"></label>
+        <label class="row"><span>password</span><input type="password" id="password" autocomplete="current-password"></label>
       </div>
-      <p class="error" id="account-error" aria-live="polite"></p>
+      <p class="message" id="account-error" aria-live="polite"></p>
       <div class="account-actions">
-        <button class="link" id="account-switch" type="button">create an account</button>
-        <button class="capsule small" id="account-submit" type="submit">sign in</button>
+        <button class="link" id="account-switch" type="button">new here?</button>
+        <span class="spacer"></span>
+        <button class="link" type="button" data-close>cancel</button>
+        <button class="capsule small" id="account-submit" type="submit" disabled>sign in</button>
       </div>
     </form>
+    <div id="account-waiting" hidden>
+      <h2 id="waiting-title">check your inbox</h2>
+      <p class="message" id="waiting-note" aria-live="polite"></p>
+      <p class="message" id="waiting-error" aria-live="polite"></p>
+      <div class="account-actions" id="waiting-actions">
+        <button class="link" id="wrong-email" type="button">wrong email?</button>
+        <button class="link" id="resend" type="button">resend</button>
+        <span class="spacer"></span>
+        <button class="link" type="button" data-close>close</button>
+      </div>
+    </div>
   </dialog>
 
   <dialog class="settings inspo" id="inspo">

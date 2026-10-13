@@ -32,6 +32,7 @@ POST /v1/signin     { "email": "…", "password": "…" }
   → 200 { "token": "…", "email": "…", "confirmed": true }
 POST /v1/signout    revokes the token it's sent with → 200 {}
 GET  /v1/account    → 200 { "email": "…", "confirmed": true }
+POST /v1/resend     sends the confirmation email again (until confirmed) → 200 {}
 GET  /confirm?token=…   the link in the confirmation email; a small page
 ```
 
