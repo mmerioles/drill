@@ -271,7 +271,7 @@ public sealed class TrayMenu : UserControl
         back.SetValue(Border.BackgroundProperty, Brushes.Transparent);
         back.SetValue(Border.PaddingProperty, new Thickness(12, 7, 12, 8));
         var text = new FrameworkElementFactory(typeof(TextBlock));
-        text.SetValue(TextBlock.TextProperty, new TemplateBindingExtension(ContentProperty));
+        text.SetValue(TextBlock.TextProperty, new System.Windows.Data.Binding("Content") { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
         text.SetValue(TextBlock.FontSizeProperty, 14.0);
         text.SetResourceReference(TextBlock.FontFamilyProperty, "Text");
         text.SetResourceReference(TextBlock.ForegroundProperty, "Ink");

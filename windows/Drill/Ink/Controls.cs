@@ -354,7 +354,7 @@ public sealed class Stepper : UserControl
         back.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
         back.SetValue(Border.BackgroundProperty, Brushes.Transparent);
         var mark = new FrameworkElementFactory(typeof(TextBlock));
-        mark.SetValue(TextBlock.TextProperty, new TemplateBindingExtension(ContentProperty));
+        mark.SetValue(TextBlock.TextProperty, new System.Windows.Data.Binding("Content") { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
         mark.SetValue(HorizontalAlignmentProperty, HorizontalAlignment.Center);
         mark.SetValue(VerticalAlignmentProperty, VerticalAlignment.Center);
         mark.SetValue(TextBlock.ForegroundProperty, new TemplateBindingExtension(ForegroundProperty));
