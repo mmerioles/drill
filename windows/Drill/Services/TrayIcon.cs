@@ -179,19 +179,22 @@ public sealed class TrayIcon : IDisposable
             {
                 // Whole-pixel strokes: 2px at 16, so the ring's radius is 6.
                 var stroke = Math.Max(2, Math.Round(s / 8));
-                // Running: the arc over a faint track. Paused: the arc alone,
-                // with pause bars inside once there's room for them.
-                DoodleRing.Draw(dc, new Size(s, s), Math.Max(progress, 0.02), stroke / 2, 0, Palette.Current,
-                                track: paused ? Colors.Transparent : Palette.WithAlpha(ink, 0.3), ink: ink,
-                                trackWidth: stroke, dotted: false, tip: size >= 24);
-                if (paused && size >= 20)
+                // Running: the arc over a faint track, at least 20° of it so a
+                // fresh block still shows. Paused: pause bars, centred, with the
+                // arc around them once there's room (at 16px, bars alone).
+                if (!paused || size >= 20)
+                    DoodleRing.Draw(dc, new Size(s, s), Math.Max(progress, 20.0 / 360), stroke / 2, 0, Palette.Current,
+                                    track: paused ? Colors.Transparent : Palette.WithAlpha(ink, 0.3), ink: ink,
+                                    trackWidth: stroke, dotted: false, tip: size >= 24);
+                if (paused)
                 {
-                    var bar = Math.Max(1.5, s / 13);
-                    var tall = Math.Round(s * 0.26);
+                    var bar = Math.Max(2, Math.Round(s / 10));
+                    var tall = size < 20 ? 7 : Math.Round(s * 0.28);
+                    var left = Math.Round((s - (bar * 2 + 2)) / 2);
                     var top = Math.Round((s - tall) / 2);
                     var brush = Palette.Brush(ink);
-                    dc.DrawRectangle(brush, null, new Rect(Math.Round(s / 2 - bar - 1), top, bar, tall));
-                    dc.DrawRectangle(brush, null, new Rect(Math.Round(s / 2 + 1), top, bar, tall));
+                    dc.DrawRectangle(brush, null, new Rect(left, top, bar, tall));
+                    dc.DrawRectangle(brush, null, new Rect(left + bar + 2, top, bar, tall));
                 }
             }
         }

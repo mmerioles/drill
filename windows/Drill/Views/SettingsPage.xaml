@@ -84,7 +84,7 @@
                     </Grid>
                     <StackPanel VerticalAlignment="Center" Margin="0,8,12,8">
                         <TextBlock Text="server" Style="{StaticResource RowLabel}" />
-                        <TextBlock x:Name="ServerNote" Style="{StaticResource RowNote}" />
+                        <TextBlock x:Name="ServerNote" Style="{StaticResource RowNote}" MaxWidth="200" HorizontalAlignment="Left" />
                     </StackPanel>
                 </DockPanel>
             </StackPanel>
