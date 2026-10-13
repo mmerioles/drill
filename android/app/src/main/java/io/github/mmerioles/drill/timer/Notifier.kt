@@ -55,9 +55,14 @@ object Notifier {
         ))
     }
 
+    /** What the countdown last showed, so coming back to the app doesn't put
+     *  a paused notification you swiped away back up. */
+    private var posted: Any? = null
+
     /** Waits for the running phase to end and shows the countdown; shows a
-     *  paused phase without a clock; clears both when idle. */
-    fun schedule(context: Context, state: EngineState, remaining: Long) {
+     *  paused phase without a clock; clears both when idle. [tag] is the
+     *  running focus block's, for "focus · maths". */
+    fun schedule(context: Context, state: EngineState, remaining: Long, tag: String? = null) {
         val alarms = context.getSystemService(AlarmManager::class.java)
         val pending = PendingIntent.getBroadcast(
             context, 0, Intent(context, PhaseEndReceiver::class.java),
@@ -68,6 +73,7 @@ object Notifier {
         if (status !is Status.Running) alarms.cancel(pending)
         if (status is Status.Idle) {
             nm.cancel(RUNNING_ID)
+            posted = null
             return
         }
         if (status is Status.Running) {
@@ -77,9 +83,13 @@ object Notifier {
         }
 
         if (!allowed(context)) return
+        val name = Copy.phaseName(state.phase) + (tag?.let { " · $it" } ?: "")
+        // Posted again only when something it shows changes.
+        val shows = listOf(state.phase, status, name)
+        if (shows == posted) return
         val builder = Notification.Builder(context, TIMER)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(Copy.phaseName(state.phase))
+            .setContentTitle(name)
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_STOPWATCH)
             .setContentIntent(openApp(context))
@@ -105,6 +115,7 @@ object Notifier {
             .addAction(action(context, "skip", TimerActionReceiver.SKIP))
             .addAction(action(context, "reset", TimerActionReceiver.RESET))
         nm.notify(RUNNING_ID, builder.build())
+        posted = shows
     }
 
     /** Says a phase is over: "focus done · take a break · 5 min". When the
@@ -119,7 +130,7 @@ object Notifier {
             .setAutoCancel(true)
             .setCategory(Notification.CATEGORY_ALARM)
             .setContentIntent(openApp(context))
-        if (waits) builder.addAction(action(context, Copy.startNext(next), TimerActionReceiver.START))
+        if (waits) builder.addAction(action(context, Copy.startNext(next), TimerActionReceiver.START, offered = next))
         context.getSystemService(NotificationManager::class.java).notify(ENDED_ID, builder.build())
     }
 
@@ -137,8 +148,10 @@ object Notifier {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
-    private fun action(context: Context, title: String, what: String): Notification.Action {
+    /** A button; [offered] is the phase a "start" button starts, and only that. */
+    private fun action(context: Context, title: String, what: String, offered: Phase? = null): Notification.Action {
         val intent = Intent(context, TimerActionReceiver::class.java).setAction(what)
+        offered?.let { intent.putExtra(TimerActionReceiver.OFFERED, it.name) }
         val pending = PendingIntent.getBroadcast(
             context, what.hashCode(), intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
@@ -175,7 +188,9 @@ class TimerActionReceiver : BroadcastReceiver() {
             TOGGLE -> model.toggle()
             SKIP -> model.skip()
             RESET -> model.reset()
-            START -> model.startNext()
+            START -> intent.getStringExtra(OFFERED)
+                ?.let { runCatching { Phase.valueOf(it) }.getOrNull() }
+                ?.let(model::startNext)
         }
     }
 
@@ -184,6 +199,7 @@ class TimerActionReceiver : BroadcastReceiver() {
         const val SKIP = "io.github.mmerioles.drill.SKIP"
         const val RESET = "io.github.mmerioles.drill.RESET"
         const val START = "io.github.mmerioles.drill.START"
+        const val OFFERED = "offered"
     }
 }
 

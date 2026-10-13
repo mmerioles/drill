@@ -139,24 +139,17 @@ button, input { font: inherit; color: inherit; }
 
 .year-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
 .year-head h2 { font-size: 18px; font-weight: 700; white-space: nowrap; flex: none; }
-.filter { position: relative; display: flex; gap: 12px; min-width: 0; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
+.filter { position: relative; display: flex; gap: 12px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .filter::-webkit-scrollbar { display: none; }
 /* Too many tabs for the width: they scroll, and an edge with more tabs
-   past it fades to say so. */
-.filter.more-right { mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
-.filter.more-left { mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); }
+   past it fades to say so. The chosen tab is marked by weight, as on the
+   other platforms. */
+.filter.more-right { mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); }
+.filter.more-left { mask-image: linear-gradient(270deg, #000 calc(100% - 24px), transparent); }
 .filter.more-left.more-right {
-  mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 24px), transparent);
 }
 .filter .link { font-size: 13px; white-space: nowrap; }
-/* Tabs: the chosen one is marked by colour and an underline that slides
-   over, not by weight, so the row never shifts. */
-.filter .link[aria-pressed="true"] { font-weight: inherit; }
-.filter .underline {
-  position: absolute; left: 0; bottom: 0; height: 1.5px; border-radius: 1px;
-  background: var(--ink);
-  transition: transform .35s cubic-bezier(.3, .7, .2, 1), width .35s cubic-bezier(.3, .7, .2, 1);
-}
 .grid { display: block; width: 100%; overflow: visible; touch-action: pan-y; }
 .grid .month { fill: var(--faint); font-size: 10px; }
 .grid .cell { fill: var(--wash); transition: fill .5s cubic-bezier(.3, .7, .2, 1); }
@@ -219,12 +212,19 @@ button, input { font: inherit; color: inherit; }
 /* Account */
 
 .account h2 { font-size: 20px; font-weight: 700; letter-spacing: -.01em; margin-bottom: 16px; }
-.account input {
-  flex: 1; min-width: 0; background: none; border: 0; outline: none;
-  text-align: right; color: var(--ink);
+/* Left-aligned fields with placeholders, as on windows: a ghost underline
+   at rest, an ink one in focus (drawn inset, so nothing moves). */
+.fields { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.fields input {
+  height: 40px; padding: 0; background: none; border: 0; border-radius: 0; outline: none;
+  color: var(--ink); font-size: 14px;
+  box-shadow: inset 0 -1px var(--ghost);
+  transition: box-shadow .15s;
 }
-.account .message { color: var(--faint); font-size: 13px; min-height: 18px; margin: -4px 2px 8px; }
-#account-waiting .message { margin: 0 2px 8px; }
+.fields input:focus { box-shadow: inset 0 -2px var(--ink); }
+.fields input::placeholder { color: var(--faint); }
+.account .message { color: var(--faint); font-size: 13px; min-height: 18px; margin: 0 0 8px; }
+#account-waiting .message { margin: 0 0 8px; }
 #account-waiting h2 { margin-bottom: 10px; }
 .account-actions { display: flex; align-items: center; gap: 16px; }
 .account-actions .spacer { flex: 1; }
@@ -274,6 +274,10 @@ button, input { font: inherit; color: inherit; }
   .controls { gap: 20px; }
   .caption { gap: 14px; font-size: 12px; }
   .legend { display: none; }
+}
+/* Narrow phones: the tabs get their own row under the heading. */
+@media (max-width: 479px) {
+  .year-head { flex-direction: column; align-items: stretch; gap: 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

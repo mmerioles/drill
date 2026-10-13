@@ -228,6 +228,16 @@ public sealed class AppModel : Observable
         if (!IsRunning) Toggle();
     }
 
+    /// <summary>
+    /// The toast's "start break" / "start focus": starts the phase it offered,
+    /// only if that phase is still waiting. Never resumes a paused phase or
+    /// starts a different one.
+    /// </summary>
+    public void StartNext(Phase offered)
+    {
+        if (Engine.IsIdle && Engine.Phase == offered) Toggle();
+    }
+
     public void Skip()
     {
         Now = _clock();

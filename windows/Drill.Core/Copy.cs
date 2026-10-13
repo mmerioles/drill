@@ -62,15 +62,23 @@ public static class Copy
         return $"{(phase.IsBreak() ? "break" : "focus")} · {left}";
     }
 
-    /// <summary>What a screen reader says for the timer: "focus, 12 minutes left".</summary>
+    /// <summary>What a screen reader says for the timer: "focus, 12 minutes left", or "focus, paused, 12 minutes left".</summary>
     public static string Spoken(Phase phase, bool running, bool active, double remaining)
     {
-        var what = Status(phase, running, active) ?? "focus";
+        var what = PhaseName(phase) + (active && !running ? ", paused" : "");
         var seconds = (int)Math.Ceiling(Math.Round(remaining, 6));
         if (seconds < 60) return $"{what}, {seconds} {(seconds == 1 ? "second" : "seconds")} left";
         var minutes = MinutesLeft(remaining);
         return $"{what}, {minutes} {(minutes == 1 ? "minute" : "minutes")} left";
     }
+
+    /// <summary>The phase's spoken name: "focus", "break" or "long break".</summary>
+    public static string PhaseName(Phase phase) => phase switch
+    {
+        Phase.Focus => "focus",
+        Phase.ShortBreak => "break",
+        _ => "long break",
+    };
 
     /// <summary>What a screen reader says for the year: "your year. today 1h 15m, this week 5h, streak 13 days."</summary>
     public static string YearSummary(double today, double week, int streak) =>

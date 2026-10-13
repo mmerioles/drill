@@ -103,7 +103,8 @@ public partial class App : Application, Shell
         _notifier.Acted += argument => Dispatcher.BeginInvoke(() =>
         {
             if (_quitting) return;
-            if (argument == "start") Model.Start();
+            if (argument.StartsWith("start:") && Enum.TryParse<Phase>(argument[6..], ignoreCase: true, out var offered)
+                && Enum.IsDefined(offered)) Model.StartNext(offered);
             else if (argument == "open") OpenMain(); // the toast's body
         });
 
@@ -289,12 +290,19 @@ public partial class App : Application, Shell
         var copy = Copy.Finished(t.Finished, t.Next, Model.Config.Duration(t.Next));
         // When the next phase waits for you, the toast can start it.
         var waits = !Model.IsRunning;
-        (string, string)? action = waits ? (t.Next.IsBreak() ? "start break" : "start focus", "start") : null;
+        (string, string)? action = waits ? (t.Next.IsBreak() ? "start break" : "start focus", StartArgument(t.Next)) : null;
         _notifier.Post(copy.Title, copy.Body, action);
         if (Model.SoundOn)
         {
             if (t.Finished == Phase.Focus) Chime.FocusDone(); else Chime.BreakOver();
         }
+    }
+
+    /// <summary>The toast button's argument, naming the phase it offers: "start:shortBreak".</summary>
+    private static string StartArgument(Phase next)
+    {
+        var name = next.ToString();
+        return $"start:{char.ToLowerInvariant(name[0])}{name[1..]}";
     }
 
     // One instance

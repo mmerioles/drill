@@ -112,8 +112,8 @@ fun TimerView(model: AppModel, now: () -> Long, boil: () -> Long, toggle: () -> 
 
         Spacer(Modifier.height(30.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Words("studying", color = ink.faint)
-            Field(model.tag, model::updateTag, Modifier.width(150.dp), placeholder = "anything", label = "studying")
+            Words("studying", Modifier.alignByBaseline(), color = ink.faint)
+            Field(model.tag, model::updateTag, Modifier.alignByBaseline().width(150.dp), placeholder = "anything", label = "studying")
         }
         val current = model.tag.trim().lowercase()
         Row(Modifier.heightIn(min = TouchTarget), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -123,9 +123,11 @@ fun TimerView(model: AppModel, now: () -> Long, boil: () -> Long, toggle: () -> 
         }
 
         Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+        // The sides share what's left, so the capsule stays centred and
+        // "reset" never breaks at large font sizes.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             val idle = timer.status is Status.Idle
-            Box(Modifier.width(56.dp), contentAlignment = Alignment.CenterEnd) {
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
                 if (!idle) Link("reset", action = model::reset)
             }
             Capsule(
@@ -136,7 +138,7 @@ fun TimerView(model: AppModel, now: () -> Long, boil: () -> Long, toggle: () -> 
                 },
                 action = toggle,
             )
-            Box(Modifier.width(56.dp), contentAlignment = Alignment.CenterStart) {
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                 Link("skip", action = model::skip)
             }
         }

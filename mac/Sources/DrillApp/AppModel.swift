@@ -60,7 +60,8 @@ final class AppModel {
     var onLogged: (() -> Void)?
     private let defaults: UserDefaults
     private let notifier = Notifier()
-    private let builder = HeatmapBuilder()
+    /// Follows the system calendar and time zone, so "today" moves with them.
+    private let builder = HeatmapBuilder(calendar: .autoupdatingCurrent)
     private var tickTask: Task<Void, Never>?
     private var blockTag: String?
     private var yearSessions: [FocusSession] = []
@@ -78,7 +79,7 @@ final class AppModel {
         self.theme = defaults.string(forKey: Keys.theme).flatMap(Theme.init) ?? .dark
 
         reload()
-        notifier.onStart = { [weak self] in self?.startNext() }
+        notifier.onStart = { [weak self] offered in self?.startNext(offered) }
 
         // A new day, time zone or clock, or a wake from sleep: "today", the
         // week and the streak may have moved, and the countdown should catch up.
@@ -155,10 +156,11 @@ final class AppModel {
         syncTicking()
     }
 
-    /// The banner's "start break" / "start focus": starts the waiting phase,
-    /// unless you've already started it yourself.
-    private func startNext() {
-        if engine.isIdle { toggle() }
+    /// The banner's "start break" / "start focus": starts the phase it
+    /// offered, only if that phase is still waiting. Never resumes a paused
+    /// phase or starts a different one.
+    private func startNext(_ offered: Phase) {
+        if engine.isIdle && engine.phase == offered { toggle() }
     }
 
     /// Themes are appearances: the Ink palette resolves per appearance, so

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -64,14 +65,11 @@ fun SettingsSheet(model: AppModel, close: () -> Unit, signIn: () -> Unit) {
     val c = model.config
     val sync = model.sync
 
-    Sheet(close) {
+    val sheet = rememberSheet(close)
+    Sheet(sheet) {
         Group {
             SettingRow("appearance") {
-                Row(Modifier.selectableGroup()) {
-                    Theme.entries.forEach { t ->
-                        Link(t.name.lowercase(), on = model.theme == t, selectable = true) { model.updateTheme(t) }
-                    }
-                }
+                Segmented(Theme.entries, model.theme, { it.name.lowercase() }, model::updateTheme)
             }
         }
         Group {
@@ -90,12 +88,10 @@ fun SettingsSheet(model: AppModel, close: () -> Unit, signIn: () -> Unit) {
             SwitchRow("sound", model.soundOn, model::updateSound)
         }
         Group {
-            AccountRow(sync, signIn)
+            AccountRow(sync) { sheet.close(signIn) }
             ServerRow(sync)
         }
-        UpdateRow(model)
-        Spacer(Modifier.height(18.dp))
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Capsule("done", small = true, action = close) }
+        Group { UpdateRow(model) }
     }
 }
 
@@ -123,7 +119,7 @@ private fun AccountRow(sync: Sync, signIn: () -> Unit) {
         when {
             waiting?.confirmed == false -> Link("cancel", action = sync::stopWaiting)
             sync.isSignedIn -> Link("sign out", action = sync::signOut)
-            else -> Link("sign in", action = signIn)
+            else -> Link("sign in", primary = true, action = signIn)
         }
     }
 }
@@ -170,9 +166,9 @@ private fun UpdateRow(model: AppModel) {
         is Updater.State.Failed -> state.message
         else -> null
     }
-    Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 46.dp).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Words("version ${BuildConfig.VERSION_NAME}", size = 13.sp, color = ink.faint)
+            Words("version ${BuildConfig.VERSION_NAME}")
             AnimatedContent(note, transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) }, label = "note") { n ->
                 if (n != null) Words(n, size = 12.sp, color = ink.faint)
             }
@@ -231,13 +227,14 @@ fun AccountSheet(model: AppModel, close: () -> Unit) {
     }
 
     val ready = email.contains("@") && password.length >= 8
+    val sheet = rememberSheet(close)
 
     fun submit() {
         if (!ready) return
         working {
             note = ""
             val problem = if (creating) sync.createAccount(email, password) else sync.signIn(email, password)
-            if (problem == null && sync.waiting == null) close()
+            if (problem == null && sync.waiting == null) sheet.close()
             problem
         }
     }
@@ -252,11 +249,11 @@ fun AccountSheet(model: AppModel, close: () -> Unit) {
     LaunchedEffect(waiting?.confirmed) {
         if (waiting?.confirmed == true) {
             delay(1400)
-            close()
+            sheet.close()
         }
     }
 
-    Sheet(close) {
+    Sheet(sheet) {
         AnimatedContent(
             waiting != null,
             transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
@@ -265,27 +262,22 @@ fun AccountSheet(model: AppModel, close: () -> Unit) {
             Column {
                 val w = sync.waiting
                 if (!linkStep || w == null) {
-                    SheetTitle(if (creating) "make an account" else "sign in", Modifier.padding(bottom = 14.dp))
-                    Group {
-                        SettingRow("email") {
-                            Field(email, { email = it; error = "" }, Modifier.weight(1.3f).widthIn(max = 190.dp), keyboard = KeyboardType.Email,
-                                weight = FontWeight.Normal, label = "email")
-                        }
-                        SettingRow("password") {
-                            Field(password, { password = it; error = "" }, Modifier.weight(1.3f).widthIn(max = 190.dp), password = true,
-                                weight = FontWeight.Normal, label = "password", done = ::submit)
-                        }
-                    }
+                    SheetTitle(if (creating) "make an account" else "sign in", Modifier.padding(bottom = 8.dp))
+                    // Stacked, full width, each named by its placeholder.
+                    Field(email, { email = it; error = "" }, Modifier.fillMaxWidth().padding(top = 16.dp),
+                        placeholder = "email", keyboard = KeyboardType.Email, weight = FontWeight.Normal, label = "email")
+                    Field(password, { password = it; error = "" }, Modifier.fillMaxWidth().padding(top = 24.dp),
+                        placeholder = "password", password = true, weight = FontWeight.Normal, label = "password", done = ::submit)
                     if (error.isNotEmpty()) {
-                        Words(error, Modifier.padding(bottom = 10.dp), size = 13.sp, color = ink.accent)
-                    } else {
-                        Words(if (creating) "password needs 8+ characters." else "",
-                            Modifier.padding(bottom = 10.dp), size = 13.sp, color = ink.faint)
+                        Words(error, Modifier.padding(top = 10.dp), size = 13.sp, color = ink.accent)
+                    } else if (creating) {
+                        Words("password needs 8+ characters.", Modifier.padding(top = 10.dp), size = 13.sp, color = ink.faint)
                     }
+                    Spacer(Modifier.height(24.dp))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Link(if (creating) "have an account?" else "new here?", size = 13.sp) { creating = !creating; error = "" }
                         Spacer(Modifier.weight(1f))
-                        Link("cancel", size = 13.sp, action = close)
+                        Link("cancel", size = 13.sp) { sheet.close() }
                         Spacer(Modifier.width(8.dp))
                         Capsule(if (creating) "create" else "sign in", small = true, enabled = ready && !busy, action = ::submit)
                     }
@@ -314,7 +306,7 @@ fun AccountSheet(model: AppModel, close: () -> Unit) {
                         Link("resend", size = 13.sp, enabled = !busy) { resend() }
                         Spacer(Modifier.weight(1f))
                         // Closing keeps waiting; settings shows how it's going.
-                        Link("close", size = 13.sp, action = close)
+                        Link("close", size = 13.sp) { sheet.close() }
                     }
                 }
             }
@@ -338,12 +330,12 @@ fun InspoSheet(model: AppModel, close: () -> Unit) {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(v.url)))
     }
 
-    Sheet(close) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            SheetTitle("inspo", Modifier.padding(end = 8.dp))
-            Row(Modifier.selectableGroup()) {
-                Link("today", on = !all, selectable = true) { all = false }
-                Link("all", on = all, selectable = true) { all = true }
+    Sheet(rememberSheet(close)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            SheetTitle("inspo", Modifier.weight(1f))
+            Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Link("today", on = !all, selectable = true, compact = true) { all = false }
+                Link("all", on = all, selectable = true, compact = true) { all = true }
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -380,8 +372,6 @@ fun InspoSheet(model: AppModel, close: () -> Unit) {
                 }
             }
         }
-        Spacer(Modifier.height(14.dp))
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Capsule("done", small = true, action = close) }
     }
 }
 

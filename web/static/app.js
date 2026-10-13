@@ -132,19 +132,31 @@ function changed() {
  *  the lock takes the transition, and the rest pick up its saved state, so
  *  a phase end chimes, notifies and logs once. */
 function advance() {
+  let ran = false;
   const run = () => {
+    ran = true;
     const stored = load(KEY.timer, null);
     if (stored) {
       Object.assign(engine, stored.engine);
       blockTag = stored.blockTag ?? null;
     }
     const t = engine.tick(Date.now());
-    if (t) { handle(t); persistTimer(); }
+    if (t) {
+      // Saved first, so a throw below can't leave the phase to end, and log, again.
+      persistTimer();
+      handle(t);
+      persistTimer();
+    }
     schedule();
     renderTimer();
   };
-  if (navigator.locks) navigator.locks.request("drill.timer", run).catch(run);
-  else run();
+  if (typeof navigator.locks?.request !== "function") return Promise.resolve(run());
+  // Run without the lock only when the lock itself failed (say a SecurityError),
+  // never a second time because run threw.
+  return navigator.locks.request("drill.timer", run).catch((err) => {
+    if (ran) throw err;
+    run();
+  });
 }
 
 const visible = () => document.visibilityState === "visible";
@@ -245,40 +257,25 @@ function renderTags() {
   $("suggest").replaceChildren(...tags.filter((t) => t !== current).slice(0, 4).map((t) =>
     button(t, () => { $("tag").value = t; save(KEY.tag, t); renderTags(); })));
 
-  // The tabs are only rebuilt when the tags change, so the underline can
-  // slide from one tab to the next.
+  // The tabs are only rebuilt when the tags change.
   const filter = $("filter");
   if (String(tags) !== String(filterTags)) {
     filterTags = tags;
     const pick = (t) => () => { if (tagFilter === t) return; tagFilter = t; renderYear(true); renderTags(); };
-    filter.replaceChildren(button("all", pick(null)), ...tags.map((t) => button(t, pick(t))),
-                           Object.assign(document.createElement("i"), { className: "underline" }));
+    filter.replaceChildren(button("all", pick(null)), ...tags.map((t) => button(t, pick(t))));
   }
   const buttons = [...filter.querySelectorAll(".link")];
   buttons.forEach((b, i) => b.setAttribute("aria-pressed", String((i === 0 ? null : tags[i - 1]) === tagFilter)));
-  const on = placeUnderline();
+  const on = buttons[tagFilter === null ? 0 : tags.indexOf(tagFilter) + 1];
+  fadeEdge();
   // A chosen tab under a faded edge slides to the middle of the row. Only
   // the row scrolls, never the page around it.
-  const fade = 28, left = filter.scrollLeft, right = left + filter.clientWidth;
+  const fade = 24, left = filter.scrollLeft, right = left + filter.clientWidth;
   if (filter.scrollWidth > filter.clientWidth &&
       (on.offsetLeft + on.offsetWidth > right - fade || on.offsetLeft < left + fade)) {
     filter.scrollTo({ left: on.offsetLeft + on.offsetWidth / 2 - filter.clientWidth / 2,
                       behavior: reduceMotion.matches ? "auto" : "smooth" });
   }
-}
-
-/** Puts the underline under the chosen tab; also after a resize. */
-function placeUnderline() {
-  const filter = $("filter");
-  const buttons = filter.querySelectorAll(".link");
-  const on = buttons[tagFilter === null ? 0 : (filterTags ?? []).indexOf(tagFilter) + 1];
-  const line = filter.querySelector(".underline");
-  if (on && line) {
-    line.style.width = `${on.offsetWidth}px`;
-    line.style.transform = `translateX(${on.offsetLeft}px)`;
-  }
-  fadeEdge();
-  return on;
 }
 
 function fadeEdge() {
@@ -515,6 +512,8 @@ function openAccount() {
   renderAccount();
   $("account").showModal();
   if (!store.waiting) $("email").focus();
+  // Autofill can fill the fields without an input event (Safari): look again.
+  requestAnimationFrame(() => renderAccount());
 }
 
 function renderAccount() {
@@ -556,6 +555,7 @@ async function run(work) {
 
 function submitAccount(e) {
   e.preventDefault();
+  renderAccount(); // autofilled fields may not have said so yet
   if ($("account-submit").disabled) return;
   run(async () => {
     sentNote = "";
@@ -639,7 +639,9 @@ async function notify(title, body, next) {
   try { new Notification(title, options); } catch {}
 }
 
-/** The banner's start button: start the phase it offered, if it's still next. */
+/** The banner's start button carries the phase it offered: start it only if
+ *  the timer is idle on that very phase. Never resume a paused phase, never
+ *  start a different one. */
 function startFromBanner(next) {
   if (engine.isIdle && engine.phase === next) toggle();
 }
@@ -808,6 +810,7 @@ $("account-action").addEventListener("click", () => {
 $("account-switch").addEventListener("click", () => { creating = !creating; problem = ""; renderAccount(); });
 $("account-form").addEventListener("submit", submitAccount);
 $("account-form").addEventListener("input", () => renderAccount());
+$("account-form").addEventListener("change", () => renderAccount());
 $("wrong-email").addEventListener("click", () => {
   store.signOut();
   problem = sentNote = "";
@@ -835,7 +838,7 @@ grid.addEventListener("pointerleave", () => { hovered = null; renderHover(); });
 // At most once a frame, however many resizes arrive.
 let resizing = 0;
 new ResizeObserver(() => {
-  resizing ||= requestAnimationFrame(() => { resizing = 0; renderYear(); placeUnderline(); });
+  resizing ||= requestAnimationFrame(() => { resizing = 0; renderYear(); fadeEdge(); });
 }).observe(grid);
 
 store.addEventListener("change", () => { renderTags(); renderYear(); });
@@ -888,8 +891,10 @@ addEventListener("focus", () => renderYear());
 
 applyTheme();
 registerWorker();
-// A phase may have ended while the tab was closed.
-advance();
+// A phase may have ended while the tab was closed. Closing the tab doesn't
+// log anything: the timer carries on in localStorage, and a block that ran
+// out meanwhile is logged here, at its end, on the next open.
+const caughtUp = advance();
 changed();
 renderTags();
 renderYear();
@@ -900,5 +905,6 @@ if (!demo) store.sync();
 const startParam = new URLSearchParams(location.search).get("start");
 if (startParam) {
   history.replaceState(null, "", location.pathname);
-  startFromBanner(startParam);
+  // After catching up, so the phase it offered can be the one that's next.
+  caughtUp.finally(() => startFromBanner(startParam));
 }

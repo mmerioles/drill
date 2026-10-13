@@ -77,7 +77,8 @@ public class CopyTests
     {
         Assert.Equal("focus, 12 minutes left", Copy.Spoken(Phase.Focus, running: true, active: true, 12 * 60));
         Assert.Equal("focus, 25 minutes left", Copy.Spoken(Phase.Focus, running: false, active: false, 1500));
-        Assert.Equal("paused, 1 minute left", Copy.Spoken(Phase.Focus, running: false, active: true, 60));
+        Assert.Equal("focus, paused, 1 minute left", Copy.Spoken(Phase.Focus, running: false, active: true, 60));
+        Assert.Equal("long break, paused, 3 minutes left", Copy.Spoken(Phase.LongBreak, running: false, active: true, 150));
         Assert.Equal("break, 30 seconds left", Copy.Spoken(Phase.ShortBreak, running: true, active: true, 30));
         Assert.Equal("your year. today 1h 15m, this week 5h, streak 13 days.", Copy.YearSummary(4500, 18000, 13));
     }

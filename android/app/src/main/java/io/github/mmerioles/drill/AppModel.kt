@@ -154,9 +154,11 @@ class AppModel(private val app: Application) {
         changed()
     }
 
-    /** The notification's "start break" / "start focus": starts only from idle. */
-    fun startNext() {
-        if (engine.isIdle) toggle()
+    /** The notification's "start break" / "start focus": starts the phase it
+     *  offered, only if that phase is still waiting. Never resumes a paused
+     *  phase or starts a different one. */
+    fun startNext(offered: Phase) {
+        if (engine.isIdle && engine.phase == offered) toggle()
     }
 
     fun skip() {
@@ -270,7 +272,9 @@ class AppModel(private val app: Application) {
     private fun changed() {
         timer = engine.state
         saveEngine()
-        Notifier.schedule(app, engine.state, engine.remaining(System.currentTimeMillis()))
+        // "focus · maths" while a tagged focus runs, else just the phase.
+        val tagged = blockTag?.takeIf { engine.phase == Phase.Focus }
+        Notifier.schedule(app, engine.state, engine.remaining(System.currentTimeMillis()), tagged)
     }
 
     private fun loadConfig() = TimerConfig(

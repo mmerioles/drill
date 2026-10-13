@@ -57,6 +57,12 @@ import kotlin.math.floor
 // the width, a phone shows half a year, and a tapped day shows its time.
 
 private const val GAP = 0.24f
+/** Room at the grid's edges for today's outline: it sits 1.75dp out from
+ *  its cell with a 1.5dp stroke, so the outline, not the cells, meets the
+ *  content edges. */
+private val OUTLINE_PAD = 1.75.dp
+private val OUTLINE = 1.5.dp
+private val MARGIN = OUTLINE_PAD + OUTLINE / 2
 private val INK = listOf(0f, 0.16f, 0.36f, 0.62f, 0.92f)
 
 @Composable
@@ -71,9 +77,10 @@ fun YearView(model: AppModel) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Words("your year", Modifier.semantics { heading() }, size = 18.sp, weight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
-            Row(Modifier.horizontalScroll(rememberScrollState()).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                Link("all", size = 13.sp, on = filter == null, selectable = true) { filter = null }
-                tags.forEach { t -> Link(t, size = 13.sp, on = filter == t, selectable = true) { filter = t } }
+            // Compact, so the last one ends on the grid's right edge.
+            Row(Modifier.horizontalScroll(rememberScrollState()).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Link("all", size = 13.sp, on = filter == null, selectable = true, compact = true) { filter = null }
+                tags.forEach { t -> Link(t, size = 13.sp, on = filter == t, selectable = true, compact = true) { filter = t } }
             }
         }
         Spacer(Modifier.height(2.dp))
@@ -93,8 +100,8 @@ fun YearView(model: AppModel) {
             val monthStyle = TextStyle(color = ink.faint, fontSize = 10.sp)
             // Room for the month names, more when the words are large.
             val monthRow = with(LocalDensity.current) { maxOf(16.dp, monthStyle.fontSize.toDp() * 1.5f) }
-            val pitchDp = maxWidth / (weeks - GAP)
-            val height = monthRow + pitchDp * 7 - pitchDp * GAP
+            val pitchDp = (maxWidth - MARGIN * 2) / (weeks - GAP)
+            val height = monthRow + pitchDp * 7 - pitchDp * GAP + MARGIN
 
             Canvas(
                 Modifier
@@ -103,15 +110,17 @@ fun YearView(model: AppModel) {
                     .semantics { contentDescription = summary }
                     .pointerInput(heat) {
                         detectTapGestures { at ->
-                            val pitch = size.width / (weeks - GAP)
-                            val w = floor(at.x / pitch).toInt()
+                            val margin = MARGIN.toPx()
+                            val pitch = (size.width - margin * 2) / (weeks - GAP)
+                            val w = floor((at.x - margin) / pitch).toInt()
                             val d = floor((at.y - monthRow.toPx()) / pitch).toInt()
                             val day = heat.weeks.getOrNull(w)?.getOrNull(d)
                             picked = if (day == null || day.date == picked?.date) null else day
                         }
                     },
             ) {
-                val pitch = size.width / (weeks - GAP)
+                val margin = MARGIN.toPx()
+                val pitch = (size.width - margin * 2) / (weeks - GAP)
                 val cell = pitch * (1 - GAP)
                 val top = monthRow.toPx()
                 var lastMonth = -1
@@ -124,14 +133,14 @@ fun YearView(model: AppModel) {
                                 val label = first.date.month.getDisplayName(DateStyle.SHORT, Locale.getDefault()).lowercase()
                                 val text = measurer.measure(label, monthStyle, softWrap = false)
                                 // A month just starting at the right edge waits for room.
-                                if (w * pitch + text.size.width <= size.width) drawText(text, topLeft = Offset(w * pitch, 0f))
+                                if (margin + w * pitch + text.size.width <= size.width) drawText(text, topLeft = Offset(margin + w * pitch, 0f))
                             }
                             lastMonth = month
                         }
                     }
                     week.forEachIndexed { d, day ->
                         if (day == null) return@forEachIndexed
-                        val x = w * pitch
+                        val x = margin + w * pitch
                         val y = top + d * pitch
                         val color = if (day.level > 0) ink.accent.copy(alpha = INK[day.level]) else ink.wash
                         drawPath(Doodle.square(x, y, cell, ((w * 7 + d) * 31 + 7).toLong(), cell / 12 * 0.35f), color)
@@ -141,10 +150,10 @@ fun YearView(model: AppModel) {
                             else -> null
                         }
                         if (outline != null) {
-                            val pad = 1.75.dp.toPx()
+                            val pad = OUTLINE_PAD.toPx()
                             drawRoundRect(
                                 outline, Offset(x - pad, y - pad), Size(cell + pad * 2, cell + pad * 2),
-                                CornerRadius(3.dp.toPx()), style = Stroke(1.1.dp.toPx()),
+                                CornerRadius(3.dp.toPx()), style = Stroke(OUTLINE.toPx()),
                             )
                         }
                     }
@@ -174,15 +183,10 @@ private fun Caption(heat: Heatmap, picked: Day?, modifier: Modifier) {
         }
         return
     }
-    FlowRow(
-        modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(22.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Stat("today", amount(heat.today))
-        Stat("this week", amount(heat.thisWeek))
-        Stat("streak", streak(heat.streak))
-        Spacer(Modifier.weight(1f))
+    // At large font sizes the legend gets a line of its own.
+    val large = LocalDensity.current.fontScale > 1.3f
+    @Composable
+    fun Legend() {
         Row(
             Modifier.clearAndSetSemantics {},
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp),
@@ -194,6 +198,22 @@ private fun Caption(heat: Heatmap, picked: Day?, modifier: Modifier) {
             }
             Words("more", size = 11.sp, color = ink.faint)
         }
+    }
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(22.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Stat("today", amount(heat.today))
+            Stat("this week", amount(heat.thisWeek))
+            Stat("streak", streak(heat.streak))
+            if (!large) {
+                Spacer(Modifier.weight(1f))
+                Legend()
+            }
+        }
+        if (large) Legend()
     }
 }
 

@@ -96,9 +96,9 @@
   <dialog class="settings account" id="account" aria-labelledby="account-title">
     <form id="account-form" novalidate>
       <h2 id="account-title">sign in</h2>
-      <div class="group">
-        <label class="row"><span>email</span><input type="email" id="email" autocomplete="username" spellcheck="false"></label>
-        <label class="row"><span>password</span><input type="password" id="password" autocomplete="current-password"></label>
+      <div class="fields">
+        <input type="email" id="email" placeholder="email" aria-label="email" autocomplete="email" spellcheck="false" autocapitalize="off">
+        <input type="password" id="password" placeholder="password" aria-label="password" autocomplete="current-password">
       </div>
       <p class="message" id="account-error" aria-live="polite"></p>
       <div class="account-actions">

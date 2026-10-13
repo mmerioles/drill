@@ -18,10 +18,10 @@ public sealed class Notifier
 
     private ToastNotifier? _notifier;
 
-    /// <summary>When the toast's one button ("start") or its body ("open") is pressed.</summary>
+    /// <summary>When the toast's one button ("start:shortBreak") or its body ("open") is pressed.</summary>
     public event Action<string>? Acted;
 
-    /// <param name="action">A button, like ("start break", "start").</param>
+    /// <param name="action">A button, like ("start break", "start:shortBreak").</param>
     /// <returns>Whether the toast went out.</returns>
     public bool Post(string title, string body, (string Label, string Argument)? action = null)
     {

@@ -21,6 +21,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -50,11 +51,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -250,13 +255,17 @@ fun Screen(model: AppModel) {
     }
 }
 
-/** The mark and name, then the links, which wrap under each other when
- *  the words are large or the phone is narrow. */
+/** The mark and name, then the links, evenly spaced. When they don't all
+ *  fit, "update" leaves the header and a yellow dot on "settings" says
+ *  there's one; when even that doesn't fit, they wrap. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Header(model: AppModel, boil: () -> Long, open: (Open) -> Unit) {
     val ink = LocalPalette.current
     val sync = model.sync
+    val measurer = rememberTextMeasurer()
+    val linkStyle = TextStyle(fontSize = 14.sp)
+    val phone = LocalConfiguration.current.screenWidthDp < 600
     Row(verticalAlignment = Alignment.Top) {
         Row(Modifier.height(TouchTarget), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -271,24 +280,40 @@ private fun Header(model: AppModel, boil: () -> Long, open: (Open) -> Unit) {
             Sync.State.Unconfirmed -> "confirm email"
             Sync.State.Idle -> if (sync.justSynced) "synced" else "sync"
         }
-        FlowRow(
-            Modifier.weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
-        ) {
-            model.lastError?.let {
-                Words(it, Modifier.align(Alignment.CenterVertically).padding(end = 4.dp), size = 13.sp, color = ink.faint)
+        // A newer version, offered between blocks: installing restarts the app.
+        val updater = model.updater
+        val release = updater.available
+        val downloading = updater.state is Updater.State.Downloading
+        val update = when {
+            downloading -> "updating…"
+            release != null && !model.isActive -> if (phone) "update" else "update to ${release.version}"
+            else -> null
+        }
+        BoxWithConstraints(Modifier.weight(1f)) {
+            val gap = 16.dp
+            val density = LocalDensity.current
+            fun width(words: List<String>) = with(density) {
+                words.sumOf { measurer.measure(it, linkStyle).size.width }.toDp() + gap * (words.size - 1)
             }
-            // A newer version, offered between blocks: installing restarts the app.
-            val updater = model.updater
-            val release = updater.available
-            if (updater.state is Updater.State.Downloading) {
-                Words("updating…", Modifier.align(Alignment.CenterVertically), size = 14.sp, color = ink.faint)
-            } else if (release != null && !model.isActive) {
-                Link("update to ${release.version}", on = true, action = updater::install)
+            val fixed = listOf(word, "inspo", "settings")
+            val showUpdate = update != null && width(listOf(update) + fixed) <= maxWidth
+            FlowRow(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(gap, Alignment.End),
+            ) {
+                model.lastError?.let {
+                    Words(it, Modifier.align(Alignment.CenterVertically), size = 13.sp, color = ink.faint)
+                }
+                if (showUpdate) {
+                    if (downloading) Words(update!!, Modifier.align(Alignment.CenterVertically), size = 14.sp, color = ink.faint)
+                    else Link(update!!, compact = true, action = updater::install)
+                }
+                Link(word, compact = true) { if (sync.isSignedIn) sync.syncNow() else open(Open.Account) }
+                Link("inspo", compact = true) { open(Open.Inspo) }
+                val badge = update != null && !showUpdate
+                Link("settings", compact = true, badge = badge,
+                    description = if (badge) "settings, update available" else null) { open(Open.Settings) }
             }
-            Link(word) { if (sync.isSignedIn) sync.syncNow() else open(Open.Account) }
-            Link("inspo") { open(Open.Inspo) }
-            Link("settings") { open(Open.Settings) }
         }
     }
 }

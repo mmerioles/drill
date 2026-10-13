@@ -1,6 +1,7 @@
 package io.github.mmerioles.drill.ui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -9,18 +10,25 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,7 +37,16 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetState
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,10 +78,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import io.github.mmerioles.drill.ink.Doodle
 import io.github.mmerioles.drill.ink.LocalPalette
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 // One ink capsule per screen; everything else is a faint word.
 
@@ -84,9 +101,16 @@ fun Words(
  *  the word stays put in the middle of it. */
 val TouchTarget = 48.dp
 
+/** The dot that says an update is waiting. */
+val UpdateYellow = Color(0xFFF2C21B)
+
 /** A faint word that does something; [on] marks the chosen one in a row.
  *  A [selectable] link is one of a set, like a tab, and says whether it's
- *  the chosen one; [description] is what TalkBack says instead of [text]. */
+ *  the chosen one; [description] is what TalkBack says instead of [text].
+ *  A [primary] link is a text button: ink, a little heavier. A [compact]
+ *  link is as wide as its word, so a row of them can be evenly spaced; the
+ *  touch area still reaches 48dp, since Compose widens small targets.
+ *  [badge] puts the yellow dot by the word. */
 @Composable
 fun Link(
     text: String,
@@ -96,6 +120,9 @@ fun Link(
     selectable: Boolean = false,
     enabled: Boolean = true,
     description: String? = null,
+    primary: Boolean = false,
+    compact: Boolean = false,
+    badge: Boolean = false,
     action: () -> Unit,
 ) {
     val ink = LocalPalette.current
@@ -104,7 +131,7 @@ fun Link(
     val color by animateColorAsState(
         when {
             !enabled -> ink.ghost
-            on || pressed -> ink.ink
+            on || pressed || primary -> ink.ink
             else -> ink.faint
         },
         label = "link",
@@ -118,12 +145,23 @@ fun Link(
         modifier
             .then(touch)
             .then(if (description != null) Modifier.semantics { contentDescription = description } else Modifier)
-            .defaultMinSize(minWidth = TouchTarget, minHeight = TouchTarget),
+            .defaultMinSize(minWidth = if (compact) 0.dp else TouchTarget, minHeight = TouchTarget),
         contentAlignment = Alignment.Center,
     ) {
         BasicText(
             text,
-            style = TextStyle(color = color, fontSize = size, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal),
+            if (badge) Modifier.drawBehind {
+                val r = 3.dp.toPx()
+                drawCircle(UpdateYellow, r, Offset(this.size.width + r + 2.dp.toPx(), r))
+            } else Modifier,
+            style = TextStyle(
+                color = color, fontSize = size,
+                fontWeight = when {
+                    on -> FontWeight.SemiBold
+                    primary -> FontWeight.Medium
+                    else -> FontWeight.Normal
+                },
+            ),
         )
     }
 }
@@ -169,20 +207,59 @@ fun SheetTitle(text: String, modifier: Modifier = Modifier) {
     Words(text, modifier.semantics { heading() }, size = 20.sp, weight = FontWeight.Bold)
 }
 
-/** A card over the screen, like the web app's dialogs. */
+/** An open sheet; [close] slides it away first, then lets it go. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Stable
+class SheetHandle internal constructor(
+    internal val state: SheetState,
+    private val scope: CoroutineScope,
+    internal val dismissed: () -> Unit,
+) {
+    /** Slides the sheet down, then runs [then] (by default, closes it). */
+    fun close(then: () -> Unit = dismissed) {
+        scope.launch { state.hide() }.invokeOnCompletion { then() }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Sheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+fun rememberSheet(onDismiss: () -> Unit): SheetHandle {
+    val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    val latest by rememberUpdatedState(onDismiss)
+    return remember(state, scope) { SheetHandle(state, scope) { latest() } }
+}
+
+/** A Material bottom sheet on drill's paper: swipe it down, tap the scrim
+ *  or go back to close it. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun Sheet(handle: SheetHandle, content: @Composable ColumnScope.() -> Unit) {
     val ink = LocalPalette.current
-    Dialog(onDismiss, DialogProperties(usePlatformDefaultWidth = false)) {
+    ModalBottomSheet(
+        onDismissRequest = handle.dismissed,
+        sheetState = handle.state,
+        sheetMaxWidth = Dp.Unspecified,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        containerColor = ink.paper,
+        contentColor = ink.ink,
+        scrimColor = Color.Black.copy(alpha = 0.32f),
+        tonalElevation = 0.dp,
+        dragHandle = {
+            Box(
+                Modifier
+                    .padding(vertical = 16.dp)
+                    .size(width = 32.dp, height = 4.dp)
+                    .background(ink.ink.copy(alpha = 0.4f), CircleShape),
+            )
+        },
+    ) {
         Column(
             Modifier
-                .padding(16.dp)
-                .widthIn(max = 440.dp)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(22.dp))
-                .background(ink.paper)
+                .imePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 22.dp, vertical = 22.dp),
+                .padding(start = 22.dp, end = 22.dp, bottom = 22.dp),
             content = content,
         )
     }
@@ -215,24 +292,61 @@ fun SettingRow(label: String, content: @Composable RowScope.() -> Unit) {
     }
 }
 
+/** A Material 3 switch in ink: off is an outline with a small faint
+ *  thumb, on is an ink track with a big paper thumb. The whole row toggles. */
 @Composable
 fun SwitchRow(label: String, on: Boolean, change: (Boolean) -> Unit) {
     val ink = LocalPalette.current
-    val knob by animateFloatAsState(if (on) 1f else 0f, label = "switch")
+    val source = remember { MutableInteractionSource() }
     Box(
         Modifier
             .fillMaxWidth()
-            .toggleable(on, remember { MutableInteractionSource() }, null, role = Role.Switch, onValueChange = change),
+            .toggleable(on, source, null, role = Role.Switch, onValueChange = change),
     ) {
         SettingRow(label) {
-            Canvas(Modifier.size(width = 40.dp, height = 24.dp)) {
-                val h = size.height
-                drawRoundRect(
-                    if (on) ink.ink else ink.ghost,
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(h / 2),
-                )
-                val r = h / 2 - 3.dp.toPx()
-                drawCircle(ink.paper, r, Offset(h / 2 + knob * (size.width - h), h / 2))
+            Switch(
+                on, onCheckedChange = null, interactionSource = source,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = ink.paper,
+                    checkedTrackColor = ink.ink,
+                    checkedBorderColor = ink.ink,
+                    uncheckedThumbColor = ink.faint,
+                    uncheckedTrackColor = ink.paper.copy(alpha = 0f),
+                    uncheckedBorderColor = ink.faint,
+                ),
+            )
+        }
+    }
+}
+
+/** A pill of choices with an ink thumb that slides to the chosen one. */
+@Composable
+fun <T> Segmented(options: List<T>, selected: T, label: (T) -> String, choose: (T) -> Unit) {
+    val ink = LocalPalette.current
+    val index = options.indexOf(selected).coerceAtLeast(0)
+    BoxWithConstraints(
+        Modifier
+            .height(36.dp)
+            .clip(CircleShape)
+            .background(ink.ink.copy(alpha = 0.06f))
+            .selectableGroup(),
+    ) {
+        val segment = 76.dp
+        val x by animateDpAsState(segment * index, label = "segment")
+        Box(Modifier.offset(x = x).width(segment).fillMaxHeight().padding(3.dp).background(ink.ink, CircleShape))
+        Row {
+            options.forEachIndexed { i, option ->
+                val chosen = i == index
+                val color by animateColorAsState(if (chosen) ink.paper else ink.faint, label = "segment text")
+                Box(
+                    Modifier
+                        .width(segment)
+                        .fillMaxHeight()
+                        .selectable(chosen, remember { MutableInteractionSource() }, null, role = Role.RadioButton) { choose(option) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    BasicText(label(option), style = TextStyle(color = color, fontSize = 14.sp, fontWeight = FontWeight.Medium))
+                }
             }
         }
     }
@@ -248,8 +362,13 @@ fun StepperRow(
 ) {
     SettingRow(label) {
         Link("−", size = 18.sp, enabled = value > range.first, description = less) { change((value - step).coerceIn(range)) }
-        Words(if (unit.isEmpty()) "$value" else "$value $unit", Modifier.widthIn(min = 56.dp),
-            weight = FontWeight.Medium, align = TextAlign.Center)
+        BasicText(
+            if (unit.isEmpty()) "$value" else "$value $unit", Modifier.widthIn(min = 56.dp),
+            style = TextStyle(
+                color = LocalPalette.current.ink, fontSize = 15.sp, textAlign = TextAlign.Center,
+                fontFeatureSettings = "tnum",
+            ),
+        )
         Link("+", size = 18.sp, enabled = value < range.last, description = more) { change((value + step).coerceIn(range)) }
     }
 }
@@ -271,15 +390,19 @@ fun Field(
     val ink = LocalPalette.current
     val focus = LocalFocusManager.current
     var had by remember { mutableStateOf(false) }
+    // 1dp ghost at rest, 2dp ink while typing.
+    val line by animateDpAsState(if (had) 2.dp else 1.dp, label = "underline")
+    val lineColor by animateColorAsState(if (had) ink.ink else ink.ghost, label = "underline color")
     BasicTextField(
         value, change,
         modifier
             .onFocusChanged { if (it.isFocused) Typing.active = true else if (had) Typing.active = false; had = it.isFocused }
             .then(if (label != null) Modifier.semantics { contentDescription = label } else Modifier)
             .drawBehind {
-                val y = size.height
-                drawLine(ink.ghost, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
-            }.padding(bottom = 4.dp),
+                val w = line.toPx()
+                val y = size.height - w / 2
+                drawLine(lineColor, Offset(0f, y), Offset(size.width, y), w)
+            }.padding(bottom = 6.dp),
         enabled = enabled,
         singleLine = true,
         textStyle = TextStyle(color = if (enabled) ink.ink else ink.faint, fontSize = 15.sp, fontWeight = weight),

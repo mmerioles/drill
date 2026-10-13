@@ -8,8 +8,9 @@ import DrillCore
 /// `swift run`), where UserNotifications is unavailable.
 @MainActor
 final class Notifier {
-    /// Called when the banner's "start break" / "start focus" is clicked.
-    var onStart: (() -> Void)? {
+    /// Called when the banner's "start break" / "start focus" is clicked,
+    /// with the phase that banner offered.
+    var onStart: ((Phase) -> Void)? {
         get { delegate.onStart }
         set { delegate.onStart = newValue }
     }
@@ -27,6 +28,7 @@ final class Notifier {
     nonisolated static let focusID = "drill.end.focus"
     nonisolated static let breakID = "drill.end.break"
     nonisolated static let startAction = "drill.start"
+    nonisolated static let offeredKey = "drill.offered"
     private static let nextBreak = "drill.next.break"
     private static let nextFocus = "drill.next.focus"
 
@@ -34,6 +36,9 @@ final class Notifier {
         guard available else { return }
         let center = UNUserNotificationCenter.current()
         center.delegate = delegate
+        // A banner scheduled before a crash or force quit would still go off
+        // for a timer that no longer runs.
+        center.removePendingNotificationRequests(withIdentifiers: [Self.focusID, Self.breakID])
         center.setNotificationCategories([
             UNNotificationCategory(
                 identifier: Self.nextBreak,
@@ -68,10 +73,15 @@ final class Notifier {
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body
-            if let next { content.categoryIdentifier = next.isBreak ? Self.nextBreak : Self.nextFocus }
+            if let next {
+                content.categoryIdentifier = next.isBreak ? Self.nextBreak : Self.nextFocus
+                content.userInfo = [Self.offeredKey: next.rawValue]
+            }
             // The sound is played by the app itself, so it honours the sound setting.
-            let wait = endsAt.timeIntervalSinceNow
-            let trigger = wait >= 1 ? UNTimeIntervalNotificationTrigger(timeInterval: wait, repeats: false) : nil
+            // Always a trigger, at least a second out: a nil trigger delivers at
+            // once, before the phase has really ended.
+            let wait = max(1, endsAt.timeIntervalSinceNow)
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: wait, repeats: false)
             try? await UNUserNotificationCenter.current().add(
                 UNNotificationRequest(identifier: breakEnding ? Self.breakID : Self.focusID,
                                       content: content, trigger: trigger))
@@ -89,7 +99,7 @@ final class Notifier {
 /// Shows banners while drill is frontmost, and hears the start button.
 @MainActor
 private final class Banners: NSObject, UNUserNotificationCenterDelegate {
-    var onStart: (() -> Void)?
+    var onStart: ((Phase) -> Void)?
 
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, willPresent notification: UNNotification
@@ -100,7 +110,9 @@ private final class Banners: NSObject, UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
     ) async {
-        guard response.actionIdentifier == Notifier.startAction else { return }
-        await MainActor.run { self.onStart?() }
+        guard response.actionIdentifier == Notifier.startAction,
+              let raw = response.notification.request.content.userInfo[Notifier.offeredKey] as? String,
+              let offered = Phase(rawValue: raw) else { return }
+        await MainActor.run { self.onStart?(offered) }
     }
 }
