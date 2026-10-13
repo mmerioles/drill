@@ -1,4 +1,4 @@
-// Generated from Support/inspo.json by scripts/make-inspo.sh. Don't edit.
+// Generated from shared/inspo.json by scripts/make-inspo.sh. Don't edit.
 
 extension Inspo {
     static let videos: [Video] = [

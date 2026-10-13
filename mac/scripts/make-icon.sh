@@ -14,5 +14,5 @@ for size in 16 32 128 256 512; do
     sips -z $((size * 2)) $((size * 2)) "$tmp/icon.png" --out "$set_dir/icon_${size}x${size}@2x.png" >/dev/null
 done
 iconutil -c icns "$set_dir" -o Support/AppIcon.icns
-cp "$tmp/icon.png" docs/icon.png
+cp "$tmp/icon.png" ../docs/icon.png
 echo "wrote Support/AppIcon.icns"

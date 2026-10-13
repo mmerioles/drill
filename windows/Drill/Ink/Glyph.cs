@@ -6,7 +6,7 @@ namespace Drill.Ink;
 public enum GlyphKind { Drill, Baguette, Check }
 
 /// <summary>
-/// Small hand-drawn marks, as in Sources/InkKit/Glyphs.swift. The Teto nods
+/// Small hand-drawn marks, as in mac/Sources/InkKit/Glyphs.swift. The Teto nods
 /// live here: her drill twintail for focus, a baguette for breaks — never a
 /// face, never a colour.
 /// </summary>

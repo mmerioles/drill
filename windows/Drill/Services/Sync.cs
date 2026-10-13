@@ -12,7 +12,7 @@ public enum SyncState { SignedOut, Idle, Syncing, Offline, Unconfirmed }
 
 /// <summary>
 /// Your account and the sync loop (docs/SYNC.md, "Client loop"), as in
-/// Sources/DrillApp/Sync.swift: push what changed here, then pull what
+/// mac/Sources/DrillApp/Sync.swift: push what changed here, then pull what
 /// changed elsewhere. Runs at launch, after each logged block, every few
 /// minutes, when you come back to the app, and when you press sync.
 ///

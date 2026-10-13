@@ -35,10 +35,10 @@ needs macOS 15+. on first open, if macOS can't verify the app: system settings â
 or build it yourself (needs `xcode-select --install`):
 
 ```sh
-git clone https://github.com/mmerioles/drill.git && cd drill && ./scripts/install.sh
+git clone https://github.com/mmerioles/drill.git && cd drill && ./mac/scripts/install.sh
 ```
 
-update with `git pull && ./scripts/install.sh`.
+update with `git pull && ./mac/scripts/install.sh`. more in [mac/README.md](mac/README.md).
 
 ### android
 
@@ -83,6 +83,20 @@ that's set, the links are printed to the server log. the details are in the
 
 the server is plain Python with no dependencies, so `python3 web/server.py`
 works too (data goes to `web/data`).
+
+## layout
+
+one folder per platform, and the few things they share:
+
+- [`mac/`](mac) the mac app (SwiftUI), with the shared swift core
+- [`ios/`](ios) not built yet; it'll reuse the mac app's core
+- [`android/`](android) the android app (Kotlin, Compose)
+- [`windows/`](windows) the windows app (C#, WPF)
+- [`web/`](web) the web app and sync server, and the download site (`web/site`)
+- [`shared/`](shared) data every app reads: the inspo video list
+- [`supabase/`](supabase) the hosted sync's database
+- [`docs/`](docs) the sync protocol, the icon and screenshots
+- [`scripts/`](scripts) versioning, and writing the inspo list out for each app
 
 ## shortcuts
 

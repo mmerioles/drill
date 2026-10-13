@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Packs build/Drill.app into build/drill_<version>.dmg, with an
+# Packs mac/build/Drill.app into mac/build/drill_<version>.dmg, with an
 # Applications shortcut to drag onto and the app icon as the volume icon.
 # Run scripts/bundle.sh first.
 set -euo pipefail

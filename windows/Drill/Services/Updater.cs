@@ -12,7 +12,7 @@ namespace Drill.Services;
 public enum UpdateState { Idle, Checking, UpToDate, Available, Installing, Failed }
 
 /// <summary>
-/// Keeps the app current from GitHub releases, like Sources/DrillApp/
+/// Keeps the app current from GitHub releases, like mac/Sources/DrillApp/
 /// Updater.swift: finds the newest release, downloads the installer for this
 /// PC (arm64 on ARM, even if this build is x64), runs it silently, and quits;
 /// the installer opens the new drill when it's done. Your sessions live in

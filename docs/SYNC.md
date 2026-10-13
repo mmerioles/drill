@@ -2,7 +2,7 @@
 
 The server is `web/server.py` (see the README to run it). Its clients are the
 web app in `web/static` (`store.js`), the mac app (`SyncAPI` in
-DrillCore, driven by `Sync.swift` in the app), the android app
+`mac/Sources/DrillCore`, driven by `Sync.swift` in the app), the android app
 (`SyncApi.kt` and `Sync.kt` in `android/.../data`), and the windows app
 (`windows/Drill.Core/Sync`, driven by `windows/Drill/Services/Sync.cs`).
 
@@ -101,7 +101,7 @@ cursor; only the calls differ. The schema is
 `supabase/migrations/20261005000000_sessions.sql`.
 
 - **Accounts** are Supabase Auth users (email and password). Signing up
-  (`/auth/v1/signup`) emails a link that lands on `site/confirmed/`. The
+  (`/auth/v1/signup`) emails a link that lands on `web/site/confirmed/`. The
   app keeps the new user's id and asks
   `POST /rest/v1/rpc/email_confirmed { user_id }` every few seconds; once
   it says `true`, the app signs in by itself. `/auth/v1/resend` sends the
@@ -121,7 +121,7 @@ design; the table only lets each user read their own rows, and only
 
 ## Client loop
 
-`web/static/store.js`, `Sources/DrillApp/Sync.swift`, the android
+`web/static/store.js`, `mac/Sources/DrillApp/Sync.swift`, the android
 app's `Sync.kt` and the windows app's `Sync.cs` all do this:
 
 1. `store.changes(since: lastPushedAt)` → push in batches → on success, save

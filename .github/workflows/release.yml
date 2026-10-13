@@ -15,9 +15,10 @@ on:
     paths-ignore:
       - "README.md"
       - "docs/**"
-      - "site/**"
       - "web/**"
       - "android/README.md"
+      - "mac/README.md"
+      - "ios/**"
       - "windows/README.md"
       - ".github/workflows/windows.yml"
       - ".github/workflows/pages.yml"
@@ -48,6 +49,9 @@ jobs:
     needs: version
     if: needs.version.outputs.value != ''
     runs-on: macos-15
+    defaults:
+      run:
+        working-directory: mac
     steps:
       - uses: actions/checkout@v7
 
@@ -68,7 +72,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: dmg
-          path: ${{ steps.dmg.outputs.path }}
+          path: mac/${{ steps.dmg.outputs.path }}
           if-no-files-found: error
 
   android:

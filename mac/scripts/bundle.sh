@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds build/Drill.app from the SwiftPM package (release, ad-hoc signed).
+# Builds mac/build/Drill.app from the SwiftPM package (release, ad-hoc signed).
 #   scripts/bundle.sh          build
 #   scripts/bundle.sh --open   build and launch
 # Env: VERSION=1.2.3 stamps the version, BUILD_NUMBER sets the build,

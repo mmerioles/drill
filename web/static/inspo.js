@@ -1,7 +1,7 @@
 // Shuzo Matsuoka's short cheer-up videos: the "〜あなたに" messages from his
 // official YouTube channel, with the clams clip first. The list lives in
-// Support/inspo.json (see scripts/make-inspo.sh). The shuffle is kept in step
-// with Sources/DrillApp/Inspo.swift, so every device shows the same few
+// shared/inspo.json (see scripts/make-inspo.sh). The shuffle is kept in step
+// with mac/Sources/DrillApp/Inspo.swift, so every device shows the same few
 // videos on the same day. `daily` marks the rotation; the rest are skits.
 
 import { ROWS } from "./inspo-videos.js";

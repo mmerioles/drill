@@ -7,7 +7,7 @@ namespace Drill.Ink;
 public enum Theme { Light, Dark }
 
 /// <summary>
-/// drill's look, as in Sources/InkKit/Ink.swift: paper, one ink, lots of
+/// drill's look, as in mac/Sources/InkKit/Ink.swift: paper, one ink, lots of
 /// air, lowercase sentences, hand-drawn strokes that "boil" gently.
 ///
 ///   dark  — "ink":  pure monochrome, white ink on black. The accent is just ink.

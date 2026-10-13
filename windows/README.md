@@ -8,13 +8,13 @@ look and every feature. Sessions sync with the mac, android and web apps
 
 - `Drill.Core` — timer engine, storage (SQLite), stats, sync and updates.
   No UI and nothing windows-only, so it builds and tests on any OS. A port
-  of `Sources/DrillCore`.
+  of `mac/Sources/DrillCore`.
 - `Drill.Core.Tests` — its tests (xunit).
 - `Drill` — the WPF app: the window, the tray icon and its flyout,
   settings, sign-in and inspo, notifications, and the updater.
 - `installer/drill.iss` — the Inno Setup script for the per-user installer.
 
-The inspo list is `Support/inspo.json` at the repo root, built straight in.
+The inspo list is `shared/inspo.json` at the repo root, built straight in.
 
 ## build
 
@@ -40,7 +40,7 @@ installers ([release.yml](../.github/workflows/release.yml)); pushes to other
 branches build one with screenshots ([windows.yml](../.github/workflows/windows.yml)).
 
 The icon, `Drill/Assets/drill.ico`, comes from `docs/icon.png` by
-`scripts/make-windows-icon.sh`.
+`windows/scripts/make-icon.sh`.
 
 ## trying things out
 

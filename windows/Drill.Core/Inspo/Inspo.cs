@@ -5,9 +5,9 @@ using Drill.Core.Store;
 namespace Drill.Core.Inspo;
 
 /// <summary>
-/// Shuzo Matsuoka's short cheer-up videos. The list is Support/inspo.json,
+/// Shuzo Matsuoka's short cheer-up videos. The list is shared/inspo.json,
 /// built into this assembly. The shuffle is kept in step with
-/// Sources/DrillApp/Inspo.swift and web/static/inspo.js, so every device
+/// mac/Sources/DrillApp/Inspo.swift and web/static/inspo.js, so every device
 /// shows the same few videos on the same day.
 /// </summary>
 public static class InspoVideos

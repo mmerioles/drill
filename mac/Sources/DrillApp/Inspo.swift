@@ -3,7 +3,7 @@ import Observation
 
 /// Shuzo Matsuoka's short cheer-up videos: the "〜あなたに" messages from
 /// his official YouTube channel, with the clams clip first. The list lives in
-/// Support/inspo.json; scripts/make-inspo.sh writes InspoVideos.swift from
+/// shared/inspo.json; scripts/make-inspo.sh writes InspoVideos.swift from
 /// it. The shuffle is kept in step with web/static/inspo.js, so every device
 /// shows the same few videos on the same day.
 enum Inspo {

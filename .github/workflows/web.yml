@@ -8,10 +8,12 @@ on:
     branches: [main]
     paths:
       - "web/**"
+      - "!web/site/**" # the download site, published by pages.yml
       - ".github/workflows/web.yml"
   pull_request:
     paths:
       - "web/**"
+      - "!web/site/**"
   workflow_dispatch:
 
 permissions:

@@ -4,7 +4,7 @@ using System.Windows.Threading;
 
 namespace Drill.Ink;
 
-// Doodle machinery, as in Sources/InkKit/Doodle.swift. Every stroke is
+// Doodle machinery, as in mac/Sources/InkKit/Doodle.swift. Every stroke is
 // jittered by a seeded wobble, and the seed steps every 0.4s — the classic
 // hand-drawn "boil". Amplitude stays around a point so it reads as pen
 // texture in motion, not noise.

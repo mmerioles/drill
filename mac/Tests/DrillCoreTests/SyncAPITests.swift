@@ -78,8 +78,9 @@ private final class TestServer {
     private let data: URL
 
     private init(port: Int) throws {
+        // mac/Tests/DrillCoreTests/this file → the repo root.
         let repo = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-            .deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
         data = FileManager.default.temporaryDirectory.appending(path: "drill-test-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
         url = URL(string: "http://127.0.0.1:\(port)")!

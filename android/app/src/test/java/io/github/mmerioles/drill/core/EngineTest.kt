@@ -6,7 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-// The same cases as Tests/DrillCoreTests/PomodoroEngineTests.swift.
+// The same cases as mac/Tests/DrillCoreTests/PomodoroEngineTests.swift.
 class EngineTest {
     private val t0 = 1_000_000_000L
     private val config = TimerConfig(focus = 100, shortBreak = 10, longBreak = 30, longBreakEvery = 2,

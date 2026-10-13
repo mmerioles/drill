@@ -4,7 +4,7 @@ import java.time.LocalDate
 
 // Shuzo Matsuoka's short cheer-up videos: the "〜あなたに" messages from his
 // official YouTube channel, with the clams clip first. The list lives in
-// Support/inspo.json (see scripts/make-inspo.sh, which writes InspoVideos.kt).
+// shared/inspo.json (see scripts/make-inspo.sh, which writes InspoVideos.kt).
 // The shuffle is kept in step with web/static/inspo.js and Inspo.swift, so
 // every device shows the same few videos on the same day.
 

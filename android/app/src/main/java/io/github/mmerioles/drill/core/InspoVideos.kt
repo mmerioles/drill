@@ -1,4 +1,4 @@
-// Generated from Support/inspo.json by scripts/make-inspo.sh. Don't edit.
+// Generated from shared/inspo.json by scripts/make-inspo.sh. Don't edit.
 // Inspo.Video(number, youtube id, in the daily rotation, english, original title)
 
 package io.github.mmerioles.drill.core

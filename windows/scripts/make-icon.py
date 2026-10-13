@@ -5,7 +5,7 @@ Windows asks for (16 to 256), each downscaled on its own from the full
 from pathlib import Path
 from PIL import Image
 
-root = Path(__file__).resolve().parent.parent
+root = Path(__file__).resolve().parents[2]  # the repo
 art = Image.open(root / "docs/icon.png").convert("RGBA")
 sizes = [16, 20, 24, 32, 40, 48, 64, 256]
 frames = [art.resize((s, s), Image.Resampling.LANCZOS) for s in sizes]

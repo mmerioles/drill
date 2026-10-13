@@ -11,7 +11,7 @@ import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.sin
 
-// drill's ink look (Sources/InkKit, web/static/ink.js): paper, one ink,
+// drill's ink look (mac/Sources/InkKit, web/static/ink.js): paper, one ink,
 // lots of air, lowercase words. Light is "teto", with her crimson for
 // progress only; dark is pure monochrome.
 

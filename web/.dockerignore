@@ -3,3 +3,4 @@ __pycache__
 data
 compose.yaml
 .env
+site

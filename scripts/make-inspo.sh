@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Writes the inspo video list, Support/inspo.json, out for every app:
-#   Sources/DrillApp/InspoVideos.swift, web/static/inspo-videos.js and
+# Writes the inspo video list, shared/inspo.json, out for the apps that
+# don't read it directly (windows builds it straight in):
+#   mac/Sources/DrillApp/InspoVideos.swift, web/static/inspo-videos.js and
 #   android/.../core/InspoVideos.kt.
 # Edit the json, then run this. Order is numbering: add new videos at the end.
 set -euo pipefail
@@ -9,8 +10,8 @@ cd "$(dirname "$0")/.."
 python3 - <<'PY'
 import json
 
-videos = json.load(open("Support/inspo.json"))
-header = "Generated from Support/inspo.json by scripts/make-inspo.sh. Don't edit."
+videos = json.load(open("shared/inspo.json"))
+header = "Generated from shared/inspo.json by scripts/make-inspo.sh. Don't edit."
 
 def swift(s):
     return json.dumps(s, ensure_ascii=False)
@@ -19,7 +20,7 @@ rows = "\n".join(
     f"        .init(number: {n}, youtube: {swift(v['id'])}, daily: {str(v['daily']).lower()},\n"
     f"              title: {swift(v['title'])}, japanese: {swift(v['japanese'])}),"
     for n, v in enumerate(videos, 1))
-with open("Sources/DrillApp/InspoVideos.swift", "w") as f:
+with open("mac/Sources/DrillApp/InspoVideos.swift", "w") as f:
     f.write(f"// {header}\n\nextension Inspo {{\n    static let videos: [Video] = [\n{rows}\n    ]\n}}\n")
 
 rows = "\n".join(

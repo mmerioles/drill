@@ -5,7 +5,7 @@ import PackageDescription
 //   DrillCore — timer engine, storage, stats, sync contract. No UI.
 //   InkKit       — the hand-drawn ink design system. SwiftUI only.
 //   DrillApp  — the macOS app that wires the two together.
-// iOS (and anything else) later reuses Core + InkKit and adds its own shell.
+// iOS (ios/, not built yet) will reuse Core + InkKit and add its own shell.
 let package = Package(
     name: "Drill",
     platforms: [.macOS(.v15), .iOS(.v18)],
@@ -18,7 +18,7 @@ let package = Package(
         .target(name: "DrillCore", linkerSettings: [.linkedLibrary("sqlite3")]),
         .target(name: "InkKit"),
         .executableTarget(name: "DrillApp", dependencies: ["DrillCore", "InkKit"]),
-        // Renders Support/AppIcon.icns from the InkKit drill; see scripts/make-icon.sh.
+        // Renders Support/AppIcon.icns from the InkKit drill; see mac/scripts/make-icon.sh.
         .executableTarget(name: "IconMaker", dependencies: ["InkKit"]),
         .testTarget(name: "DrillCoreTests", dependencies: ["DrillCore"]),
     ]

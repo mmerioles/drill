@@ -1,4 +1,4 @@
-// Generated from Support/inspo.json by scripts/make-inspo.sh. Don't edit.
+// Generated from shared/inspo.json by scripts/make-inspo.sh. Don't edit.
 // [youtube id, in the daily rotation, english, original title]
 
 export const ROWS = [

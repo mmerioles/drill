@@ -32,7 +32,7 @@ public abstract class Observable : INotifyPropertyChanged
 }
 
 /// <summary>
-/// The app's single source of truth, as in Sources/DrillApp/AppModel.swift:
+/// The app's single source of truth, as in mac/Sources/DrillApp/AppModel.swift:
 /// owns the engine, drives its clock, writes finished focus blocks to the
 /// store, and keeps the heatmap fresh. Views bind to it and call its
 /// intents; nothing else touches the store.
