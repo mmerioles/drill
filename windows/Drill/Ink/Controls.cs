@@ -173,12 +173,6 @@ public sealed class Capsule : Button
         MouseEnter += (_, _) => Shade();
         MouseLeave += (_, _) => Shade();
         IsEnabledChanged += (_, _) => Shade();
-        // Padding scales with the type, as on the mac (size × 2.6, × 0.85),
-        // unless a style or the page sets its own.
-        Loaded += (_, _) =>
-        {
-            if (Padding == default) Padding = new Thickness(FontSize * 2.6, FontSize * 0.85, FontSize * 2.6, FontSize * 0.85);
-        };
     }
 
     public double Fade

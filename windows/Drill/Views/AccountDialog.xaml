@@ -31,7 +31,7 @@
                        TextWrapping="Wrap" Visibility="Collapsed" />
             <DockPanel Margin="0,24,0,0">
                 <ink:InkLink x:Name="SwitchMode" FontSize="13" VerticalAlignment="Center" Click="OnSwitch" Margin="-2,0,0,0" />
-                <ink:Capsule x:Name="Primary" DockPanel.Dock="Right" FontSize="14" Click="OnSubmit" IsDefault="True" />
+                <ink:Capsule x:Name="Primary" DockPanel.Dock="Right" FontSize="14" Padding="36.4,11.9" Click="OnSubmit" IsDefault="True" />
                 <ink:InkLink Content="cancel" DockPanel.Dock="Right" FontSize="13" VerticalAlignment="Center" Margin="0,0,14,0"
                              Click="OnCancel" IsCancel="True" />
                 <Border />

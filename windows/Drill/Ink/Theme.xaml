@@ -86,6 +86,8 @@
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FocusVisualStyle" Value="{StaticResource CapsuleFocusRing}" />
         <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        <!-- As the mac: the type size × 2.6 across and × 0.85 down. -->
+        <Setter Property="Padding" Value="41.6,13.6" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ink:Capsule">
@@ -94,7 +96,7 @@
                             Padding="{TemplateBinding Padding}" MinWidth="{TemplateBinding MinWidth}"
                             Opacity="{Binding Fade, RelativeSource={RelativeSource TemplatedParent}}">
                         <TextBlock Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}" HorizontalAlignment="Center" TextAlignment="Center"
-                                   Foreground="{TemplateBinding Foreground}" />
+                                   VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}" />
                     </Border>
                 </ControlTemplate>
             </Setter.Value>
