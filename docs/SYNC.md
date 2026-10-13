@@ -99,7 +99,7 @@ client buckets sessions into days in its own time zone.
 With no server in settings, the apps sync through drill's Supabase project
 (`SupabaseAPI.swift`, `SupabaseApi.kt`, `SupabaseApi.cs`). Same rows, same merge rule, same
 cursor; only the calls differ. The schema is
-`supabase/migrations/20261005000000_sessions.sql`.
+`supabase/migrations/20261006061038_sessions.sql`.
 
 - **Accounts** are Supabase Auth users (email and password). Signing up
   (`/auth/v1/signup`) emails a link that lands on `web/site/confirmed/`. The

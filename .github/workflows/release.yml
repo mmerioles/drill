@@ -16,6 +16,7 @@ on:
       - "README.md"
       - "docs/**"
       - "web/**"
+      - "supabase/**"
       - "android/README.md"
       - "mac/README.md"
       - "ios/**"
