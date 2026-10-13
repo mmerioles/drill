@@ -1,8 +1,10 @@
 # On every push to main: pick the next semantic version from commit messages
-# (scripts/next-version.sh), build the mac app and the android app with it,
-# and publish both as GitHub release v<version>:
-#   drill_<version>.dmg   universal mac app
-#   drill_<version>.apk   android app, signed with the release key
+# (scripts/next-version.sh), build the mac, android and windows apps with it,
+# and publish them all as GitHub release v<version>:
+#   drill_<version>.dmg         universal mac app
+#   drill_<version>.apk         android app, signed with the release key
+#   drill_<version>_x64.exe     windows installer, intel and amd PCs
+#   drill_<version>_arm64.exe   windows installer, arm PCs (snapdragon)
 # The android key lives in repo secrets (see android/README.md). Every release
 # has to be signed with the same key, or phones refuse the update.
 name: release
@@ -16,6 +18,8 @@ on:
       - "site/**"
       - "web/**"
       - "android/README.md"
+      - "windows/README.md"
+      - ".github/workflows/windows.yml"
       - ".github/workflows/pages.yml"
       - ".github/workflows/web.yml"
   workflow_dispatch:
@@ -110,8 +114,58 @@ jobs:
           path: build/drill_*.apk
           if-no-files-found: error
 
+  windows:
+    needs: version
+    if: needs.version.outputs.value != ''
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Test
+        if: matrix.arch == 'x64'
+        run: dotnet test windows/Drill.Core.Tests -c Release
+
+      - name: Publish app
+        env:
+          VERSION: ${{ needs.version.outputs.value }}
+        run: >
+          dotnet publish windows/Drill/Drill.csproj -c Release -r win-${{ matrix.arch }}
+          --self-contained -p:Version=$env:VERSION -p:PublishReadyToRun=true
+          -o build/windows/${{ matrix.arch }}
+
+      - name: Build installer
+        env:
+          VERSION: ${{ needs.version.outputs.value }}
+        run: |
+          $iscc = (Get-Command iscc.exe -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          }
+          & $iscc /Q "/DVersion=$env:VERSION" "/DArch=${{ matrix.arch }}" `
+            "/DSource=$PWD\build\windows\${{ matrix.arch }}" "/DOutputDir=$PWD\build" `
+            windows\installer\drill.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-${{ matrix.arch }}
+          path: build/drill_*_${{ matrix.arch }}.exe
+          if-no-files-found: error
+
   publish:
-    needs: [version, mac, android]
+    needs: [version, mac, android, windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v8

@@ -1,0 +1,53 @@
+<UserControl x:Class="Drill.Views.AccountDialog"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ink="clr-namespace:Drill.Ink">
+    <Grid>
+        <!-- Email and password -->
+        <StackPanel x:Name="Details">
+            <TextBlock x:Name="Heading" Style="{StaticResource Base}" FontFamily="{DynamicResource Display}" FontWeight="Bold"
+                       FontSize="20" TextOptions.TextFormattingMode="Ideal" Text="sign in" />
+            <Border Margin="0,16,0,0" CornerRadius="8" Background="{DynamicResource CardFill}" BorderBrush="{DynamicResource CardLine}"
+                    BorderThickness="1" Padding="14,0">
+                <StackPanel TextElement.FontSize="14">
+                    <DockPanel Height="44">
+                        <TextBlock Text="email" Style="{StaticResource Base}" VerticalAlignment="Center" Width="76" />
+                        <TextBox x:Name="Email" Style="{StaticResource Bare}" FontSize="14" VerticalAlignment="Center"
+                                 TextAlignment="Right" InputScope="EmailSmtpAddress" />
+                    </DockPanel>
+                    <Rectangle Height="1" Fill="{DynamicResource CardLine}" />
+                    <DockPanel Height="44">
+                        <TextBlock Text="password" Style="{StaticResource Base}" VerticalAlignment="Center" Width="76" />
+                        <PasswordBox x:Name="Password" Style="{StaticResource BarePassword}" FontSize="14" VerticalAlignment="Center"
+                                     HorizontalContentAlignment="Right" />
+                    </DockPanel>
+                </StackPanel>
+            </Border>
+            <TextBlock x:Name="Problem" Style="{StaticResource Base}" FontSize="13" Opacity="0.45" Margin="0,12,0,0"
+                       TextWrapping="Wrap" MinHeight="18" />
+            <DockPanel Margin="0,16,0,0">
+                <ink:InkLink x:Name="SwitchMode" FontSize="13" VerticalAlignment="Center" Click="OnSwitch" Margin="-2,0,0,0" />
+                <ink:Capsule x:Name="Primary" DockPanel.Dock="Right" FontSize="14" Click="OnSubmit" IsDefault="True" />
+                <ink:InkLink Content="cancel" DockPanel.Dock="Right" FontSize="13" VerticalAlignment="Center" Margin="0,0,14,0"
+                             Click="OnCancel" IsCancel="True" />
+                <Border />
+            </DockPanel>
+        </StackPanel>
+
+        <!-- Waiting on the email link -->
+        <StackPanel x:Name="WaitingPanel" Visibility="Collapsed">
+            <DockPanel>
+                <ink:StatusMark x:Name="Mark" DockPanel.Dock="Right" Breathing="True" Width="21" Height="21" VerticalAlignment="Center" />
+                <ink:FadingText x:Name="WaitHeading" FontSize="20" HorizontalAlignment="Left" Duration="250" />
+            </DockPanel>
+            <ink:FadingText x:Name="WaitNote" FontSize="13" Opacity="0.45" Margin="0,12,0,0" HorizontalAlignment="Left" Duration="250" />
+            <TextBlock x:Name="WaitProblem" Style="{StaticResource Base}" FontSize="13" Opacity="0.45" Margin="0,8,0,0"
+                       TextWrapping="Wrap" MinHeight="18" />
+            <DockPanel x:Name="WaitActions" Margin="0,16,0,0">
+                <ink:InkLink Content="wrong email?" FontSize="13" Click="OnWrongEmail" Margin="-2,0,14,0" />
+                <ink:InkLink x:Name="Resend" Content="resend" FontSize="13" Click="OnResend" />
+                <ink:InkLink Content="close" DockPanel.Dock="Right" FontSize="13" HorizontalAlignment="Right" Click="OnCancel" />
+            </DockPanel>
+        </StackPanel>
+    </Grid>
+</UserControl>

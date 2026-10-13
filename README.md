@@ -7,6 +7,7 @@
   <a href="https://github.com/mmerioles/drill/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/mmerioles/drill/release.yml?style=flat-square&label=build" alt="build"></a>
   <img src="https://img.shields.io/badge/macOS-15%2B-2B2A2F?style=flat-square&logo=apple" alt="macOS 15+">
   <img src="https://img.shields.io/badge/android-8%2B-2B2A2F?style=flat-square&logo=android" alt="android 8+">
+  <img src="https://img.shields.io/badge/windows-10%2B-2B2A2F?style=flat-square" alt="windows 10+">
 </p>
 
 <p align="center">
@@ -22,7 +23,7 @@
 - pomodoro timer with auto breaks
 - tag what you're studying
 - a year heatmap of your focus time
-- menu bar countdown on mac, a notification countdown on android
+- menu bar countdown on mac, a notification countdown on android, a tray and taskbar countdown on windows
 - light and dark themes
 - sync across your devices with an email and a password, or through your own server
 
@@ -45,6 +46,16 @@ open **[the site](https://mmerioles.github.io/drill/)** on your phone and tap do
 picks the apk for you. open the download, and if android asks, let your browser install apps.
 needs android 8+. updates install the same way, over the top; settings shows when one is out.
 building it yourself is in [android/README.md](android/README.md).
+
+### windows
+
+open **[the site](https://mmerioles.github.io/drill/)** on your PC and press download: it
+picks the installer for your chip (x64, or arm64 on snapdragon PCs). run it; it installs
+just for you, with no admin prompt. needs windows 10 (1809) or later.
+the installer isn't code-signed yet, so if windows says "Windows protected your PC":
+more info → run anyway. updates install themselves; settings shows when one is out.
+closing the window keeps drill in the tray; quit from there.
+building it yourself is in [windows/README.md](windows/README.md).
 
 ## web app and sync server
 
@@ -76,3 +87,5 @@ works too (data goes to `web/data`).
 ## shortcuts
 
 `space` start/pause · `⌘→` skip · `⌘R` reset · `⌘,` settings
+
+on windows: `space` start/pause · `ctrl →` skip · `ctrl R` reset · `ctrl ,` settings

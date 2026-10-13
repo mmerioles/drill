@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Timer engine, storage, stats and the sync contract. No UI, no Windows:
+       it builds and tests on any OS. A port of Sources/DrillCore. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Drill.Core</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The one list of inspo videos, shared with every other app. -->
+    <EmbeddedResource Include="..\..\Support\inspo.json" LogicalName="inspo.json" />
+  </ItemGroup>
+</Project>

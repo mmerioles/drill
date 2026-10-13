@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- drill for Windows: a WPF shell over Drill.Core, like DrillApp is a
+       SwiftUI shell over DrillCore. The Windows SDK target brings the WinRT
+       APIs for toasts and the system's animation setting. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <UseWPF>true</UseWPF>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>Drill</AssemblyName>
+    <RootNamespace>Drill</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\drill.ico</ApplicationIcon>
+    <Product>drill</Product>
+    <Company>mmerioles</Company>
+    <Description>a quiet pomodoro timer</Description>
+    <Copyright>mmerioles</Copyright>
+    <!-- Start fast: precompiled code, and no tiered warm-up stalls. -->
+    <TieredPGO>true</TieredPGO>
+    <ServerGarbageCollector>false</ServerGarbageCollector>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Drill.Core\Drill.Core.csproj" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Assets\drill.ico" />
+  </ItemGroup>
+</Project>

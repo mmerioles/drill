@@ -1,0 +1,107 @@
+<UserControl x:Class="Drill.Views.SettingsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ink="clr-namespace:Drill.Ink"
+             Width="440">
+    <!-- As SettingsView.swift, with each of its sections as a Windows 11 card. -->
+    <StackPanel Margin="20,0,20,8">
+        <TextBlock Text="settings" Style="{StaticResource Base}" FontFamily="{DynamicResource Display}" FontWeight="Bold"
+                   FontSize="20" Margin="2,0,0,16" TextOptions.TextFormattingMode="Ideal" />
+
+        <Border Style="{StaticResource Card}">
+            <DockPanel Height="48" Margin="16,0">
+                <TextBlock Text="appearance" Style="{StaticResource RowLabel}" />
+                <ink:Segmented x:Name="Appearance" HorizontalAlignment="Right" VerticalAlignment="Center" />
+            </DockPanel>
+        </Border>
+
+        <Border Style="{StaticResource Card}">
+            <StackPanel>
+                <DockPanel Height="48" Margin="16,0,8,0">
+                    <TextBlock Text="focus" Style="{StaticResource RowLabel}" />
+                    <ink:Stepper x:Name="FocusMinutes" Minimum="5" Maximum="120" Step="5" Unit="min" HorizontalAlignment="Right" />
+                </DockPanel>
+                <Rectangle Style="{StaticResource Rule}" />
+                <DockPanel Height="48" Margin="16,0,8,0">
+                    <TextBlock Text="short break" Style="{StaticResource RowLabel}" />
+                    <ink:Stepper x:Name="ShortBreak" Minimum="1" Maximum="30" Unit="min" HorizontalAlignment="Right" />
+                </DockPanel>
+                <Rectangle Style="{StaticResource Rule}" />
+                <DockPanel Height="48" Margin="16,0,8,0">
+                    <TextBlock Text="long break" Style="{StaticResource RowLabel}" />
+                    <ink:Stepper x:Name="LongBreak" Minimum="5" Maximum="60" Step="5" Unit="min" HorizontalAlignment="Right" />
+                </DockPanel>
+                <Rectangle Style="{StaticResource Rule}" />
+                <DockPanel Height="48" Margin="16,0,8,0">
+                    <TextBlock Text="long break every" Style="{StaticResource RowLabel}" />
+                    <ink:Stepper x:Name="Every" Minimum="2" Maximum="8" HorizontalAlignment="Right" />
+                </DockPanel>
+            </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource Card}">
+            <StackPanel>
+                <DockPanel Height="48" Margin="16,0">
+                    <TextBlock Text="auto-start breaks" Style="{StaticResource RowLabel}" />
+                    <ink:Toggle x:Name="AutoBreaks" HorizontalAlignment="Right" />
+                </DockPanel>
+                <Rectangle Style="{StaticResource Rule}" />
+                <DockPanel Height="48" Margin="16,0">
+                    <TextBlock Text="auto-start focus" Style="{StaticResource RowLabel}" />
+                    <ink:Toggle x:Name="AutoFocus" HorizontalAlignment="Right" />
+                </DockPanel>
+                <Rectangle Style="{StaticResource Rule}" />
+                <DockPanel Height="48" Margin="16,0">
+                    <TextBlock Text="sound" Style="{StaticResource RowLabel}" />
+                    <ink:Toggle x:Name="Sound" HorizontalAlignment="Right" />
+                </DockPanel>
+                <Rectangle Style="{StaticResource Rule}" />
+                <DockPanel Height="48" Margin="16,0">
+                    <TextBlock Text="keep running in the tray" Style="{StaticResource RowLabel}" />
+                    <ink:Toggle x:Name="Tray" HorizontalAlignment="Right" />
+                </DockPanel>
+            </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource Card}">
+            <StackPanel>
+                <DockPanel MinHeight="60" Margin="16,0">
+                    <Button x:Name="AccountButton" DockPanel.Dock="Right" Style="{StaticResource CardButton}" VerticalAlignment="Center"
+                            Click="OnAccount" />
+                    <ink:StatusMark x:Name="AccountMark" DockPanel.Dock="Right" Breathing="True" Margin="0,0,10,0" VerticalAlignment="Center" />
+                    <StackPanel VerticalAlignment="Center" Margin="0,8">
+                        <TextBlock x:Name="AccountName" Style="{StaticResource RowLabel}" />
+                        <ink:FadingText x:Name="AccountNote" FontSize="12" Opacity="0.55" HorizontalAlignment="Left" Duration="250" />
+                    </StackPanel>
+                </DockPanel>
+                <Rectangle Style="{StaticResource Rule}" />
+                <DockPanel MinHeight="60" Margin="16,0">
+                    <Grid DockPanel.Dock="Right" Width="200" VerticalAlignment="Center">
+                        <TextBlock x:Name="ServerHint" Text="drill's" FontSize="14" Foreground="{DynamicResource Hint}"
+                                   FontFamily="{DynamicResource Text}" HorizontalAlignment="Right" IsHitTestVisible="False" />
+                        <TextBox x:Name="Server" Style="{StaticResource Bare}" FontSize="14" TextAlignment="Right" />
+                    </Grid>
+                    <StackPanel VerticalAlignment="Center" Margin="0,8,12,8">
+                        <TextBlock Text="server" Style="{StaticResource RowLabel}" />
+                        <TextBlock x:Name="ServerNote" Style="{StaticResource RowNote}" />
+                    </StackPanel>
+                </DockPanel>
+            </StackPanel>
+        </Border>
+
+        <Border x:Name="UpdateCard" Style="{StaticResource Card}">
+            <DockPanel MinHeight="60" Margin="16,0">
+                <Grid DockPanel.Dock="Right" VerticalAlignment="Center">
+                    <Button x:Name="UpdateButton" Style="{StaticResource CardButton}" Click="OnUpdate" />
+                    <TextBlock x:Name="UpdateWorking" Style="{StaticResource RowLabel}" Opacity="0.55" Visibility="Collapsed"
+                               HorizontalAlignment="Right" />
+                </Grid>
+                <ink:StatusMark x:Name="UpdateMark" DockPanel.Dock="Right" Margin="0,0,10,0" VerticalAlignment="Center" />
+                <StackPanel VerticalAlignment="Center" Margin="0,8">
+                    <TextBlock x:Name="VersionLabel" Style="{StaticResource RowLabel}" />
+                    <ink:FadingText x:Name="UpdateNote" FontSize="12" Opacity="0.55" HorizontalAlignment="Left" Duration="250" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

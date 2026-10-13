@@ -1,0 +1,269 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:ink="clr-namespace:Drill.Ink">
+
+    <!-- Type: Segoe UI Variable, the Windows 11 face, picked by optical
+         size; plain Segoe UI on Windows 10. -->
+    <FontFamily x:Key="Display">Segoe UI Variable Display, Segoe UI</FontFamily>
+    <FontFamily x:Key="Text">Segoe UI Variable Text, Segoe UI</FontFamily>
+    <FontFamily x:Key="Small">Segoe UI Variable Small, Segoe UI</FontFamily>
+    <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+
+    <ink:BezierEase x:Key="Decelerate" X1="0" Y1="0" X2="0" Y2="1" />
+    <ink:BezierEase x:Key="Accelerate" X1="1" Y1="0" X2="1" Y2="1" />
+    <ink:BezierEase x:Key="Glide" X1="0.1" Y1="0.9" X2="0.2" Y2="1" />
+
+    <!-- Keyboard focus: the Windows 11 double stroke, ink outside, paper
+         inside. Never shown for clicks. -->
+    <Style x:Key="FocusRing">
+        <Setter Property="Control.Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Border Margin="-3" CornerRadius="7" BorderThickness="2" BorderBrush="{DynamicResource Ink}">
+                        <Border CornerRadius="5" BorderThickness="1" BorderBrush="{DynamicResource Paper}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="CapsuleFocusRing">
+        <Setter Property="Control.Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Border Margin="-3" CornerRadius="999" BorderThickness="2" BorderBrush="{DynamicResource Ink}">
+                        <Border CornerRadius="999" BorderThickness="1" BorderBrush="{DynamicResource Paper}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="TextBlock" x:Key="Base">
+        <Setter Property="FontFamily" Value="{DynamicResource Text}" />
+        <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+    </Style>
+
+    <!-- Everything secondary: faint lowercase words that darken under the
+         pointer. Faint is ink at 45%, so the darkening is an opacity fade. -->
+    <Style TargetType="ink:InkLink">
+        <Setter Property="FontFamily" Value="{DynamicResource Text}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Focusable" Value="True" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="2,0" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ink:InkLink">
+                    <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" CornerRadius="4">
+                        <TextBlock x:Name="Label" Text="{TemplateBinding Content}" Opacity="{Binding Ink, RelativeSource={RelativeSource TemplatedParent}}"
+                                   FontWeight="{TemplateBinding FontWeight}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsSelected" Value="True">
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- The one primary action per screen: an ink capsule with paper text. -->
+    <Style TargetType="ink:Capsule">
+        <Setter Property="FontFamily" Value="{DynamicResource Text}" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource Paper}" />
+        <Setter Property="Background" Value="{DynamicResource Ink}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource CapsuleFocusRing}" />
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ink:Capsule">
+                    <Border x:Name="Pill" Background="{TemplateBinding Background}" CornerRadius="999"
+                            Padding="{TemplateBinding Padding}" MinWidth="{TemplateBinding MinWidth}"
+                            Opacity="{Binding Fade, RelativeSource={RelativeSource TemplatedParent}}">
+                        <TextBlock Text="{TemplateBinding Content}" HorizontalAlignment="Center" TextAlignment="Center"
+                                   Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Minimize and close, drawn by drill so they sit on the paper and
+         fade with it; Windows 11 sizes and glyphs. -->
+    <Style TargetType="Button" x:Key="CaptionButton">
+        <Setter Property="Width" Value="46" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="FontFamily" Value="{DynamicResource Icons}" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Back" Background="{TemplateBinding Background}">
+                        <TextBlock x:Name="Mark" Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   TextOptions.TextRenderingMode="Grayscale" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Back" Property="Background" Value="{DynamicResource Hover}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Back" Property="Background" Value="{DynamicResource Press}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="Button" x:Key="CloseButton" BasedOn="{StaticResource CaptionButton}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Back" Background="Transparent">
+                        <TextBlock x:Name="Mark" Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   TextOptions.TextRenderingMode="Grayscale" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Back" Property="Background" Value="#C42B1C" />
+                            <Setter TargetName="Mark" Property="Foreground" Value="White" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Back" Property="Background" Value="#C83C30" />
+                            <Setter TargetName="Mark" Property="Foreground" Value="#E6FFFFFF" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- The tag field: bare text on a hairline. -->
+    <Style TargetType="TextBox" x:Key="Bare">
+        <Setter Property="FontFamily" Value="{DynamicResource Text}" />
+        <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource Ink}" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource Faint}" />
+        <Setter Property="SelectionOpacity" Value="0.5" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <ScrollViewer x:Name="PART_ContentHost" Focusable="False" HorizontalScrollBarVisibility="Hidden"
+                                  VerticalScrollBarVisibility="Hidden" Padding="0" Margin="-2,0,0,0" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="PasswordBox" x:Key="BarePassword">
+        <Setter Property="FontFamily" Value="{DynamicResource Text}" />
+        <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource Ink}" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource Faint}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="PasswordBox">
+                    <ScrollViewer x:Name="PART_ContentHost" Focusable="False" HorizontalScrollBarVisibility="Hidden"
+                                  VerticalScrollBarVisibility="Hidden" Padding="0" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Settings cards: a tint of ink with a hairline, Windows 11 radii. -->
+    <Style TargetType="Border" x:Key="Card">
+        <Setter Property="Background" Value="{DynamicResource CardFill}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardLine}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Margin" Value="0,0,0,12" />
+    </Style>
+
+    <Style TargetType="Rectangle" x:Key="Rule">
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Fill" Value="{DynamicResource CardLine}" />
+        <Setter Property="Margin" Value="16,0" />
+    </Style>
+
+    <Style TargetType="ink:Toggle">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style TargetType="ink:Stepper">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+    </Style>
+    <Style TargetType="ink:Segmented">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+    </Style>
+
+    <!-- Small quiet buttons on cards: "sign in", "check". -->
+    <Style TargetType="ink:Capsule" x:Key="SmallCapsule" BasedOn="{StaticResource {x:Type ink:Capsule}}">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Padding" Value="16,6" />
+    </Style>
+    <!-- Buttons on cards: Windows 11's standard button, in ink. The capsule
+         stays the one primary action on a screen. -->
+    <Style TargetType="Button" x:Key="CardButton">
+        <Setter Property="FontFamily" Value="{DynamicResource Text}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+        <Setter Property="Background" Value="{DynamicResource Hover}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+        <Setter Property="Padding" Value="12,5,12,6" />
+        <Setter Property="MinWidth" Value="72" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Back" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                        <TextBlock x:Name="Label" Text="{TemplateBinding Content}" HorizontalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Back" Property="Background" Value="{DynamicResource Border}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Back" Property="Background" Value="{DynamicResource Press}" />
+                            <Setter TargetName="Label" Property="Opacity" Value="0.7" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Label" Property="Opacity" Value="0.4" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="TextBlock" x:Key="RowLabel" BasedOn="{StaticResource Base}">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style TargetType="TextBlock" x:Key="RowNote" BasedOn="{StaticResource Base}">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Opacity" Value="0.55" />
+        <Setter Property="Margin" Value="0,1,0,0" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+</ResourceDictionary>

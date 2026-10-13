@@ -1,0 +1,83 @@
+# Checks the windows app before it reaches main: tests the core, builds the
+# x64 app and its installer, and renders every screen (light and dark) with
+# `Drill.exe --render`. The installer and the screenshots are kept as
+# artifacts for two weeks, so a change can be tried and looked at without a
+# windows PC at hand. Releases from main are built by release.yml.
+name: windows
+
+on:
+  push:
+    branches-ignore: [main]
+    paths:
+      - "windows/**"
+      - "Support/inspo.json"
+      - ".github/workflows/windows.yml"
+  pull_request:
+    paths:
+      - "windows/**"
+      - "Support/inspo.json"
+      - ".github/workflows/windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Test
+        run: dotnet test windows/Drill.Core.Tests -c Release
+
+      - name: Publish app
+        run: >
+          dotnet publish windows/Drill/Drill.csproj -c Release -r win-x64
+          --self-contained -p:Version=0.0.${{ github.run_number }} -p:PublishReadyToRun=true
+          -o build/windows/x64
+
+      - name: Render screens
+        run: |
+          $p = Start-Process build/windows/x64/Drill.exe -ArgumentList "--render", "$PWD\build\screens" `
+            -Wait -PassThru -NoNewWindow
+          if ($p.ExitCode -ne 0) { throw "render exited with $($p.ExitCode)" }
+          Get-ChildItem build/screens
+
+      - name: Build installer
+        run: |
+          $iscc = (Get-Command iscc.exe -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          }
+          & $iscc /Q "/DVersion=0.0.${{ github.run_number }}" "/DArch=x64" `
+            "/DSource=$PWD\build\windows\x64" "/DOutputDir=$PWD\build" `
+            windows\installer\drill.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: screens
+          path: build/screens
+          if-no-files-found: error
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installer
+          path: build/drill_*_x64.exe
+          if-no-files-found: error
+          retention-days: 14

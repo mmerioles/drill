@@ -2,8 +2,9 @@
 
 The server is `web/server.py` (see the README to run it). Its clients are the
 web app in `web/static` (`store.js`), the mac app (`SyncAPI` in
-DrillCore, driven by `Sync.swift` in the app), and the android app
-(`SyncApi.kt` and `Sync.kt` in `android/.../data`).
+DrillCore, driven by `Sync.swift` in the app), the android app
+(`SyncApi.kt` and `Sync.kt` in `android/.../data`), and the windows app
+(`windows/Drill.Core/Sync`, driven by `windows/Drill/Services/Sync.cs`).
 
 The home server's job is small: keep the union of every device's sessions and
 hand back what each device hasn't seen yet. Devices do all merging themselves
@@ -95,7 +96,7 @@ client buckets sessions into days in its own time zone.
 ## Hosted sync (Supabase)
 
 With no server in settings, the apps sync through drill's Supabase project
-(`SupabaseAPI.swift`, `SupabaseApi.kt`). Same rows, same merge rule, same
+(`SupabaseAPI.swift`, `SupabaseApi.kt`, `SupabaseApi.cs`). Same rows, same merge rule, same
 cursor; only the calls differ. The schema is
 `supabase/migrations/20261005000000_sessions.sql`.
 
@@ -120,8 +121,8 @@ design; the table only lets each user read their own rows, and only
 
 ## Client loop
 
-`web/static/store.js`, `Sources/DrillApp/Sync.swift` and the android
-app's `Sync.kt` all do this:
+`web/static/store.js`, `Sources/DrillApp/Sync.swift`, the android
+app's `Sync.kt` and the windows app's `Sync.cs` all do this:
 
 1. `store.changes(since: lastPushedAt)` → push in batches → on success, save
    `lastPushedAt` (taken before reading the changes).
