@@ -29,7 +29,9 @@ public sealed class InkFrame : Grid
     private readonly Image _fade = new() { IsHitTestVisible = false, Stretch = Stretch.Fill };
     private readonly StackPanel _caption;
 
-    public InkFrame(FrameworkElement page, bool minimizable = true)
+    /// <param name="underCaption">The page starts at the window's top edge and
+    /// keeps clear of the caption buttons itself, as the main page does.</param>
+    public InkFrame(FrameworkElement page, bool minimizable = true, bool underCaption = false)
     {
         Page = page;
         SetResourceReference(BackgroundProperty, "Paper");
@@ -38,7 +40,7 @@ public sealed class InkFrame : Grid
         TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
         RenderOptions.SetClearTypeHint(this, ClearTypeHint.Auto);
 
-        page.Margin = new Thickness(0, CaptionHeight, 0, 0);
+        page.Margin = new Thickness(0, underCaption ? 0 : CaptionHeight, 0, 0);
         Children.Add(page);
 
         _caption = new StackPanel
@@ -113,10 +115,10 @@ public class InkWindow : Window
     public InkFrame Frame { get; }
     private readonly App _app;
 
-    public InkWindow(FrameworkElement page, string title, bool minimizable = true)
+    public InkWindow(FrameworkElement page, string title, bool minimizable = true, bool underCaption = false)
     {
         _app = (App)Application.Current;
-        Frame = new InkFrame(page, minimizable);
+        Frame = new InkFrame(page, minimizable, underCaption);
         Title = title;
         Content = Frame;
         SetResourceReference(BackgroundProperty, "Paper");

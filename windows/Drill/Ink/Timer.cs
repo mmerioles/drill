@@ -210,23 +210,32 @@ public sealed class HeatGrid : FrameworkElement
         set => SetValue(HoveredProperty, value);
     }
 
-    /// <summary>Pitch and cell size in DIPs, both whole device pixels, and the left inset that centers the rest.</summary>
-    private (double Pitch, double Cell, double Left) Metrics(double width)
+    /// <summary>
+    /// The exact pitch, and the cell size in whole device pixels. Each column
+    /// is placed by <see cref="Column"/>, rounded on its own, so the grid's
+    /// outer edges land exactly on the content's and gaps differ by at most a pixel.
+    /// </summary>
+    private (double Pitch, double Cell) Metrics(double width)
     {
         var scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
         var n = Math.Max(Heatmap.Weeks.Count, 1);
-        var usable = (width - Margin_ * 2) * scale;
-        var pitch = Math.Floor(usable / (n - GapRatio));
-        var cell = Math.Round(pitch * (1 - GapRatio));
-        var used = pitch * (n - 1) + cell;
-        var left = Math.Floor((usable - used) / 2);
-        return (pitch / scale, cell / scale, Margin_ + left / scale);
+        var pitch = (width - Margin_ * 2) / (n - GapRatio);
+        return (pitch, Math.Round(pitch * (1 - GapRatio) * scale) / scale);
+    }
+
+    private double Column(int w, double pitch) => Snap(Margin_ + w * pitch);
+    private double Row(int d, double pitch) => Snap(MonthRow + d * pitch);
+
+    private double Snap(double dip)
+    {
+        var scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+        return Math.Round(dip * scale) / scale;
     }
 
     protected override Size MeasureOverride(Size available)
     {
-        var width = double.IsInfinity(available.Width) ? 700 : available.Width;
-        var (pitch, cell, _) = Metrics(width);
+        var width = double.IsInfinity(available.Width) ? 706 : available.Width;
+        var (pitch, cell) = Metrics(width);
         return new Size(width, MonthRow + 6 * pitch + cell + Margin_);
     }
 
@@ -235,8 +244,9 @@ public sealed class HeatGrid : FrameworkElement
         var p = Palette.Current;
         dc.DrawRectangle(Background, null, new Rect(RenderSize)); // hit-testable everywhere
         var map = Heatmap;
-        var (pitch, cell, left) = Metrics(ActualWidth);
-        var today = DateTime.Today;
+        var (pitch, cell) = Metrics(ActualWidth);
+        // Today is the grid's last day, whatever this machine's clock says.
+        var today = map.Weeks.Count > 0 ? map.Weeks[^1].LastOrDefault(d => d is not null)?.Date : null;
         var empty = Palette.Brush(Palette.WithAlpha(p.Ink, 0.055));
         var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
 
@@ -252,7 +262,7 @@ public sealed class HeatGrid : FrameworkElement
             {
                 var label = new FormattedText(Copy.Month(first.Date), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
                                               face, 10, Palette.Brush(p.Faint), dpi);
-                dc.DrawText(label, new Point(left + w * pitch, 0));
+                dc.DrawText(label, new Point(Column(w, pitch), 0));
             }
             lastMonth = first.Date.Month;
         }
@@ -262,7 +272,7 @@ public sealed class HeatGrid : FrameworkElement
             for (var d = 0; d < 7; d++)
             {
                 if (map.Weeks[w][d] is not { } day) continue;
-                var r = new Rect(left + w * pitch, MonthRow + d * pitch, cell, cell);
+                var r = new Rect(Column(w, pitch), Row(d, pitch), cell, cell);
                 var square = Doodle.Polygon([r.TopLeft, r.TopRight, r.BottomRight, r.BottomLeft],
                                             unchecked((ulong)(w * 7 + d) * 31 + 7), 0.35);
                 dc.DrawGeometry(day.Level > 0 ? Palette.Brush(Palette.WithAlpha(p.Accent, Levels[day.Level])) : empty, null, square);
@@ -271,7 +281,7 @@ public sealed class HeatGrid : FrameworkElement
                 {
                     var outline = r;
                     outline.Inflate(1.75, 1.75);
-                    dc.DrawRoundedRectangle(null, new Pen(Palette.Brush(isToday ? p.Ink : p.Faint), 1.1), outline, 3, 3);
+                    dc.DrawRoundedRectangle(null, new Pen(Palette.Brush(isToday ? p.Ink : p.Faint), isToday ? 1.5 : 1.1), outline, 2.5, 2.5);
                 }
             }
         }
@@ -280,8 +290,8 @@ public sealed class HeatGrid : FrameworkElement
     protected override void OnMouseMove(MouseEventArgs e)
     {
         var at = e.GetPosition(this);
-        var (pitch, _, left) = Metrics(ActualWidth);
-        var w = (int)Math.Floor((at.X - left) / pitch);
+        var (pitch, _) = Metrics(ActualWidth);
+        var w = (int)Math.Floor((at.X - Margin_) / pitch);
         var d = (int)Math.Floor((at.Y - MonthRow) / pitch);
         HeatmapDay? day = null;
         if (at.Y >= MonthRow && w >= 0 && w < Heatmap.Weeks.Count && d is >= 0 and < 7) day = Heatmap.Weeks[w][d];

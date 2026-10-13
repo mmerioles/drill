@@ -26,7 +26,7 @@ public sealed class InspoPage : UserControl
     {
         _watched = watched;
         Width = 440;
-        var root = new StackPanel { Margin = new Thickness(28, 0, 28, 28) };
+        var root = new StackPanel { Margin = new Thickness(24, 0, 24, 24) };
 
         var header = new DockPanel { Margin = new Thickness(0, 0, 0, 18) };
         var links = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Bottom };
@@ -67,10 +67,11 @@ public sealed class InspoPage : UserControl
     /// <summary>Every video as a square, filled once watched, then the full list.</summary>
     private void ShowAllVideos()
     {
-        var grid = new WrapPanel { Width = 25 * 14.5, HorizontalAlignment = HorizontalAlignment.Left };
+        // 25 to a row, as on the mac, spread across the page.
+        var grid = new System.Windows.Controls.Primitives.UniformGrid { Columns = 25, Margin = new Thickness(0, 0, 0, 0) };
         foreach (var video in InspoVideos.All)
         {
-            var square = new Rectangle { Width = 11, Height = 11, RadiusX = 2, RadiusY = 2, Margin = new Thickness(0, 0, 3.5, 3.5), Cursor = Cursors.Hand };
+            var square = new Rectangle { Width = 11, Height = 11, RadiusX = 2, RadiusY = 2, Margin = new Thickness(0, 0, 0, 4), Cursor = Cursors.Hand, SnapsToDevicePixels = true };
             square.SetResourceReference(Shape.FillProperty, _watched.Contains(video) ? "Accent" : "Empty");
             square.ToolTip = $"{video.Number}. {video.Title}";
             square.MouseLeftButtonUp += (_, _) => Open(video);
@@ -78,7 +79,7 @@ public sealed class InspoPage : UserControl
         }
         _body.Children.Add(grid);
         var count = Text($"{_watched.Count} of {InspoVideos.All.Count} watched", 13);
-        count.Opacity = 0.45;
+        count.Opacity = InkLink.Rest;
         count.Margin = new Thickness(0, 6, 0, 18);
         _body.Children.Add(count);
 
@@ -100,7 +101,7 @@ public sealed class InspoPage : UserControl
         if (numbered)
         {
             var n = Text(video.Number.ToString("000"), 12);
-            n.Opacity = 0.45;
+            n.Opacity = InkLink.Rest;
             n.Margin = new Thickness(0, 1, 12, 0);
             Typography.SetNumeralAlignment(n, FontNumeralAlignment.Tabular);
             line.Children.Add(n);
@@ -118,7 +119,10 @@ public sealed class InspoPage : UserControl
         }
         words.Children.Add(title);
         var japanese = Text(video.Japanese, 13);
-        japanese.Opacity = 0.45;
+        // Japanese in Yu Gothic UI, shaped rather than hinted.
+        japanese.FontFamily = new FontFamily("Segoe UI Variable Text, Yu Gothic UI");
+        TextOptions.SetTextFormattingMode(japanese, TextFormattingMode.Ideal);
+        japanese.Opacity = InkLink.Rest;
         japanese.TextWrapping = TextWrapping.Wrap;
         japanese.Margin = new Thickness(0, 2, 0, 0);
         words.Children.Add(japanese);
@@ -134,7 +138,7 @@ public sealed class InspoPage : UserControl
             Template = Plain(),
         };
         row.MouseEnter += (_, _) => Animate.To(japanese, OpacityProperty, 1, 120);
-        row.MouseLeave += (_, _) => Animate.To(japanese, OpacityProperty, 0.45, 120);
+        row.MouseLeave += (_, _) => Animate.To(japanese, OpacityProperty, InkLink.Rest, 120);
         row.Click += (_, _) => Open(video);
         System.Windows.Automation.AutomationProperties.SetName(row, video.Title);
         return row;

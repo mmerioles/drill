@@ -60,6 +60,18 @@ public sealed class BezierEase : EasingFunctionBase
     }
 }
 
+/// <summary>
+/// A pill's corner radius: half its height. (WPF draws an oversized radius
+/// like 999 as an ellipse, not a capsule.)
+/// </summary>
+public sealed class HalfHeight : System.Windows.Data.IValueConverter
+{
+    public object Convert(object value, Type t, object p, System.Globalization.CultureInfo c) =>
+        new CornerRadius(value is double h ? h / 2 : 0);
+
+    public object ConvertBack(object value, Type t, object p, System.Globalization.CultureInfo c) => throw new NotSupportedException();
+}
+
 /// <summary>Animation helpers that respect Windows' animation setting.</summary>
 public static class Animate
 {
@@ -110,7 +122,8 @@ public sealed class InkLink : Button
     public static readonly DependencyProperty InkProperty = DependencyProperty.Register(
         nameof(Ink), typeof(double), typeof(InkLink), new PropertyMetadata(Rest));
 
-    private const double Rest = 0.45;
+    /// <summary>Faint, for text: a touch more than the 45% strokes use, as Segoe is lighter than SF.</summary>
+    public const double Rest = 0.52;
 
     public InkLink()
     {
@@ -194,7 +207,7 @@ public sealed class Capsule : Button
     }
 
     private void Shade() =>
-        Animate.To(this, FadeProperty, !IsEnabled ? 0.5 : IsMouseOver ? 0.86 : 1, 120);
+        Animate.To(this, FadeProperty, !IsEnabled ? 0.35 : IsMouseOver ? 0.86 : 1, 120);
 }
 
 /// <summary>
@@ -407,7 +420,7 @@ public sealed class Segmented : FrameworkElement
         "Slide", typeof(double), typeof(Segmented), new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
 
     public IReadOnlyList<string> Items { get; set; } = [];
-    private const double Segment = 64, Tall = 30;
+    private const double Segment = 64, Tall = 28;
     private int _hover = -1;
 
     public Segmented()
@@ -485,6 +498,8 @@ public sealed class FadingText : Grid
         nameof(Text), typeof(string), typeof(FadingText), new PropertyMetadata(null, (d, e) => ((FadingText)d).Change((string?)e.NewValue)));
 
     public double Duration { get; set; } = 500;
+    /// <summary>Takes no room while empty (notes), rather than holding a line (the status word).</summary>
+    public bool CollapseWhenEmpty { get; set; }
 
     private TextBlock _shown;
 
@@ -516,6 +531,7 @@ public sealed class FadingText : Grid
 
     private void Change(string? text)
     {
+        if (CollapseWhenEmpty) Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
         if (_shown.Text == (text ?? "")) return;
         if (!Motion.Enabled || !IsLoaded)
         {

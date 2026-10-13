@@ -60,7 +60,7 @@ internal static class Render
             Shot($"account-{t}", () =>
             {
                 var shell = new Demo(theme);
-                var frame = new InkFrame(new MainPage(shell));
+                var frame = new InkFrame(new MainPage(shell), underCaption: true);
                 frame.Dialogs.Show(new AccountDialog(shell.Sync, () => { }));
                 return frame;
             });
@@ -68,7 +68,7 @@ internal static class Render
             {
                 var shell = new Demo(theme);
                 shell.Sync.PretendWaiting("teto@example.com");
-                var frame = new InkFrame(new MainPage(shell));
+                var frame = new InkFrame(new MainPage(shell), underCaption: true);
                 frame.Dialogs.Show(new AccountDialog(shell.Sync, () => { }));
                 return frame;
             });
@@ -101,7 +101,7 @@ internal static class Render
     {
         var shell = new Demo(theme);
         if (running) Run(shell, paused);
-        return new InkFrame(new MainPage(shell));
+        return new InkFrame(new MainPage(shell), underCaption: true);
     }
 
     /// <summary>Fourteen and a bit minutes into a focus block on "15-213".</summary>

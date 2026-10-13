@@ -78,7 +78,8 @@ public sealed class DoodleRing : InkElement
 
     /// <summary>Shared with the tray icon, which draws the same ring small.</summary>
     public static void Draw(DrawingContext dc, Size size, double progress, double lineWidth, ulong tick, Palette p,
-                            Color? track = null, Color? ink = null, double trackWidth = 1.4, bool dotted = true)
+                            Color? track = null, Color? ink = null, double trackWidth = 1.4, bool dotted = true,
+                            bool tip = true)
     {
         var c = new Point(size.Width / 2, size.Height / 2);
         var r = Math.Min(size.Width, size.Height) / 2 - lineWidth * 2;
@@ -92,7 +93,8 @@ public sealed class DoodleRing : InkElement
         }
 
         var trackPts = Enumerable.Range(0, samples).Select(i => At(i, samples, 2 * Math.PI)).ToArray();
-        dc.DrawGeometry(null, Doodle.Pen(track ?? p.Ghost, trackWidth, dotted ? Dotted : null),
+        if (track is not { A: 0 })
+            dc.DrawGeometry(null, Doodle.Pen(track ?? p.Ghost, trackWidth, dotted ? Dotted : null),
                         Doodle.Path(Doodle.Jitter(trackPts, unchecked(tick + 3), 0.7 * Scale(r)), closed: true));
 
         var prog = Math.Clamp(progress, 0, 1);
@@ -103,6 +105,7 @@ public sealed class DoodleRing : InkElement
         var color = ink ?? p.Accent;
         dc.DrawGeometry(null, Doodle.Pen(color, lineWidth), Doodle.Path(arc, closed: false));
 
+        if (!tip) return;
         var d = lineWidth * 2.4;
         dc.DrawEllipse(Palette.Brush(color), null, arc[^1], d / 2, d / 2);
     }

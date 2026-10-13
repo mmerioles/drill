@@ -39,7 +39,8 @@ public partial class SettingsPage : UserControl
 
         Server.TextChanged += (_, _) => ServerHint.Visibility = Server.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         Server.KeyDown += (_, e) => { if (e.Key == Key.Enter) SaveServer(); };
-        Server.LostKeyboardFocus += (_, _) => SaveServer();
+        Server.LostKeyboardFocus += (_, _) => { SaveServer(); ServerLine.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "Ghost"); };
+        Server.GotKeyboardFocus += (_, _) => ServerLine.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "Faint");
         Server.Text = shell.Sync.CustomServer ?? "";
         ShowAccount();
         ShowUpdate();

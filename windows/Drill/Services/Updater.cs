@@ -107,7 +107,7 @@ public sealed class Updater : Observable
     /// </summary>
     public async Task Check(bool quietly = false)
     {
-        if (!IsEnabled || Current is not { } current || IsWorking) return;
+        if (!IsEnabled || Current is not { } current || IsWorking || _pretending) return;
         State = UpdateState.Checking;
         _lastChecked = DateTimeOffset.UtcNow;
         var settle = Task.Delay(quietly ? 0 : 900);

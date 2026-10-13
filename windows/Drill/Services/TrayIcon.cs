@@ -173,15 +173,26 @@ public sealed class TrayIcon : IDisposable
             var s = (double)size;
             if (!live)
             {
-                Glyph.Draw(dc, GlyphKind.Drill, s, Math.Max(1.25, s / 11), 0, ink, roughness: 0);
+                Glyph.Draw(dc, GlyphKind.Drill, s, Math.Clamp(s / 11, 1.25, 2), 0, ink, roughness: 0);
             }
             else
             {
-                var alpha = paused ? 0.45 : 1;
-                var stroke = Math.Max(1.5, s / 8);
+                // Whole-pixel strokes: 2px at 16, so the ring's radius is 6.
+                var stroke = Math.Max(2, Math.Round(s / 8));
+                // Running: the arc over a faint track. Paused: the arc alone,
+                // with pause bars inside once there's room for them.
                 DoodleRing.Draw(dc, new Size(s, s), Math.Max(progress, 0.02), stroke / 2, 0, Palette.Current,
-                                track: Palette.WithAlpha(ink, 0.3 * alpha), ink: Palette.WithAlpha(ink, alpha),
-                                trackWidth: stroke, dotted: false);
+                                track: paused ? Colors.Transparent : Palette.WithAlpha(ink, 0.3), ink: ink,
+                                trackWidth: stroke, dotted: false, tip: size >= 24);
+                if (paused && size >= 20)
+                {
+                    var bar = Math.Max(1.5, s / 13);
+                    var tall = Math.Round(s * 0.26);
+                    var top = Math.Round((s - tall) / 2);
+                    var brush = Palette.Brush(ink);
+                    dc.DrawRectangle(brush, null, new Rect(Math.Round(s / 2 - bar - 1), top, bar, tall));
+                    dc.DrawRectangle(brush, null, new Rect(Math.Round(s / 2 + 1), top, bar, tall));
+                }
             }
         }
         var bitmap = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);

@@ -114,7 +114,7 @@ public partial class App : Application, Shell
     {
         if (_main is null)
         {
-            _main = new InkWindow(new MainPage(this), "drill");
+            _main = new InkWindow(new MainPage(this), "drill", underCaption: true);
             _main.TaskbarItemInfo = new TaskbarItemInfo();
             _main.Closed += (_, _) => _main = null;
             ShowProgress();

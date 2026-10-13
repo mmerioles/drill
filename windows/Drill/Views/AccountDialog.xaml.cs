@@ -30,8 +30,10 @@ public partial class AccountDialog : UserControl
         WaitHeading.SetResourceReference(TextElement.FontFamilyProperty, "Display");
         WaitHeading.SetValue(TextElement.FontWeightProperty, FontWeights.Bold);
 
-        Email.TextChanged += (_, _) => ShowReady();
-        Password.PasswordChanged += (_, _) => ShowReady();
+        Email.TextChanged += (_, _) => { EmailHint.Visibility = Email.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed; ShowReady(); };
+        Password.PasswordChanged += (_, _) => { PasswordHint.Visibility = Password.Password.Length == 0 ? Visibility.Visible : Visibility.Collapsed; ShowReady(); };
+        Underline(Email, EmailLine, "CardLine");
+        Underline(Password, PasswordLine, null);
         sync.PropertyChanged += OnSync;
         Unloaded += (_, _) => sync.PropertyChanged -= OnSync;
         Loaded += (_, _) =>
@@ -40,6 +42,19 @@ public partial class AccountDialog : UserControl
             else Keyboard.Focus(Email);
         };
         Show();
+    }
+
+    /// <summary>The field you're typing in gets a 2px ink underline; otherwise a hairline (or none).</summary>
+    private static void Underline(Control field, System.Windows.Shapes.Rectangle line, string? rest)
+    {
+        void Rest()
+        {
+            line.Height = 1;
+            if (rest is null) line.Fill = System.Windows.Media.Brushes.Transparent; else line.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, rest);
+        }
+        field.GotKeyboardFocus += (_, _) => { line.Height = 2; line.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "Ink"); };
+        field.LostKeyboardFocus += (_, _) => Rest();
+        Rest();
     }
 
     private void OnSync(object? sender, PropertyChangedEventArgs e)
@@ -66,6 +81,7 @@ public partial class AccountDialog : UserControl
         SwitchMode.Content = _creating ? "have an account?" : "new here?";
         Primary.Content = _creating ? "create" : "sign in";
         if (Problem.Tag is not string) Problem.Text = _creating ? "password needs 8+ characters." : "";
+        Problem.Visibility = Problem.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         ShowReady();
 
         if (waiting is not null)
@@ -89,6 +105,8 @@ public partial class AccountDialog : UserControl
         Problem.Tag = text;
         WaitProblem.Text = text ?? "";
         Problem.Text = text ?? (_creating ? "password needs 8+ characters." : "");
+        Problem.Visibility = Problem.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        WaitProblem.Visibility = WaitProblem.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
     /// <summary>Runs one call at a time, and shows what went wrong.</summary>

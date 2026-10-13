@@ -4,9 +4,9 @@
              xmlns:ink="clr-namespace:Drill.Ink"
              Width="440">
     <!-- As SettingsView.swift, with each of its sections as a Windows 11 card. -->
-    <StackPanel Margin="20,0,20,8">
+    <StackPanel Margin="24,0,24,12">
         <TextBlock Text="settings" Style="{StaticResource Base}" FontFamily="{DynamicResource Display}" FontWeight="Bold"
-                   FontSize="20" Margin="2,0,0,16" TextOptions.TextFormattingMode="Ideal" />
+                   FontSize="20" Margin="0,0,0,16" TextOptions.TextFormattingMode="Ideal" />
 
         <Border Style="{StaticResource Card}">
             <DockPanel Height="48" Margin="16,0">
@@ -17,22 +17,22 @@
 
         <Border Style="{StaticResource Card}">
             <StackPanel>
-                <DockPanel Height="48" Margin="16,0,8,0">
+                <DockPanel Height="48" Margin="16,0,6,0">
                     <TextBlock Text="focus" Style="{StaticResource RowLabel}" />
                     <ink:Stepper x:Name="FocusMinutes" Minimum="5" Maximum="120" Step="5" Unit="min" HorizontalAlignment="Right" />
                 </DockPanel>
                 <Rectangle Style="{StaticResource Rule}" />
-                <DockPanel Height="48" Margin="16,0,8,0">
+                <DockPanel Height="48" Margin="16,0,6,0">
                     <TextBlock Text="short break" Style="{StaticResource RowLabel}" />
                     <ink:Stepper x:Name="ShortBreak" Minimum="1" Maximum="30" Unit="min" HorizontalAlignment="Right" />
                 </DockPanel>
                 <Rectangle Style="{StaticResource Rule}" />
-                <DockPanel Height="48" Margin="16,0,8,0">
+                <DockPanel Height="48" Margin="16,0,6,0">
                     <TextBlock Text="long break" Style="{StaticResource RowLabel}" />
                     <ink:Stepper x:Name="LongBreak" Minimum="5" Maximum="60" Step="5" Unit="min" HorizontalAlignment="Right" />
                 </DockPanel>
                 <Rectangle Style="{StaticResource Rule}" />
-                <DockPanel Height="48" Margin="16,0,8,0">
+                <DockPanel Height="48" Margin="16,0,6,0">
                     <TextBlock Text="long break every" Style="{StaticResource RowLabel}" />
                     <ink:Stepper x:Name="Every" Minimum="2" Maximum="8" HorizontalAlignment="Right" />
                 </DockPanel>
@@ -71,15 +71,16 @@
                     <ink:StatusMark x:Name="AccountMark" DockPanel.Dock="Right" Breathing="True" Margin="0,0,10,0" VerticalAlignment="Center" />
                     <StackPanel VerticalAlignment="Center" Margin="0,8">
                         <TextBlock x:Name="AccountName" Style="{StaticResource RowLabel}" />
-                        <ink:FadingText x:Name="AccountNote" FontSize="12" Opacity="0.55" HorizontalAlignment="Left" Duration="250" />
+                        <ink:FadingText x:Name="AccountNote" CollapseWhenEmpty="True" FontSize="12" Opacity="0.55" HorizontalAlignment="Left" Duration="250" />
                     </StackPanel>
                 </DockPanel>
                 <Rectangle Style="{StaticResource Rule}" />
                 <DockPanel MinHeight="60" Margin="16,0">
-                    <Grid DockPanel.Dock="Right" Width="200" VerticalAlignment="Center">
+                    <Grid DockPanel.Dock="Right" Width="160" VerticalAlignment="Center">
                         <TextBlock x:Name="ServerHint" Text="drill's" FontSize="14" Foreground="{DynamicResource Hint}"
-                                   FontFamily="{DynamicResource Text}" HorizontalAlignment="Right" IsHitTestVisible="False" />
-                        <TextBox x:Name="Server" Style="{StaticResource Bare}" FontSize="14" TextAlignment="Right" />
+                                   FontFamily="{DynamicResource Text}" IsHitTestVisible="False" Margin="0,0,0,4" />
+                        <TextBox x:Name="Server" Style="{StaticResource Bare}" FontSize="14" Margin="0,0,0,4" />
+                        <Rectangle x:Name="ServerLine" Height="1" VerticalAlignment="Bottom" Fill="{DynamicResource Ghost}" />
                     </Grid>
                     <StackPanel VerticalAlignment="Center" Margin="0,8,12,8">
                         <TextBlock Text="server" Style="{StaticResource RowLabel}" />
@@ -99,7 +100,7 @@
                 <ink:StatusMark x:Name="UpdateMark" DockPanel.Dock="Right" Margin="0,0,10,0" VerticalAlignment="Center" />
                 <StackPanel VerticalAlignment="Center" Margin="0,8">
                     <TextBlock x:Name="VersionLabel" Style="{StaticResource RowLabel}" />
-                    <ink:FadingText x:Name="UpdateNote" FontSize="12" Opacity="0.55" HorizontalAlignment="Left" Duration="250" />
+                    <ink:FadingText x:Name="UpdateNote" CollapseWhenEmpty="True" FontSize="12" Opacity="0.55" HorizontalAlignment="Left" Duration="250" />
                 </StackPanel>
             </DockPanel>
         </Border>

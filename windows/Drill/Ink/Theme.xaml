@@ -9,6 +9,8 @@
     <FontFamily x:Key="Small">Segoe UI Variable Small, Segoe UI</FontFamily>
     <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
 
+    <ink:HalfHeight x:Key="HalfHeight" />
+
     <ink:BezierEase x:Key="Decelerate" X1="0" Y1="0" X2="0" Y2="1" />
     <ink:BezierEase x:Key="Accelerate" X1="1" Y1="0" X2="1" Y2="1" />
     <ink:BezierEase x:Key="Glide" X1="0.1" Y1="0.9" X2="0.2" Y2="1" />
@@ -31,8 +33,10 @@
         <Setter Property="Control.Template">
             <Setter.Value>
                 <ControlTemplate>
-                    <Border Margin="-3" CornerRadius="999" BorderThickness="2" BorderBrush="{DynamicResource Ink}">
-                        <Border CornerRadius="999" BorderThickness="1" BorderBrush="{DynamicResource Paper}" />
+                    <Border Margin="-3" BorderThickness="2" BorderBrush="{DynamicResource Ink}"
+                            CornerRadius="{Binding ActualHeight, RelativeSource={RelativeSource Self}, Converter={StaticResource HalfHeight}}">
+                        <Border BorderThickness="1" BorderBrush="{DynamicResource Paper}"
+                                CornerRadius="{Binding ActualHeight, RelativeSource={RelativeSource Self}, Converter={StaticResource HalfHeight}}" />
                     </Border>
                 </ControlTemplate>
             </Setter.Value>
@@ -85,7 +89,8 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ink:Capsule">
-                    <Border x:Name="Pill" Background="{TemplateBinding Background}" CornerRadius="999"
+                    <Border x:Name="Pill" Background="{TemplateBinding Background}"
+                            CornerRadius="{Binding ActualHeight, RelativeSource={RelativeSource Self}, Converter={StaticResource HalfHeight}}"
                             Padding="{TemplateBinding Padding}" MinWidth="{TemplateBinding MinWidth}"
                             Opacity="{Binding Fade, RelativeSource={RelativeSource TemplatedParent}}">
                         <TextBlock Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}" HorizontalAlignment="Center" TextAlignment="Center"

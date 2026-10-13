@@ -20,86 +20,30 @@
   <img src="docs/screenshots/dark.png" width="49%" alt="dark">
 </p>
 
-- pomodoro timer with auto breaks
-- tag what you're studying
-- a year heatmap of your focus time
-- menu bar countdown on mac, a notification countdown on android, a tray and taskbar countdown on windows
-- light and dark themes
-- sync across your devices with an email and a password, or through your own server
-
 ## install
 
-**[download the latest .dmg](https://mmerioles.github.io/drill/)**, open it, and drag drill into Applications.
-needs macOS 15+. on first open, if macOS can't verify the app: system settings → privacy & security → open anyway.
+download from **[mmerioles.github.io/drill](https://mmerioles.github.io/drill/)**. it picks the right file for your device.
 
-or build it yourself (needs `xcode-select --install`):
+- **mac**: open the .dmg, drag drill into applications.
+- **windows**: run the installer. if windows warns you: more info → run anyway.
+- **android**: open the .apk and allow installs if asked.
 
-```sh
-git clone https://github.com/mmerioles/drill.git && cd drill && ./mac/scripts/install.sh
-```
+updates install themselves.
 
-update with `git pull && ./mac/scripts/install.sh`. more in [mac/README.md](mac/README.md).
+## sync
 
-### android
-
-open **[the site](https://mmerioles.github.io/drill/)** on your phone and tap download: it
-picks the apk for you. open the download, and if android asks, let your browser install apps.
-needs android 8+. updates install the same way, over the top; settings shows when one is out.
-building it yourself is in [android/README.md](android/README.md).
-
-### windows
-
-open **[the site](https://mmerioles.github.io/drill/)** on your PC and press download: it
-picks the installer for your chip (x64, or arm64 on snapdragon PCs). run it; it installs
-just for you, with no admin prompt. needs windows 10 (1809) or later.
-the installer isn't code-signed yet, so if windows says "Windows protected your PC":
-more info → run anyway. updates install themselves; settings shows when one is out.
-closing the window keeps drill in the tray; quit from there.
-building it yourself is in [windows/README.md](windows/README.md).
-
-## web app and sync server
-
-press sync and sign in to keep your sessions on every device. by default
-that's drill's hosted sync (on Supabase). to keep your data at home instead,
-run your own server and put its address under server in settings.
-
-drill also runs in the browser, served by a small self-hosted server that
-is also the sync server. syncing needs an account (just an email and a
-password), and each account keeps its own history. it's one container:
+press sync and sign in. to use your own server instead:
 
 ```sh
-docker run -d --name drill -p 8080:8080 \
-  -e DRILL_PUBLIC_URL=https://drill.example.com \
-  -v drill-data:/data --restart unless-stopped \
-  ghcr.io/mmerioles/drill:latest
+docker run -d -p 8080:8080 -v drill-data:/data ghcr.io/mmerioles/drill:latest
 ```
 
-or `cd web && docker compose up -d`. open the server in a browser, or put its
-address under server in the mac app's settings, then press sync to sign in or
-create an account. confirmation emails go out through `DRILL_MAIL_URL` (any endpoint
-that takes `{ to, subject, text }`, such as a Cloudflare Worker); until
-that's set, the links are printed to the server log. the details are in the
-[sync protocol](docs/SYNC.md).
+then put its address under server in settings. details in [docs/SYNC.md](docs/SYNC.md).
 
-the server is plain Python with no dependencies, so `python3 web/server.py`
-works too (data goes to `web/data`).
+## repo
 
-## layout
-
-one folder per platform, and the few things they share:
-
-- [`mac/`](mac) the mac app (SwiftUI), with the shared swift core
-- [`ios/`](ios) not built yet; it'll reuse the mac app's core
-- [`android/`](android) the android app (Kotlin, Compose)
-- [`windows/`](windows) the windows app (C#, WPF)
-- [`web/`](web) the web app and sync server, and the download site (`web/site`)
-- [`shared/`](shared) data every app reads: the inspo video list
-- [`supabase/`](supabase) the hosted sync's database
-- [`docs/`](docs) the sync protocol, the icon and screenshots
-- [`scripts/`](scripts) versioning, and writing the inspo list out for each app
+`mac/` · `windows/` · `android/` · `ios/` · `web/` (web app, sync server, site) · `shared/` · `docs/` · `supabase/`
 
 ## shortcuts
 
-`space` start/pause · `⌘→` skip · `⌘R` reset · `⌘,` settings
-
-on windows: `space` start/pause · `ctrl →` skip · `ctrl R` reset · `ctrl ,` settings
+`space` start/pause · `⌘/ctrl →` skip · `⌘/ctrl R` reset · `⌘/ctrl ,` settings

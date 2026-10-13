@@ -146,7 +146,7 @@ public class PopupWindow : Window
 public sealed class TrayPanel : UserControl
 {
     private readonly AppModel _model;
-    private readonly FadingText _status = new() { FontSize = 12, Opacity = 0.45, HorizontalAlignment = HorizontalAlignment.Right };
+    private readonly FadingText _status = new() { FontSize = 12, Opacity = InkLink.Rest, HorizontalAlignment = HorizontalAlignment.Right };
     private readonly RollingText _clock = new() { FontSize = 34, VerticalAlignment = VerticalAlignment.Center };
     private readonly DoodleRing _ring = new() { Width = 34, Height = 34, LineWidth = 2, VerticalAlignment = VerticalAlignment.Center };
     private readonly Capsule _primary = new() { FontSize = 13, MinWidth = 72, Padding = new Thickness(22, 7, 22, 8) };
@@ -191,7 +191,7 @@ public sealed class TrayPanel : UserControl
 
         var bottom = new DockPanel();
         var label = InspoPage.Text("today", 13);
-        label.Opacity = 0.45;
+        label.Opacity = InkLink.Rest;
         _today.FontWeight = FontWeights.SemiBold;
         _today.Margin = new Thickness(5, 0, 0, 0);
         var links = new StackPanel { Orientation = Orientation.Horizontal };
