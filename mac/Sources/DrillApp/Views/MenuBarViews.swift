@@ -82,7 +82,11 @@ struct MenuBarPanel: View {
 
             HStack(spacing: 5) {
                 Text("today").foregroundStyle(Ink.faint)
-                Text(Copy.amount(model.heatmap.today)).foregroundStyle(Ink.ink).fontWeight(.medium)
+                Text(Copy.amount(model.todayTotal)).foregroundStyle(Ink.ink).fontWeight(.medium)
+                if model.dailyGoal > 0 {
+                    Text("/ \(Copy.amount(model.dailyGoal))").foregroundStyle(Ink.faint)
+                    GoalRing(progress: model.todayTotal / model.dailyGoal)
+                }
                 Spacer()
                 HStack(spacing: 14) {
                     Button("open") {

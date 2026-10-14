@@ -25,6 +25,11 @@ struct SettingsView: View {
                 }
             }
             Section {
+                Stepper(value: goalMinutes, in: 0...720, step: 30) {
+                    row("daily goal", Copy.goal(model.dailyGoal))
+                }
+            }
+            Section {
                 Toggle("auto-start breaks", isOn: $model.config.autoStartBreaks)
                 Toggle("auto-start focus", isOn: $model.config.autoStartFocus)
                 Toggle("sound", isOn: $model.soundOn)
@@ -57,6 +62,11 @@ struct SettingsView: View {
         return Stepper(value: value, in: range, step: step) {
             row(label, "\(value.wrappedValue) min")
         }
+    }
+
+    /// The goal in half hours, from off up to 12h.
+    private var goalMinutes: Binding<Int> {
+        Binding(get: { Int(model.dailyGoal / 60) }, set: { model.dailyGoal = TimeInterval($0 * 60) })
     }
 
     private func row(_ label: String, _ value: String) -> some View {

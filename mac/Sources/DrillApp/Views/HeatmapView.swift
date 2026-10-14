@@ -8,6 +8,7 @@ import DrillCore
 struct HeatmapSection: View {
     @Environment(AppModel.self) private var model
     @State private var hovered: HeatmapDay?
+    @State private var opened: OpenDay?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -19,7 +20,8 @@ struct HeatmapSection: View {
                 TagFilter()
             }
 
-            HeatGrid(heatmap: model.heatmap, hovered: $hovered)
+            HeatGrid(heatmap: model.heatmap, hovered: $hovered, opened: $opened,
+                     sessions: { model.sessions(on: $0) })
                 // The grid is a picture; VoiceOver gets its summary.
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("your year")
@@ -44,13 +46,32 @@ struct HeatmapSection: View {
         } else {
             let h = model.heatmap
             HStack(spacing: 22) {
-                stat("today", Copy.amount(h.today))
+                today
                 stat("this week", Copy.amount(h.thisWeek))
                 stat("streak", Copy.streak(h.streak))
                 Spacer()
                 Legend()
             }
         }
+    }
+
+    /// "today 1h 15m / 2h ◔": the goal shows only while every subject is
+    /// shown, since it counts them all.
+    private var today: some View {
+        HStack(spacing: 5) {
+            Text("today")
+            Text(Copy.amount(model.heatmap.today)).foregroundStyle(Ink.ink).fontWeight(.medium)
+            if model.dailyGoal > 0 && model.tagFilter == nil {
+                Text("/ \(Copy.amount(model.dailyGoal))")
+                GoalRing(progress: model.todayTotal / model.dailyGoal)
+                    .padding(.leading, 2)
+                    .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(model.dailyGoal > 0 && model.tagFilter == nil
+            ? "today \(Copy.amount(model.todayTotal)) of \(Copy.amount(model.dailyGoal))"
+            : "today \(Copy.amount(model.heatmap.today))")
     }
 
     private var summary: String {
@@ -64,6 +85,13 @@ struct HeatmapSection: View {
             Text(value).foregroundStyle(Ink.ink).fontWeight(.medium)
         }
     }
+}
+
+/// A day opened from the grid, and where its square is, for the popover's arrow.
+struct OpenDay: Identifiable, Equatable {
+    let day: Date
+    let anchor: CGRect
+    var id: Date { day }
 }
 
 private struct TagFilter: View {
@@ -108,6 +136,8 @@ private struct GridMetrics {
 private struct HeatGrid: View {
     let heatmap: Heatmap
     @Binding var hovered: HeatmapDay?
+    @Binding var opened: OpenDay?
+    let sessions: (Date) -> [FocusSession]
     @State private var width: CGFloat = 706
 
     var body: some View {
@@ -126,13 +156,27 @@ private struct HeatGrid: View {
         .frame(maxWidth: .infinity)
         .frame(height: m.height)
         .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
-        .padding(.horizontal, -Cell.margin)
+        // Pointer, clicks and the popover's arrow all in the canvas's own
+        // space, before the negative padding below shifts it.
+        .contentShape(Rectangle())
         .onContinuousHover { phase in
             switch phase {
             case .active(let p): hovered = day(at: p, m)
             case .ended: hovered = nil
             }
         }
+        // A click opens that day; clicking the open day again closes it.
+        .onTapGesture { p in
+            guard let (w, d) = cell(at: p, m), let day = heatmap.weeks[w][d] else { return }
+            if opened?.day == day.date { opened = nil; return }
+            opened = OpenDay(day: day.date, anchor: rect(w, d, m).offsetBy(dx: Cell.margin, dy: 0))
+        }
+        .pointerStyle(hovered == nil ? nil : .link)
+        .popover(item: $opened, attachmentAnchor: .rect(.rect(opened?.anchor ?? .zero)), arrowEdge: .top) { open in
+            DayDetail(day: open.day, sessions: sessions(open.day))
+                .presentationBackground(Ink.paper)
+        }
+        .padding(.horizontal, -Cell.margin)
     }
 
     private func rect(_ w: Int, _ d: Int, _ m: GridMetrics) -> CGRect {
@@ -140,10 +184,16 @@ private struct HeatGrid: View {
                width: m.size, height: m.size)
     }
 
+    private func cell(at p: CGPoint, _ m: GridMetrics) -> (Int, Int)? {
+        let x = p.x - Cell.margin, y = p.y - Cell.monthRow
+        guard x >= 0, y >= 0 else { return nil }
+        let w = Int(x / m.pitch), d = Int(y / m.pitch)
+        guard heatmap.weeks.indices.contains(w), (0..<7).contains(d) else { return nil }
+        return (w, d)
+    }
+
     private func day(at p: CGPoint, _ m: GridMetrics) -> HeatmapDay? {
-        let w = Int((p.x - Cell.margin) / m.pitch), d = Int((p.y - Cell.monthRow) / m.pitch)
-        guard p.y >= Cell.monthRow, heatmap.weeks.indices.contains(w), (0..<7).contains(d) else { return nil }
-        return heatmap.weeks[w][d]
+        cell(at: p, m).flatMap { heatmap.weeks[$0.0][$0.1] }
     }
 
     private func draw(_ day: HeatmapDay, in r: CGRect, seed: UInt64, ctx: GraphicsContext) {
@@ -153,9 +203,10 @@ private struct HeatGrid: View {
             seed: seed &* 31 &+ 7, amp: 0.35)
         ctx.fill(square, with: .color(day.level > 0 ? Ink.accent.opacity(Cell.ink[day.level]) : Cell.empty))
         let isToday = Calendar.current.isDateInToday(day.date)
-        if isToday || day == hovered {
+        let isOpen = opened?.day == day.date
+        if isToday || isOpen || day == hovered {
             ctx.stroke(Path(roundedRect: r.insetBy(dx: -1.75, dy: -1.75), cornerRadius: 3),
-                       with: .color(isToday ? Ink.ink : Ink.faint), lineWidth: 1.1)
+                       with: .color(isToday || isOpen ? Ink.ink : Ink.faint), lineWidth: isOpen ? 1.5 : 1.1)
         }
     }
 

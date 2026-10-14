@@ -58,6 +58,15 @@ final class AppModel {
         didSet { defaults.set(soundOn, forKey: Keys.sound) }
     }
 
+    /// Focus time to aim for each day, in seconds; 0 is off.
+    var dailyGoal: TimeInterval {
+        didSet { defaults.set(dailyGoal, forKey: Keys.goal) }
+    }
+
+    /// Today's focus across every subject, whatever the tag filter shows:
+    /// what the daily goal counts.
+    private(set) var todayTotal: TimeInterval = 0
+
     var theme: Theme {
         didSet {
             defaults.set(theme.rawValue, forKey: Keys.theme)
@@ -87,6 +96,7 @@ final class AppModel {
         self.engine = PomodoroEngine(config: configOverride ?? saved ?? .standard)
         self.tag = defaults.string(forKey: Keys.tag) ?? ""
         self.soundOn = defaults.object(forKey: Keys.sound) as? Bool ?? true
+        self.dailyGoal = defaults.object(forKey: Keys.goal) as? Double ?? 2 * 3600
         self.theme = defaults.string(forKey: Keys.theme).flatMap(Theme.init) ?? .dark
         self.mode = defaults.string(forKey: Keys.mode).flatMap(TimerMode.init) ?? .pomodoro
 
@@ -313,9 +323,19 @@ final class AppModel {
     func reload() {
         let range = builder.range(today: Date())
         yearSessions = (try? store.sessions(from: range.from, to: range.to)) ?? []
+        todayTotal = builder.dailyTotals(yearSessions)[builder.calendar.startOfDay(for: Date())] ?? 0
         recentTags = (try? store.tags(limit: 6)) ?? []
         // Clearing the filter rebuilds through its didSet; don't build twice.
         if let filter = tagFilter, !recentTags.contains(filter) { tagFilter = nil } else { rebuildHeatmap() }
+    }
+
+    /// One day's sessions, oldest first, as the grid shows them (so the tag
+    /// filter applies).
+    func sessions(on day: Date) -> [FocusSession] {
+        let start = builder.calendar.startOfDay(for: day)
+        guard let end = builder.calendar.date(byAdding: .day, value: 1, to: start) else { return [] }
+        let all = (try? store.sessions(from: start, to: end)) ?? []
+        return tagFilter.map { t in all.filter { $0.tag == t } } ?? all
     }
 
     private func rebuildHeatmap() {
@@ -330,5 +350,6 @@ final class AppModel {
         static let sound = "drill.sound"
         static let theme = "drill.theme"
         static let mode = "drill.mode"
+        static let goal = "drill.goal"
     }
 }

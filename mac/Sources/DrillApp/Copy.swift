@@ -79,6 +79,14 @@ enum Copy {
         }
     }
 
+    /// The daily goal as settings show it: "off", "30m", "2h", "1h 30m".
+    static func goal(_ seconds: TimeInterval) -> String {
+        seconds <= 0 ? "off" : amount(seconds)
+    }
+
+    /// A session's start, as a day's list shows it: "9:05 am".
+    static let timeFormat: Date.FormatStyle = .dateTime.hour().minute()
+
     static func streak(_ days: Int) -> String {
         days == 1 ? "1 day" : "\(days) days"
     }

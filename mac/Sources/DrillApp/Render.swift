@@ -47,6 +47,23 @@ enum Render {
                 }
             }
         }
+        // A day's popover, on its own: it opens in a window of its own,
+        // which offscreen rendering can't reach.
+        for theme in Theme.allCases {
+            let model = demo(theme: theme)
+            let view = DayDetail(day: Date(), sessions: model.sessions(on: Date()))
+                .environment(\.colorScheme, theme == .light ? .light : .dark)
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 2
+            var image: NSImage?
+            NSAppearance(named: theme == .light ? .aqua : .darkAqua)!
+                .performAsCurrentDrawingAppearance { image = renderer.nsImage }
+            if let tiff = image?.tiffRepresentation,
+               let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+                try? png.write(to: folder.appending(path: "day-\(theme.rawValue).png"))
+            }
+        }
+
         // The marks, large, to judge their drawing.
         let marks = HStack(spacing: 40) {
             ForEach([Glyph.Kind.tomato, .stopwatch, .drill], id: \.self) { kind in
@@ -72,6 +89,7 @@ enum Render {
         ("pomodoro-running", .pomodoro, { m in m.tag = "15-213"; m.toggle(); m.freeze(at: Date() + 863) }),
         ("stopwatch-idle", .stopwatch, { _ in }),
         ("stopwatch-running", .stopwatch, { m in m.tag = "piano"; m.toggle(); m.freeze(at: Date() + 2537) }),
+        ("goal-met", .pomodoro, { m in m.dailyGoal = 30 * 60 }),
     ]
 
     /// A model on an in-memory store with a few months of sessions, and
@@ -82,7 +100,7 @@ enum Render {
         let store = try! SQLiteSessionStore.inMemory()
         var rng = SystemRandomNumberGenerator()
         let tags = ["15-213", "jp", "piano"]
-        for back in 0..<200 where back < 13 || Int.random(in: 0..<10, using: &rng) < 6 {
+        for back in 1..<200 where back < 13 || Int.random(in: 0..<10, using: &rng) < 6 {
             let day = Calendar.current.date(byAdding: .day, value: -back, to: Date())!
             for b in 0..<Int.random(in: 1...4, using: &rng) {
                 let start = Calendar.current.date(bySettingHour: 9 + b * 2, minute: 0, second: 0, of: day)!
@@ -90,6 +108,15 @@ enum Render {
                                              plannedSeconds: 1500, completed: true, tag: tags.randomElement(),
                                              deviceID: "render", updatedAt: start))
             }
+        }
+        // Today: two pomodoros and one stopwatch block.
+        let morning = Calendar.current.date(bySettingHour: 9, minute: 5, second: 0, of: Date())!
+        for (offset, length, planned, tag) in [(0.0, 1500.0, 1500.0, "15-213"), (1800, 1500, 1500, "15-213"),
+                                               (5400, 2720, 0, "piano")] {
+            let start = morning + offset
+            try? store.save(FocusSession(startedAt: start, endedAt: start + length, focusSeconds: length,
+                                         plannedSeconds: planned, completed: true, tag: tag,
+                                         deviceID: "render", updatedAt: start))
         }
         let model = AppModel(store: store, defaults: defaults)
         model.theme = theme
