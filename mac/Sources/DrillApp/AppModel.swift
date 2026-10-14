@@ -9,12 +9,23 @@ enum Theme: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// Pomodoro counts down through focus and breaks; stopwatch counts up a
+/// plain block of time until you stop it.
+enum TimerMode: String {
+    case pomodoro, stopwatch
+}
+
 /// The app's single source of truth: owns the engine, drives its clock,
 /// writes finished focus blocks to the store, and keeps the heatmap fresh.
 /// Views read from it and call its intents; nothing else touches the store.
 @Observable @MainActor
 final class AppModel {
     private(set) var engine: PomodoroEngine
+    private(set) var stopwatch = Stopwatch()
+    /// Which timer the face shows. Switches only between blocks.
+    private(set) var mode: TimerMode {
+        didSet { defaults.set(mode.rawValue, forKey: Keys.mode) }
+    }
     /// Wall clock as of the last tick; views derive countdowns from it.
     private(set) var now = Date()
     private(set) var heatmap = Heatmap.empty
@@ -77,6 +88,7 @@ final class AppModel {
         self.tag = defaults.string(forKey: Keys.tag) ?? ""
         self.soundOn = defaults.object(forKey: Keys.sound) as? Bool ?? true
         self.theme = defaults.string(forKey: Keys.theme).flatMap(Theme.init) ?? .dark
+        self.mode = defaults.string(forKey: Keys.mode).flatMap(TimerMode.init) ?? .pomodoro
 
         reload()
         notifier.onStart = { [weak self] offered in self?.startNext(offered) }
@@ -122,15 +134,37 @@ final class AppModel {
 
     // MARK: Derived
 
-    var remaining: TimeInterval { engine.remaining(at: now) }
-    var progress: Double { engine.progress(at: now) }
+    var isStopwatch: Bool { mode == .stopwatch }
+    /// The time the face shows: left on the pomodoro, counted on the stopwatch.
+    var shown: TimeInterval { isStopwatch ? stopwatch.elapsed(at: now) : engine.remaining(at: now) }
+    /// The ring: the phase's progress, or the stopwatch's sweep round each hour.
+    var progress: Double {
+        isStopwatch ? stopwatch.elapsed(at: now).truncatingRemainder(dividingBy: 3600) / 3600 : engine.progress(at: now)
+    }
+    /// The digits, as the face and the menu bar show them.
+    var clock: String { Copy.clock(shown, countingUp: isStopwatch) }
+    /// The whole second shown, for animating only when it changes.
+    var shownSecond: Int { Int(isStopwatch ? (shown + 1e-6).rounded(.down) : shown.rounded(.up)) }
+    /// The quiet word above the digits. The stopwatch only ever says "paused":
+    /// the mark under its digits already says what it is.
+    var status: String? {
+        isStopwatch ? (isActive && !isRunning ? "paused" : nil)
+            : Copy.status(engine.phase, running: isRunning, active: isActive)
+    }
     var phase: Phase { engine.phase }
-    var isRunning: Bool { engine.isRunning }
-    var isActive: Bool { !engine.isIdle }
+    var isRunning: Bool { isStopwatch ? stopwatch.isRunning : engine.isRunning }
+    var isActive: Bool { isStopwatch ? !stopwatch.isIdle : !engine.isIdle }
 
     // MARK: Intents
 
     func toggle() {
+        if isStopwatch {
+            now = Date()
+            if stopwatch.isIdle { captureTag() }
+            stopwatch.toggle(at: now)
+            syncTicking()
+            return
+        }
         let starting = engine.isIdle
         now = Date()
         engine.toggle(at: now)
@@ -142,7 +176,9 @@ final class AppModel {
         syncTicking()
     }
 
+    /// Pomodoro only: a stopwatch has no phases to skip.
     func skip() {
+        guard !isStopwatch else { return }
         now = Date()
         notifier.cancel()
         handle(engine.skip(at: now))
@@ -151,16 +187,36 @@ final class AppModel {
 
     func reset() {
         now = Date()
+        if isStopwatch {
+            if let record = stopwatch.reset(at: now) { log(record) }
+            syncTicking()
+            return
+        }
         notifier.cancel()
         if let record = engine.reset(at: now) { log(record) }
         syncTicking()
+    }
+
+    /// For --render: shows the face as of `date`, without ticking.
+    func freeze(at date: Date) {
+        tickTask?.cancel()
+        tickTask = nil
+        now = date
+    }
+
+    /// Pomodoro ⇄ stopwatch, between blocks only, so switching never
+    /// drops time you're in the middle of.
+    func switchMode() {
+        guard !isActive else { return }
+        mode = isStopwatch ? .pomodoro : .stopwatch
+        now = Date()
     }
 
     /// The banner's "start break" / "start focus": starts the phase it
     /// offered, only if that phase is still waiting. Never resumes a paused
     /// phase or starts a different one.
     private func startNext(_ offered: Phase) {
-        if engine.isIdle && engine.phase == offered { toggle() }
+        if !isStopwatch && engine.isIdle && engine.phase == offered { toggle() }
     }
 
     /// Themes are appearances: the Ink palette resolves per appearance, so
@@ -180,9 +236,9 @@ final class AppModel {
     private func syncTicking() {
         tickTask?.cancel()
         tickTask = nil
-        guard engine.isRunning else { return }
+        guard isRunning else { return }
         tickTask = Task { [weak self] in
-            while !Task.isCancelled, let wait = self?.engine.untilNextSecond(at: Date()) {
+            while !Task.isCancelled, let wait = self?.untilNextSecond() {
                 try? await Task.sleep(for: .seconds(wait), tolerance: .milliseconds(20))
                 guard !Task.isCancelled else { return }
                 self?.tick()
@@ -190,8 +246,13 @@ final class AppModel {
         }
     }
 
+    private func untilNextSecond() -> TimeInterval? {
+        isStopwatch ? stopwatch.untilNextSecond(at: Date()) : engine.untilNextSecond(at: Date())
+    }
+
     private func tick() {
         now = Date()
+        guard !isStopwatch else { return }
         // Only touch the observed engine when the phase is really over:
         // a no-op mutation would still redraw everything that reads it.
         guard case .running(let endsAt) = engine.status, now >= endsAt,
@@ -204,7 +265,7 @@ final class AppModel {
     private func timeMoved() {
         reload()
         now = Date()
-        if engine.isRunning { tick(); syncTicking() }
+        if isRunning { tick(); syncTicking() }
     }
 
     private func handle(_ t: Transition) {
@@ -268,5 +329,6 @@ final class AppModel {
         static let tag = "drill.tag"
         static let sound = "drill.sound"
         static let theme = "drill.theme"
+        static let mode = "drill.mode"
     }
 }

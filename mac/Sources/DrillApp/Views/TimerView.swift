@@ -3,6 +3,8 @@ import SwiftUI
 import DrillCore
 
 /// The ring, the numbers, what you're studying, and the three controls.
+/// Between blocks, clicking the face switches pomodoro ⇄ stopwatch; the mark
+/// under the digits says which one it is.
 struct TimerView: View {
     @Environment(AppModel.self) private var model
     @FocusState private var tagFocused: Bool
@@ -17,22 +19,31 @@ struct TimerView: View {
                 VStack(spacing: 8) {
                     // A single quiet word, only when there's something to say;
                     // the fixed height keeps the digits from jumping.
-                    Text(Copy.status(model.phase, running: model.isRunning, active: model.isActive) ?? " ")
+                    Text(model.status ?? " ")
                         .font(Ink.text(13))
                         .foregroundStyle(Ink.faint)
                         .contentTransition(.opacity)
-                        .animation(Ink.ease, value: model.phase)
+                        .animation(Ink.ease, value: model.status)
                         .accessibilityHidden(true)
-                    Text(Copy.clock(model.remaining))
+                    Text(model.clock)
                         .font(Ink.digits(58))
                         .foregroundStyle(Ink.ink)
-                        .contentTransition(.numericText(countsDown: true))
-                        .animation(.snappy, value: Int(model.remaining.rounded(.up)))
+                        .contentTransition(.numericText(countsDown: !model.isStopwatch))
+                        .animation(.snappy, value: model.shownSecond)
+                        .animation(.snappy, value: model.mode)
                         .modifier(SpokenTimer())
+                    ModeMark()
+                    // A stopwatch has no cycle; the dots fade but keep their room.
                     CycleDots(filled: model.engine.cyclePosition, of: model.config.longBreakEvery)
+                        .opacity(model.isStopwatch ? 0 : 1)
+                        .animation(Ink.ease, value: model.mode)
                 }
             }
             .frame(width: 270, height: 270)
+            .contentShape(Circle())
+            .onTapGesture(perform: model.switchMode)
+            .pointerStyle(model.isActive ? nil : .link)
+            .help(model.isActive ? "" : "switch to \(Copy.modeName(stopwatch: !model.isStopwatch))")
 
             tagField
                 .padding(.top, 30)
@@ -47,10 +58,13 @@ struct TimerView: View {
                     .keyboardShortcut(.defaultAction)
                 Button("skip", action: model.skip)
                     .buttonStyle(.inkLink)
+                    .opacity(model.isStopwatch ? 0 : 1)
+                    .disabled(model.isStopwatch)
             }
             .padding(.top, 28)
         }
         .animation(Ink.ease, value: model.isActive)
+        .animation(Ink.ease, value: model.mode)
     }
 
     private var tagField: some View {
@@ -93,6 +107,28 @@ struct TimerView: View {
     }
 }
 
+/// A small tomato or stopwatch under the digits, in plain ink: which timer
+/// this is. It's also the switch, for the keyboard and VoiceOver; the whole
+/// face switches too, for the pointer.
+private struct ModeMark: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Button(action: model.switchMode) {
+            Glyph(model.isStopwatch ? .stopwatch : .tomato, size: 18, boiling: model.isRunning, lineWidth: 1.5)
+                .id(model.mode)
+                .transition(.scale(scale: 0.5).combined(with: .opacity))
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        // Not .disabled: that would grey the mark mid-block. Switching
+        // already waits for the block to end.
+        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: model.mode)
+        .accessibilityLabel(Copy.modeName(stopwatch: model.isStopwatch))
+        .accessibilityHint(model.isActive ? "" : "switches to \(Copy.modeName(stopwatch: !model.isStopwatch))")
+    }
+}
+
 /// Where you are in the long-break cycle: small inked dots, filled as you go.
 private struct CycleDots: View {
     let filled: Int
@@ -113,14 +149,15 @@ private struct CycleDots: View {
     }
 }
 
-/// The countdown as VoiceOver says it: "focus", "12 minutes left".
+/// The timer as VoiceOver says it: "focus", "12 minutes left", or
+/// "stopwatch", "12 minutes"; "paused, …" while paused.
 struct SpokenTimer: ViewModifier {
     @Environment(AppModel.self) private var model
 
     func body(content: Content) -> some View {
+        let amount = model.isStopwatch ? Copy.spokenCounted(model.shown) : Copy.spokenLeft(model.shown)
         content
-            .accessibilityLabel(Copy.phaseName(model.phase))
-            .accessibilityValue(model.isActive && !model.isRunning
-                ? "paused, \(Copy.spokenLeft(model.remaining))" : Copy.spokenLeft(model.remaining))
+            .accessibilityLabel(model.isStopwatch ? "stopwatch" : Copy.phaseName(model.phase))
+            .accessibilityValue(model.isActive && !model.isRunning ? "paused, \(amount)" : amount)
     }
 }

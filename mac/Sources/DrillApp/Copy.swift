@@ -37,6 +37,19 @@ enum Copy {
         return total == 1 ? "1 second left" : "\(total) seconds left"
     }
 
+    /// What VoiceOver says for the stopwatch: "12 minutes".
+    static func spokenCounted(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds)
+        if total >= 60 {
+            let m = total / 60
+            return m == 1 ? "1 minute" : "\(m) minutes"
+        }
+        return total == 1 ? "1 second" : "\(total) seconds"
+    }
+
+    /// The face's mode, as the mark under the digits shows it.
+    static func modeName(stopwatch: Bool) -> String { stopwatch ? "stopwatch" : "pomodoro" }
+
     /// The ring's spoken name: the phase, whether or not it's running.
     static func phaseName(_ phase: Phase) -> String {
         switch phase {
@@ -46,8 +59,10 @@ enum Copy {
         }
     }
 
-    static func clock(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds.rounded(.up))
+    /// A countdown rounds up (it never shows 00:00 with time left); a count
+    /// up rounds down (it never shows a second that hasn't passed).
+    static func clock(_ seconds: TimeInterval, countingUp: Bool = false) -> String {
+        let total = Int(countingUp ? (seconds + 1e-6).rounded(.down) : seconds.rounded(.up))
         let h = total / 3600, m = (total % 3600) / 60, s = total % 60
         return h > 0
             ? String(format: "%d:%02d:%02d", h, m, s)

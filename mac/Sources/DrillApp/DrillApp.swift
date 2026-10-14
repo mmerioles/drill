@@ -10,6 +10,7 @@ struct DrillApp: App {
     @State private var sync: Sync
 
     init() {
+        Render.runIfAsked()
         Rename.carryOver()
         let model = AppModel.live()
         let sync = Sync(store: model.store, deviceID: model.deviceID, onPulled: { [weak model] in model?.reload() })
@@ -69,8 +70,13 @@ private struct TimerCommands: Commands {
                 .keyboardShortcut(.return, modifiers: .command)
             Button("Skip", action: model.skip)
                 .keyboardShortcut(.rightArrow, modifiers: .command)
+                .disabled(model.isStopwatch)
             Button("Reset", action: model.reset)
                 .keyboardShortcut("r", modifiers: .command)
+            Divider()
+            Button(model.isStopwatch ? "Switch to Pomodoro" : "Switch to Stopwatch", action: model.switchMode)
+                .keyboardShortcut("t", modifiers: .command)
+                .disabled(model.isActive)
         }
     }
 }

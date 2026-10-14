@@ -8,7 +8,7 @@ struct MenuBarLabel: View {
 
     var body: some View {
         if model.isActive {
-            Text("\(word) \(Copy.clock(model.remaining))".trimmingCharacters(in: .whitespaces))
+            Text("\(word) \(model.clock)".trimmingCharacters(in: .whitespaces))
                 .monospacedDigit()
         } else {
             Image(nsImage: Self.drill)
@@ -19,7 +19,8 @@ struct MenuBarLabel: View {
     /// "paused" while paused, "break" through either break, and nothing
     /// for a running focus block: the countdown says enough.
     private var word: String {
-        if !model.isRunning { return Copy.status(model.phase, running: false, active: true) ?? "" }
+        if !model.isRunning { return "paused" }
+        if model.isStopwatch { return "" }
         return model.phase.isBreak ? "break" : ""
     }
 
@@ -48,17 +49,17 @@ struct MenuBarPanel: View {
                 Glyph(.drill, size: 16, boiling: model.isRunning, lineWidth: 1.4, tint: Ink.accent)
                 Text("drill").font(Ink.word(14)).foregroundStyle(Ink.ink)
                 Spacer()
-                if let status = Copy.status(model.phase, running: model.isRunning, active: model.isActive) {
+                if let status = model.status {
                     Text(status).font(Ink.text(12)).foregroundStyle(Ink.faint)
                 }
             }
 
             HStack(alignment: .center) {
-                Text(Copy.clock(model.remaining))
+                Text(model.clock)
                     .font(Ink.digits(34))
                     .foregroundStyle(Ink.ink)
-                    .contentTransition(.numericText(countsDown: true))
-                    .animation(.snappy, value: Int(model.remaining.rounded(.up)))
+                    .contentTransition(.numericText(countsDown: !model.isStopwatch))
+                    .animation(.snappy, value: model.shownSecond)
                     .modifier(SpokenTimer())
                 Spacer()
                 DoodleRing(progress: model.progress, lineWidth: 2, boiling: false)
@@ -69,7 +70,9 @@ struct MenuBarPanel: View {
             HStack(spacing: 16) {
                 Button(model.isRunning ? "pause" : (model.isActive ? "resume" : "start"), action: model.toggle)
                     .buttonStyle(InkCapsuleStyle(size: 13, minWidth: 64))
-                Button("skip", action: model.skip).buttonStyle(.inkLink(selected: false, size: 13))
+                if !model.isStopwatch {
+                    Button("skip", action: model.skip).buttonStyle(.inkLink(selected: false, size: 13))
+                }
                 if model.isActive {
                     Button("reset", action: model.reset).buttonStyle(.inkLink(selected: false, size: 13))
                 }
