@@ -329,6 +329,67 @@ final class AppModel {
         if let filter = tagFilter, !recentTags.contains(filter) { tagFilter = nil } else { rebuildHeatmap() }
     }
 
+    // MARK: Editing history
+
+    /// Writes a changed session: newer than every copy of it, even one from
+    /// a device whose clock runs ahead, and at least a whole second newer
+    /// (servers keep whole seconds), so the change wins the sync merge.
+    @discardableResult
+    private func rewrite(_ session: FocusSession) -> FocusSession {
+        var s = session
+        s.updatedAt = max(Date(), session.updatedAt.addingTimeInterval(1))
+        do {
+            try store.save(s)
+            lastError = nil
+            onLogged?()
+        } catch {
+            lastError = "couldn't save that change."
+        }
+        reload()
+        return s
+    }
+
+    /// Removes a block, everywhere: a tombstone that syncs like any write.
+    /// Returns the tombstone, which is what `restore` takes back.
+    @discardableResult
+    func delete(_ session: FocusSession) -> FocusSession {
+        var s = session
+        s.deletedAt = Date()
+        return rewrite(s)
+    }
+
+    /// Takes back a delete, from its tombstone, so the restore is newer.
+    func restore(_ tombstone: FocusSession) {
+        var s = tombstone
+        s.deletedAt = nil
+        rewrite(s)
+    }
+
+    /// Saves an edited block: its start, length and subject.
+    func update(_ session: FocusSession, start: Date, length: TimeInterval, tag: String?) {
+        var s = session
+        s.startedAt = start
+        s.endedAt = start + length
+        s.focusSeconds = length
+        s.tag = Self.cleanTag(tag)
+        rewrite(s)
+    }
+
+    /// Adds a block you didn't time. It has no plan, like a stopwatch block.
+    func add(start: Date, length: TimeInterval, tag: String?) {
+        rewrite(FocusSession(startedAt: start, endedAt: start + length, focusSeconds: length,
+                             plannedSeconds: 0, completed: true, tag: Self.cleanTag(tag),
+                             deviceID: deviceID, updatedAt: Date()))
+    }
+
+    /// The subject a block starts with: the open filter's, else what you're studying.
+    var suggestedTag: String { tagFilter ?? tag }
+
+    private static func cleanTag(_ tag: String?) -> String? {
+        let t = tag?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        return t.isEmpty ? nil : t
+    }
+
     /// One day's sessions, oldest first, as the grid shows them (so the tag
     /// filter applies).
     func sessions(on day: Date) -> [FocusSession] {

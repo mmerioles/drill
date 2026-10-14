@@ -20,8 +20,7 @@ struct HeatmapSection: View {
                 TagFilter()
             }
 
-            HeatGrid(heatmap: model.heatmap, hovered: $hovered, opened: $opened,
-                     sessions: { model.sessions(on: $0) })
+            HeatGrid(heatmap: model.heatmap, hovered: $hovered, opened: $opened)
                 // The grid is a picture; VoiceOver gets its summary.
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("your year")
@@ -137,7 +136,7 @@ private struct HeatGrid: View {
     let heatmap: Heatmap
     @Binding var hovered: HeatmapDay?
     @Binding var opened: OpenDay?
-    let sessions: (Date) -> [FocusSession]
+    @Environment(AppModel.self) private var model
     @State private var width: CGFloat = 706
 
     var body: some View {
@@ -173,7 +172,8 @@ private struct HeatGrid: View {
         }
         .pointerStyle(hovered == nil ? nil : .link)
         .popover(item: $opened, attachmentAnchor: .rect(.rect(opened?.anchor ?? .zero)), arrowEdge: .top) { open in
-            DayDetail(day: open.day, sessions: sessions(open.day))
+            DayDetail(day: open.day, sessions: model.sessions(on: open.day))
+                .environment(model)
                 .presentationBackground(Ink.paper)
         }
         .padding(.horizontal, -Cell.margin)

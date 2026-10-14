@@ -49,9 +49,11 @@ enum Render {
         }
         // A day's popover, on its own: it opens in a window of its own,
         // which offscreen rendering can't reach.
-        for theme in Theme.allCases {
+        for (theme, preview) in [(Theme.light, DayDetail.Preview.none), (.dark, .none),
+                                 (.light, .editingFirst), (.dark, .adding), (.light, .removedFirst)] {
             let model = demo(theme: theme)
-            let view = DayDetail(day: Date(), sessions: model.sessions(on: Date()))
+            let view = DayDetail(day: Date(), sessions: model.sessions(on: Date()), preview: preview)
+                .environment(model)
                 .environment(\.colorScheme, theme == .light ? .light : .dark)
             let renderer = ImageRenderer(content: view)
             renderer.scale = 2
@@ -60,7 +62,7 @@ enum Render {
                 .performAsCurrentDrawingAppearance { image = renderer.nsImage }
             if let tiff = image?.tiffRepresentation,
                let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
-                try? png.write(to: folder.appending(path: "day-\(theme.rawValue).png"))
+                try? png.write(to: folder.appending(path: "day-\(preview)-\(theme.rawValue).png"))
             }
         }
 
