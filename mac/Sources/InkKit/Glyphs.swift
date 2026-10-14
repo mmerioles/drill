@@ -110,36 +110,37 @@ public struct Glyph: View {
         return paths
     }
 
-    /// A round fruit, a little wider than tall, with a star of five leaves
-    /// lying over its shoulders and a short stem: the pomodoro.
+    /// The pomodoro: a round fruit under a star-shaped calyx. The drawing
+    /// is IconPark's "tomato" (Apache 2.0, © ByteDance; see
+    /// THIRD_PARTY_NOTICES.md), on its 48-unit grid, with drill's wobble on
+    /// every point so it boils like the rest of the ink.
     static func tomato(_ s: CGFloat, seed: UInt64, amp: Double) -> [Path] {
-        let c = CGPoint(x: s * 0.5, y: s * 0.58)
-        let rx = Double(s) * 0.42, ry = Double(s) * 0.33
-        // A soft dip at the top where the stem sits.
-        let body = (0..<22).map { i -> CGPoint in
-            let a = Double(i) / 22 * 2 * .pi - .pi / 2
-            let dip = 1 - 0.12 * pow(max(0, -sin(a)), 10)
-            return CGPoint(x: c.x + cos(a) * rx, y: c.y + sin(a) * ry * dip)
+        let k = s / 48
+        var w = Wobble(seed: seed)
+        // A little less wobble than the hand-drawn marks: it's already a drawing.
+        func p(_ x: Double, _ y: Double) -> CGPoint {
+            CGPoint(x: x * k + w.next() * amp * 0.8, y: y * k + w.next() * amp * 0.8)
         }
-        var paths = [Doodle.path(Doodle.jitter(body, seed: seed, amp: amp * 0.5), closed: true)]
 
-        // Five leaves fanning out from the stem's foot, each bowed and
-        // drooping onto the fruit like a calyx seen from the side.
-        let top = CGPoint(x: c.x, y: c.y - ry * 0.86)
-        var w = Wobble(seed: seed &+ 1)
-        for (dx, dy) in [(-0.27, 0.10), (-0.15, 0.15), (0.0, 0.11), (0.15, 0.15), (0.27, 0.10)] {
-            let tip = CGPoint(x: top.x + dx * s + w.next() * amp, y: top.y + dy * s + w.next() * amp)
-            var p = Path()
-            p.move(to: top)
-            p.addQuadCurve(to: tip, control: CGPoint(x: top.x + dx * s * 0.6, y: top.y - 0.02 * s))
-            paths.append(p)
+        // The fruit, notched at the top where the calyx sits.
+        var fruit = Path()
+        fruit.move(to: p(24, 44))
+        fruit.addCurve(to: p(44, 27.5), control1: p(35.046, 44), control2: p(44, 36.613))
+        fruit.addCurve(to: p(33, 12.984), control1: p(44, 21.058), control2: p(39.525, 15.701))
+        for (x, y) in [(29.5, 14.5), (30, 20), (23.5, 18), (17, 20), (17, 14.5), (14, 12.984)] {
+            fruit.addLine(to: p(x, y))
         }
-        var stem = Path()
-        stem.move(to: top)
-        stem.addQuadCurve(to: CGPoint(x: top.x + 0.07 * s, y: top.y - 0.17 * s + w.next() * amp),
-                          control: CGPoint(x: top.x - 0.01 * s, y: top.y - 0.12 * s))
-        paths.append(stem)
-        return paths
+        fruit.addCurve(to: p(4, 27.5), control1: p(8.022, 15.837), control2: p(4, 21.393))
+        fruit.addCurve(to: p(24, 44), control1: p(4, 36.613), control2: p(12.954, 44))
+        fruit.closeSubpath()
+
+        // The five-pointed calyx.
+        let star = [(23.5, 4.0), (27.309, 9.117), (36, 9.91), (29.663, 14.483), (31.5, 21),
+                    (23.5, 18), (15.5, 21), (17.337, 14.483), (11, 9.91), (19.691, 9.117)]
+        var calyx = Path()
+        calyx.addLines(star.map { p($0.0, $0.1) })
+        calyx.closeSubpath()
+        return [fruit, calyx]
     }
 
     /// A round face with a crown button on top and one hand: the stopwatch.
