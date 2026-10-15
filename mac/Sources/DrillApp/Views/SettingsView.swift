@@ -111,6 +111,7 @@ struct SettingsView: View {
 }
 
 /// A label and, to the right, its value and control.
+@MainActor
 private func row(_ label: String, @ViewBuilder trailing: () -> some View) -> some View {
     HStack(spacing: 12) {
         Text(label)
@@ -123,6 +124,7 @@ private func row(_ label: String, @ViewBuilder trailing: () -> some View) -> som
 }
 
 /// Rows in a wash, with an optional small title over it.
+@MainActor
 private func group(_ title: String? = nil, @ViewBuilder _ rows: () -> some View) -> some View {
     VStack(alignment: .leading, spacing: 8) {
         if let title {
@@ -135,6 +137,7 @@ private func group(_ title: String? = nil, @ViewBuilder _ rows: () -> some View)
 }
 
 /// The hairline between rows.
+@MainActor
 private var rule: some View {
     Rectangle().fill(Ink.ghost).frame(height: 1)
 }
