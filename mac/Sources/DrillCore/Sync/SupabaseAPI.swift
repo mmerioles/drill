@@ -121,7 +121,9 @@ public struct SupabaseAPI: Sendable {
     }
 
     private func call(_ path: String, token: String? = nil, body: Data, signingUp: Bool = false) async throws -> Data {
-        guard let url = URL(string: path, relativeTo: project.appending(path: "/")) else {
+        // Joined as text: `appending(path: "/")` doubles the slash on macOS 15.
+        let base = project.absoluteString.hasSuffix("/") ? String(project.absoluteString.dropLast()) : project.absoluteString
+        guard let url = URL(string: base + "/" + path) else {
             throw SyncError.unreachable
         }
         var request = URLRequest(url: url, timeoutInterval: 20)
