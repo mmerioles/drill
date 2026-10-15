@@ -47,6 +47,12 @@ internal static class Render
             Shot($"main-{t}-idle", () => MainScreen(theme, running: false, paused: false));
             Shot($"main-{t}-running", () => MainScreen(theme, running: true, paused: false));
             Shot($"main-{t}-paused", () => MainScreen(theme, running: true, paused: true));
+            Shot($"palette-{t}", () =>
+            {
+                var page = new MainPage(new Demo(theme));
+                page.OpenPalette("st");
+                return new InkFrame(page, underCaption: true);
+            });
             Shot($"settings-{t}", () =>
             {
                 var shell = new Demo(theme);

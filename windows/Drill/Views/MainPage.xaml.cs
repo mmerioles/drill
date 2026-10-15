@@ -16,6 +16,7 @@ namespace Drill.Views;
 public partial class MainPage : UserControl
 {
     private readonly Shell _shell;
+    private readonly CommandPalette _palette;
     private AppModel Model => _shell.Model;
     private bool _listening;
     /// <summary>Something changed while the window was hidden in the tray; caught up when it's back.</summary>
@@ -26,6 +27,8 @@ public partial class MainPage : UserControl
         _shell = shell;
         DataContext = shell;
         InitializeComponent();
+        _palette = new CommandPalette(shell, () => Focus());
+        Root.Children.Add(_palette);
 
         // The app's objects outlive this page: listen only while it's in a window.
         Loaded += (_, _) => Listen(true);
@@ -93,6 +96,7 @@ public partial class MainPage : UserControl
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
         base.OnPreviewKeyDown(e);
+        if (_palette.IsOpen) return;
         var ctrl = Keyboard.Modifiers == ModifierKeys.Control;
         var plain = Keyboard.Modifiers == ModifierKeys.None;
         var typing = TagBox.IsKeyboardFocusWithin || Keyboard.FocusedElement is TextBoxBase or PasswordBox;
@@ -111,6 +115,9 @@ public partial class MainPage : UserControl
                 break;
             case Key.OemComma when ctrl:
                 _shell.OpenSettings();
+                break;
+            case Key.K when ctrl:
+                OpenPalette();
                 break;
             default:
                 return;
@@ -252,6 +259,8 @@ public partial class MainPage : UserControl
     /// <summary>The accent at a heatmap level, for the legend.</summary>
     private static System.Windows.Media.Brush AccentBrush(double alpha) =>
         Palette.Brush(Palette.WithAlpha(Palette.Current.Accent, alpha));
+
+    public void OpenPalette(string query = "") => _palette.Open(query);
 
     private void OnToggle(object sender, RoutedEventArgs e) => Model.Toggle();
     private void OnSkip(object sender, RoutedEventArgs e) => Model.Skip();

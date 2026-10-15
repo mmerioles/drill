@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.PathEffect
@@ -29,6 +30,12 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -44,8 +51,11 @@ import io.github.mmerioles.drill.ink.LocalPalette
 /** The ring, clock, tag and controls. [now] and [boil] are read only where
  *  drawn, so a tick redraws the ring and digits, not the whole view. */
 @Composable
-fun TimerView(model: AppModel, now: () -> Long, boil: () -> Long, toggle: () -> Unit) {
+fun TimerView(model: AppModel, now: () -> Long, boil: () -> Long, toggle: () -> Unit, palette: () -> Unit) {
     val ink = LocalPalette.current
+    val focus = LocalFocusManager.current
+    val haptics = LocalHapticFeedback.current
+    val openPalette by rememberUpdatedState(palette)
     val timer = model.timer
     val status = when {
         timer.phase == Phase.Focus && timer.status is Status.Idle -> ""
@@ -58,7 +68,19 @@ fun TimerView(model: AppModel, now: () -> Long, boil: () -> Long, toggle: () -> 
 
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            Modifier.size(RING).clearAndSetSemantics { contentDescription = spoken },
+            Modifier
+                .size(RING)
+                .clearAndSetSemantics {
+                    contentDescription = spoken
+                    onLongClick("commands") { palette(); true }
+                }
+                // A tap still just dismisses the keyboard; a long press opens the palette.
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = { focus.clearFocus() },
+                        onLongPress = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); openPalette() },
+                    )
+                },
             contentAlignment = Alignment.Center,
         ) {
             Canvas(Modifier.fillMaxSize()) {

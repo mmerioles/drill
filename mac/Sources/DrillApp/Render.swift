@@ -16,11 +16,11 @@ enum Render {
         _ = NSApplication.shared
         var failed = 0
         for theme in Theme.allCases {
-            for (name, mode, state) in shots {
+            for (name, mode, state, query) in shots {
                 let model = demo(theme: theme)
                 if model.mode != mode { model.switchMode() }
                 state(model)
-                let view = MainView()
+                let view = MainView(palettePreview: query)
                     .environment(model)
                     .environment(Updater())
                     .environment(Sync(store: model.store, deviceID: model.deviceID,
@@ -74,12 +74,13 @@ enum Render {
         return true
     }
 
-    private static let shots: [(String, TimerMode, (AppModel) -> Void)] = [
-        ("pomodoro-idle", .pomodoro, { _ in }),
-        ("pomodoro-running", .pomodoro, { m in m.tag = "15-213"; m.toggle(); m.freeze(at: Date() + 863) }),
-        ("stopwatch-idle", .stopwatch, { _ in }),
-        ("stopwatch-running", .stopwatch, { m in m.tag = "piano"; m.toggle(); m.freeze(at: Date() + 2537) }),
-        ("goal-met", .pomodoro, { m in m.dailyGoal = 30 * 60 }),
+    private static let shots: [(String, TimerMode, (AppModel) -> Void, String?)] = [
+        ("pomodoro-idle", .pomodoro, { _ in }, nil),
+        ("pomodoro-running", .pomodoro, { m in m.tag = "15-213"; m.toggle(); m.freeze(at: Date() + 863) }, nil),
+        ("stopwatch-idle", .stopwatch, { _ in }, nil),
+        ("stopwatch-running", .stopwatch, { m in m.tag = "piano"; m.toggle(); m.freeze(at: Date() + 2537) }, nil),
+        ("goal-met", .pomodoro, { m in m.dailyGoal = 30 * 60 }, nil),
+        ("palette", .pomodoro, { _ in }, "st"),
     ]
 
     /// An in-memory store with a few months of sessions, and throwaway defaults.

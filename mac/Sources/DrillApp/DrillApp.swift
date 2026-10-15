@@ -63,9 +63,14 @@ struct DrillApp: App {
 
 private struct TimerCommands: Commands {
     let model: AppModel
+    @FocusedValue(\.palette) private var palette
 
     var body: some Commands {
         CommandMenu("Timer") {
+            Button("Commands…") { palette?.wrappedValue.toggle() }
+                .keyboardShortcut("k", modifiers: .command)
+                .disabled(palette == nil)
+            Divider()
             Button(model.isRunning ? "Pause" : (model.isActive ? "Resume" : "Start"), action: model.toggle)
                 .keyboardShortcut(.return, modifiers: .command)
             Button("Skip", action: model.skip)

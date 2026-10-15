@@ -252,6 +252,41 @@ button, input { font: inherit; color: inherit; }
 .inspo li a:hover span { color: var(--ink); }
 #inspo[data-page="all"] ul { max-height: 360px; overflow-y: auto; scrollbar-width: none; }
 
+/* Command palette: a field and up to eight rows, about a fifth of the way down. */
+
+.palette {
+  margin: 20vh auto auto; width: min(520px, calc(100vw - 32px));
+  padding: 6px; border: 0; border-radius: 14px;
+  background: var(--paper); color: var(--ink);
+  box-shadow: 0 0 0 1px var(--ghost), 0 18px 48px rgb(0 0 0 / .18);
+}
+.palette::backdrop { background: rgb(0 0 0 / .06); }
+.palette[open] { animation: drop .12s ease-out; }
+.palette.closing { animation: fade .08s ease-in forwards; }
+.palette.closing::backdrop { animation: fade .08s ease-in forwards; }
+@keyframes drop { from { opacity: 0; transform: translateY(-6px); } }
+@keyframes fade { to { opacity: 0; } }
+.palette input {
+  display: block; width: 100%; padding: 10px 12px;
+  background: none; border: 0; outline: none; font-size: 16px;
+}
+.palette input::placeholder { color: var(--faint); }
+.palette ul {
+  list-style: none; padding: 0; max-height: calc(8 * 36px); overflow-y: auto; scrollbar-width: none;
+}
+.palette ul:not(:empty) { margin-top: 4px; }
+.palette li {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  height: 36px; padding: 0 12px; border-radius: 8px;
+  color: var(--faint); font-size: 14px; cursor: pointer;
+  white-space: nowrap;
+}
+.palette li span { overflow: hidden; text-overflow: ellipsis; }
+.palette li b { color: var(--ink); font-weight: inherit; }
+.palette li[aria-selected="true"] { background: var(--wash); }
+.palette li.empty { cursor: default; }
+.palette kbd { font: inherit; font-size: 12px; color: var(--faint); }
+
 /* Demo: the app on the download site (?demo), without an account. */
 
 .demo #sync, .demo .sync-group { display: none; }

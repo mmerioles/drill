@@ -5,6 +5,8 @@ import DrillCore
 /// A year, a week per column. Each cell wobbles by a fixed seed, so the grid
 /// looks hand-ruled but holds still.
 struct HeatmapSection: View {
+    /// Bumped to open today's popover, e.g. from the palette.
+    var openToday = 0
     @Environment(AppModel.self) private var model
     @State private var hovered: HeatmapDay?
     @State private var opened: OpenDay?
@@ -16,7 +18,7 @@ struct HeatmapSection: View {
                 TagFilter()
             }
 
-            HeatGrid(heatmap: model.heatmap, hovered: $hovered, opened: $opened)
+            HeatGrid(heatmap: model.heatmap, hovered: $hovered, opened: $opened, openToday: openToday)
                 // The grid is a picture; VoiceOver gets its summary.
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("your year")
@@ -130,6 +132,7 @@ private struct HeatGrid: View {
     let heatmap: Heatmap
     @Binding var hovered: HeatmapDay?
     @Binding var opened: OpenDay?
+    let openToday: Int
     @Environment(AppModel.self) private var model
     @State private var width: CGFloat = 706
 
@@ -164,6 +167,16 @@ private struct HeatGrid: View {
             opened = OpenDay(day: day.date, anchor: rect(w, d, m).offsetBy(dx: Cell.margin, dy: 0))
         }
         .pointerStyle(hovered == nil ? nil : .link)
+        .onChange(of: openToday) {
+            let m = GridMetrics(width: width, columns: heatmap.weeks.count)
+            for (w, week) in heatmap.weeks.enumerated() {
+                for (d, day) in week.enumerated() {
+                    if let day, Calendar.current.isDateInToday(day.date) {
+                        opened = OpenDay(day: day.date, anchor: rect(w, d, m).offsetBy(dx: Cell.margin, dy: 0))
+                    }
+                }
+            }
+        }
         .popover(item: $opened, attachmentAnchor: .rect(.rect(opened?.anchor ?? .zero)), arrowEdge: .top) { open in
             DayDetail(day: open.day, sessions: model.sessions(on: open.day))
                 .environment(model)

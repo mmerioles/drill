@@ -40,6 +40,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -65,6 +66,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import io.github.mmerioles.drill.AppModel
 import io.github.mmerioles.drill.DrillApp
 import io.github.mmerioles.drill.Theme
+import io.github.mmerioles.drill.core.Command
 import io.github.mmerioles.drill.core.Copy
 import io.github.mmerioles.drill.core.Status
 import io.github.mmerioles.drill.data.Sync
@@ -73,9 +75,11 @@ import io.github.mmerioles.drill.ink.Doodle
 import io.github.mmerioles.drill.ink.LocalPalette
 import io.github.mmerioles.drill.ink.Palette
 import kotlinx.coroutines.delay
+import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
     private val model by lazy { DrillApp.model(this) }
+    private val palette = mutableStateOf(false)
 
     /** Midnight or a clock/zone change moves the year's "today". */
     private val clockChanged = object : BroadcastReceiver() {
@@ -87,7 +91,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         model.updater.start()
         model.pinNightMode()
-        setContent { App(model) }
+        setContent { App(model, palette) }
     }
 
     override fun onStart() {
@@ -114,11 +118,20 @@ class MainActivity : ComponentActivity() {
         model.updater.checkIfStale(15 * 60_000L)
     }
 
+    /** Ctrl+K opens the palette, even from the tag field. */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_K && event.isCtrlPressed) {
+            if (event.action == KeyEvent.ACTION_DOWN) palette.value = true
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     /** With a keyboard: space or enter starts and pauses, unless typing. */
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
         val key = keyCode == KeyEvent.KEYCODE_SPACE || keyCode == KeyEvent.KEYCODE_ENTER ||
             keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
-        if (key && !Typing.active && event.hasNoModifiers()) {
+        if (key && !Typing.active && !palette.value && event.hasNoModifiers()) {
             model.toggle()
             return true
         }
@@ -133,21 +146,23 @@ else SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
 enum class Open { None, Settings, Account, Inspo }
 
 @Composable
-fun App(model: AppModel) {
+fun App(model: AppModel, palette: MutableState<Boolean>) {
     val dark = model.theme == Theme.Dark
     val activity = LocalContext.current as ComponentActivity
     SideEffect { activity.enableEdgeToEdge(bars(model.theme), bars(model.theme)) }
     CompositionLocalProvider(LocalPalette provides if (dark) Palette.dark else Palette.light) {
-        Screen(model)
+        Screen(model, palette)
     }
 }
 
 @Composable
-fun Screen(model: AppModel) {
+fun Screen(model: AppModel, palette: MutableState<Boolean>) {
     val ink = LocalPalette.current
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var open by rememberSaveable { mutableStateOf(Open.None) }
+    var filter by rememberSaveable { mutableStateOf<String?>(null) }
+    var picked by remember { mutableStateOf<LocalDate?>(null) }
 
     // Ticks on each second boundary while running and on screen; only the
     // ring and digits read it. At zero, catch up rather than wait for the alarm.
@@ -230,11 +245,45 @@ fun Screen(model: AppModel) {
         ) {
             Header(model) { open = it }
             Spacer(Modifier.height(28.dp))
-            TimerView(model, { clock.longValue }, { boil.longValue }, toggle)
+            TimerView(model, { clock.longValue }, { boil.longValue }, toggle) { palette.value = true }
             Spacer(Modifier.height(48.dp))
-            YearView(model)
+            YearView(model, filter, { filter = it }, picked, { picked = it })
         }
     }
+
+    CommandPalette(
+        palette.value,
+        commands = {
+            val sync = model.sync
+            val tags = model.recentTags
+            buildList {
+                val title = when (model.timer.status) {
+                    is Status.Running -> "pause"
+                    Status.Idle -> "start"
+                    is Status.Paused -> "resume"
+                }
+                add(Command("toggle", title, "space", listOf("timer"), toggle))
+                add(Command("skip", "skip", keywords = listOf("timer"), run = model::skip))
+                if (model.isActive) add(Command("reset", "reset", keywords = listOf("timer"), run = model::reset))
+                add(Command("settings", "open settings", keywords = listOf("preferences")) { open = Open.Settings })
+                add(Command("inspo", "open inspo", keywords = listOf("videos")) { open = Open.Inspo })
+                if (sync.isSignedIn) {
+                    add(Command("sync", "sync now", run = sync::syncNow))
+                    add(Command("auto", if (sync.auto) "turn auto sync off" else "turn auto sync on") { sync.updateAuto(!sync.auto) })
+                }
+                add(Command("today", "today", keywords = listOf("sessions")) { picked = model.today })
+                tags.forEach { t -> add(Command("study:$t", "studying $t") { model.updateTag(t) }) }
+                tags.forEach { t -> add(Command("show:$t", "show $t", keywords = listOf("filter")) { filter = t }) }
+                add(Command("show all", "show all", keywords = listOf("filter")) { filter = null })
+            }
+        },
+        fallback = { query ->
+            val tag = query.trim()
+            if (tag.isEmpty() || model.recentTags.any { it.equals(tag, ignoreCase = true) }) null
+            else Command("new", "studying \"$tag\"") { model.updateTag(tag) }
+        },
+        close = { palette.value = false },
+    )
 
     when (open) {
         Open.Settings -> SettingsSheet(model, close = { open = Open.None }, signIn = { open = Open.Account })

@@ -1,6 +1,7 @@
 import { Engine, Phase, defaultConfig, isBreak } from "./engine.js";
 import { buildHeatmap, firstWeekday } from "./heatmap.js";
 import { BOIL_MS, ring, square } from "./ink.js";
+import { createPalette } from "./palette.js";
 import { VIDEOS, markWatched, today as inspoToday, watched, watchedBefore } from "./inspo.js";
 import { SAMPLE_TAGS, sampleYear } from "./sample.js";
 import { chime, wakeAudio } from "./sound.js";
@@ -259,13 +260,12 @@ function renderTags() {
   if (key === tagsDrawn) return;
   tagsDrawn = key;
   $("suggest").replaceChildren(...tags.filter((t) => t !== current).slice(0, 4).map((t) =>
-    button(t, () => { $("tag").value = t; save(KEY.tag, t); renderTags(); })));
+    button(t, () => setTag(t))));
 
   const filter = $("filter");
   if (String(tags) !== String(filterTags)) {
     filterTags = tags;
-    const pick = (t) => () => { if (tagFilter === t) return; tagFilter = t; renderYear(true); renderTags(); };
-    filter.replaceChildren(button("all", pick(null)), ...tags.map((t) => button(t, pick(t))));
+    filter.replaceChildren(button("all", () => showTag(null)), ...tags.map((t) => button(t, () => showTag(t))));
   }
   const buttons = [...filter.querySelectorAll(".link")];
   buttons.forEach((b, i) => b.setAttribute("aria-pressed", String((i === 0 ? null : tags[i - 1]) === tagFilter)));
@@ -279,6 +279,20 @@ function renderTags() {
     filter.scrollTo({ left: on.offsetLeft + on.offsetWidth / 2 - filter.clientWidth / 2,
                       behavior: reduceMotion.matches ? "auto" : "smooth" });
   }
+}
+
+function setTag(t) {
+  $("tag").value = t;
+  save(KEY.tag, t);
+  renderTags();
+}
+
+/** Filters the year to one tag, or all with null. */
+function showTag(t) {
+  if (tagFilter === t) return;
+  tagFilter = t;
+  renderYear(true);
+  renderTags();
 }
 
 function fadeEdge() {
@@ -675,13 +689,49 @@ function saveSettings() {
     autoStartFocus: $("autoStartFocus").checked,
   };
   settings.sound = $("sound").checked;
-  const resumed = $("autoSync").checked && !settings.autoSync;
-  settings.autoSync = store.autoSync = $("autoSync").checked;
   engine.config = settings.config;
-  save(KEY.settings, settings);
   changed();
+  setAutoSync($("autoSync").checked);
+}
+
+/** Saves the settings too. */
+function setAutoSync(on) {
+  const resumed = on && !settings.autoSync;
+  settings.autoSync = store.autoSync = on;
+  save(KEY.settings, settings);
   syncLoop();
   if (resumed) store.sync();
+}
+
+function openInspo() {
+  inspoPage = "today";
+  renderInspo();
+  $("inspo").showModal();
+  document.activeElement.blur(); // open quietly, without a ring on the first video
+}
+
+// MARK: Command palette
+
+/** What the palette offers right now, in the order of the spec. */
+function commands(query) {
+  const account = !demo && !!store.account;
+  const tags = tagList();
+  const typed = query.trim().toLowerCase().slice(0, 40);
+  return [
+    { id: "toggle", title: engine.isRunning ? "pause" : engine.isIdle ? "start" : "resume",
+      keywords: ["timer"], hint: "space", run: toggle },
+    { id: "skip", title: "skip", keywords: ["timer"], run: skip },
+    !engine.isIdle && { id: "reset", title: "reset", keywords: ["timer"], run: reset },
+    { id: "settings", title: "open settings", keywords: ["preferences"], run: openSettings },
+    { id: "inspo", title: "open inspo", keywords: ["videos"], run: openInspo },
+    account && { id: "sync", title: "sync now", run: () => store.sync() },
+    account && { id: "autoSync", title: settings.autoSync ? "turn auto sync off" : "turn auto sync on",
+                 keywords: ["sync"], run: () => setAutoSync(!settings.autoSync) },
+    ...tags.map((t) => ({ id: `tag:${t}`, title: `studying ${t}`, keywords: ["tag"], run: () => setTag(t) })),
+    { id: "show:", title: "show all", keywords: ["filter"], run: () => showTag(null) },
+    ...tags.map((t) => ({ id: `show:${t}`, title: `show ${t}`, keywords: ["filter"], run: () => showTag(t) })),
+    typed && !tags.includes(typed) && { id: "tag", title: `studying "${typed}"`, last: true, run: () => setTag(typed) },
+  ].filter(Boolean);
 }
 
 // MARK: Wiring
@@ -690,12 +740,7 @@ $("toggle").addEventListener("click", toggle);
 $("skip").addEventListener("click", skip);
 $("reset").addEventListener("click", reset);
 $("open-settings").addEventListener("click", openSettings);
-$("open-inspo").addEventListener("click", () => {
-  inspoPage = "today";
-  renderInspo();
-  $("inspo").showModal();
-  document.activeElement.blur(); // open quietly, without a ring on the first video
-});
+$("open-inspo").addEventListener("click", openInspo);
 $("inspo").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) return e.currentTarget.close();
   if (!e.target.dataset.page) return;
@@ -719,6 +764,15 @@ document.addEventListener("keydown", (e) => {
   if (e.target.closest?.("input, textarea, select, button, a, dialog, [contenteditable]")) return;
   e.preventDefault();
   toggle();
+});
+
+const palette = createPalette($("palette"), commands);
+document.addEventListener("keydown", (e) => {
+  if (e.key?.toLowerCase() !== "k" || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+  // Not over another dialog.
+  if ([...document.querySelectorAll("dialog[open]")].some((d) => d.id !== "palette")) return;
+  e.preventDefault();
+  palette.toggle();
 });
 
 const dialog = $("settings");

@@ -134,5 +134,12 @@
       <div class="done"><button class="capsule small" value="done">done</button></div>
     </form>
   </dialog>
+
+  <dialog class="palette" id="palette" aria-label="commands">
+    <input type="text" placeholder="type a command…" aria-label="command" role="combobox"
+           aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list"
+           autocomplete="off" spellcheck="false" autocapitalize="off">
+    <ul id="palette-list" role="listbox" aria-label="commands"></ul>
+  </dialog>
 </body>
 </html>

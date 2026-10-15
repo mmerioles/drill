@@ -19,11 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -48,6 +44,7 @@ import io.github.mmerioles.drill.core.Heatmap
 import io.github.mmerioles.drill.ink.Doodle
 import io.github.mmerioles.drill.ink.LocalPalette
 import android.text.format.DateFormat
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle as DateStyle
 import java.util.Locale
@@ -63,19 +60,17 @@ private val MARGIN = OUTLINE_PAD + OUTLINE / 2
 private val INK = listOf(0f, 0.16f, 0.36f, 0.62f, 0.92f)
 
 @Composable
-fun YearView(model: AppModel) {
+fun YearView(model: AppModel, filter: String?, setFilter: (String?) -> Unit, pickedDate: LocalDate?, pick: (LocalDate?) -> Unit) {
     val ink = LocalPalette.current
-    var filter by rememberSaveable { mutableStateOf<String?>(null) }
-    var picked by remember { mutableStateOf<Day?>(null) }
     val tags = model.recentTags
-    if (filter != null && filter !in tags) filter = null
+    if (filter != null && filter !in tags) setFilter(null)
 
     Column(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Spacer(Modifier.weight(1f))
             Row(Modifier.horizontalScroll(rememberScrollState()).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Link("all", size = 13.sp, on = filter == null, selectable = true, compact = true) { filter = null }
-                tags.forEach { t -> Link(t, size = 13.sp, on = filter == t, selectable = true, compact = true) { filter = t } }
+                Link("all", size = 13.sp, on = filter == null, selectable = true, compact = true) { setFilter(null) }
+                tags.forEach { t -> Link(t, size = 13.sp, on = filter == t, selectable = true, compact = true) { setFilter(t) } }
             }
         }
         Spacer(Modifier.height(2.dp))
@@ -88,6 +83,7 @@ fun YearView(model: AppModel) {
             val heat = remember(all, filter, weeks, today) {
                 Heatmap.build(all.filter { filter == null || it.tag == filter }, weeks, today)
             }
+            val picked = heat.weeks.firstNotNullOfOrNull { w -> w.firstOrNull { it?.date == pickedDate } }
             val summary = "your year. today ${Copy.amount(heat.today)}, this week ${Copy.amount(heat.thisWeek)}, " +
                 "streak ${Copy.days(heat.streak)}"
             val measurer = rememberTextMeasurer()
@@ -101,14 +97,14 @@ fun YearView(model: AppModel) {
                     .fillMaxWidth()
                     .height(height)
                     .semantics { contentDescription = summary }
-                    .pointerInput(heat) {
+                    .pointerInput(heat, pickedDate) {
                         detectTapGestures { at ->
                             val margin = MARGIN.toPx()
                             val pitch = (size.width - margin * 2) / (weeks - GAP)
                             val w = floor((at.x - margin) / pitch).toInt()
                             val d = floor((at.y - monthRow.toPx()) / pitch).toInt()
                             val day = heat.weeks.getOrNull(w)?.getOrNull(d)
-                            picked = if (day == null || day.date == picked?.date) null else day
+                            pick(if (day == null || day.date == pickedDate) null else day.date)
                         }
                     },
             ) {

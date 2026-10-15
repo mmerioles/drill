@@ -5,80 +5,82 @@
              Width="780" Height="732" Focusable="True" FocusVisualStyle="{x:Null}"
              KeyboardNavigation.TabNavigation="Cycle">
     <!-- As MainView.swift: the header, the timer in the middle, your year at the bottom. -->
-    <DockPanel Margin="40,44,40,32" Background="Transparent" x:Name="Paper">
+    <Grid x:Name="Root">
+        <DockPanel Margin="40,44,40,32" Background="Transparent" x:Name="Paper">
 
-        <!-- Header -->
-        <DockPanel DockPanel.Dock="Top" Height="28" LastChildFill="False">
-            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Bottom" Margin="0,0,0,5" x:Name="Links">
-                <TextBlock x:Name="Updating" Text="updating…" Style="{StaticResource Base}" FontSize="14" Opacity="0.52"
-                           Margin="0,0,16,0" Visibility="Collapsed" />
-                <ink:InkLink x:Name="UpdateLink" Margin="0,0,14,0" Visibility="Collapsed" Click="OnUpdate" />
-                <ink:InkLink x:Name="SyncLink" Content="{Binding Sync.Label}" Margin="0,0,14,0" Visibility="Collapsed" Click="OnSync" />
-                <ink:InkLink Content="inspo" Margin="0,0,14,0" Click="OnInspo" />
-                <ink:InkLink Content="settings" Click="OnSettings" />
-            </StackPanel>
-            <TextBlock DockPanel.Dock="Right" Text="{Binding Model.LastError}" Style="{StaticResource Base}" FontSize="13"
-                       Opacity="0.52" Margin="0,0,16,0" VerticalAlignment="Center" />
-        </DockPanel>
-
-        <!-- Your year -->
-        <StackPanel DockPanel.Dock="Bottom">
-            <DockPanel Margin="0,0,0,12">
-                <StackPanel x:Name="Filters" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                            Margin="0,0,-2,1" />
+            <!-- Header -->
+            <DockPanel DockPanel.Dock="Top" Height="28" LastChildFill="False">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Bottom" Margin="0,0,0,5" x:Name="Links">
+                    <TextBlock x:Name="Updating" Text="updating…" Style="{StaticResource Base}" FontSize="14" Opacity="0.52"
+                               Margin="0,0,16,0" Visibility="Collapsed" />
+                    <ink:InkLink x:Name="UpdateLink" Margin="0,0,14,0" Visibility="Collapsed" Click="OnUpdate" />
+                    <ink:InkLink x:Name="SyncLink" Content="{Binding Sync.Label}" Margin="0,0,14,0" Visibility="Collapsed" Click="OnSync" />
+                    <ink:InkLink Content="inspo" Margin="0,0,14,0" Click="OnInspo" />
+                    <ink:InkLink Content="settings" Click="OnSettings" />
+                </StackPanel>
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Model.LastError}" Style="{StaticResource Base}" FontSize="13"
+                           Opacity="0.52" Margin="0,0,16,0" VerticalAlignment="Center" />
             </DockPanel>
-            <ink:HeatGrid x:Name="Year" Heatmap="{Binding Model.Heatmap}" Margin="-3,0" />
-            <Grid Height="18" Margin="0,12,0,0" TextElement.FontSize="13">
-                <StackPanel x:Name="Stats" Orientation="Horizontal">
-                    <TextBlock Style="{StaticResource Base}" Opacity="0.52" Text="today" />
-                    <TextBlock Style="{StaticResource Base}" Margin="5,0,22,0" x:Name="Today" FontWeight="SemiBold" />
-                    <TextBlock Style="{StaticResource Base}" Opacity="0.52" Text="this week" />
-                    <TextBlock Style="{StaticResource Base}" Margin="5,0,22,0" x:Name="Week" FontWeight="SemiBold" />
-                    <TextBlock Style="{StaticResource Base}" Opacity="0.52" Text="streak" />
-                    <TextBlock Style="{StaticResource Base}" Margin="5,0,0,0" x:Name="Streak" FontWeight="SemiBold" />
-                </StackPanel>
-                <StackPanel x:Name="Legend" Orientation="Horizontal" HorizontalAlignment="Right" TextElement.FontSize="11">
-                    <TextBlock Style="{StaticResource Base}" Opacity="0.52" Text="less" Margin="0,0,4,0" VerticalAlignment="Center" />
-                    <StackPanel x:Name="Swatches" Orientation="Horizontal" VerticalAlignment="Center" />
-                    <TextBlock Style="{StaticResource Base}" Opacity="0.52" Text="more" Margin="4,0,0,0" VerticalAlignment="Center" />
-                </StackPanel>
-                <StackPanel x:Name="DayCaption" Orientation="Horizontal" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource Base}" x:Name="DayName" />
-                    <TextBlock Style="{StaticResource Base}" Opacity="0.52" Text=" — " />
-                    <TextBlock Style="{StaticResource Base}" Opacity="0.52" x:Name="DayAmount" />
-                </StackPanel>
-            </Grid>
-        </StackPanel>
 
-        <!-- The timer: ring, digits, what you're studying, and the three controls -->
-        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,4,0,12">
-            <Grid Width="270" Height="270">
-                <ink:DoodleRing Progress="{Binding Model.Progress}" Boiling="{Binding Model.IsRunning}" />
-                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,4,0,0">
-                    <ink:FadingText x:Name="Status" FontSize="13" Opacity="0.52" HorizontalAlignment="Center" Height="18" />
-                    <ink:RollingText x:Name="Clock" AutomationProperties.HelpText="space or enter starts and pauses" FontSize="60" HorizontalAlignment="Center" Margin="0,2,0,6" />
-                    <ink:CycleDots Filled="{Binding Model.CyclePosition}" Count="{Binding Model.CycleLength}" HorizontalAlignment="Center" />
-                </StackPanel>
-            </Grid>
-
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,30,0,0">
-                <TextBlock Text="studying" Style="{StaticResource Base}" FontSize="15" Opacity="0.52" VerticalAlignment="Bottom"
-                           Margin="0,0,8,4" />
-                <Grid Width="150">
-                    <TextBlock x:Name="Hint" Text="anything" FontSize="15" Foreground="{DynamicResource Hint}"
-                               FontFamily="{DynamicResource Text}" IsHitTestVisible="False" Margin="0,0,0,4" VerticalAlignment="Bottom" />
-                    <TextBox x:Name="TagBox" AutomationProperties.Name="studying" Style="{StaticResource Bare}" FontSize="15" Margin="0,0,0,4" MaxLength="40"
-                             Text="{Binding Model.Tag, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Bottom" />
-                    <Rectangle x:Name="Underline" Height="1" VerticalAlignment="Bottom" Fill="{DynamicResource Ghost}" />
+            <!-- Your year -->
+            <StackPanel DockPanel.Dock="Bottom">
+                <DockPanel Margin="0,0,0,12">
+                    <StackPanel x:Name="Filters" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                Margin="0,0,-2,1" />
+                </DockPanel>
+                <ink:HeatGrid x:Name="Year" Heatmap="{Binding Model.Heatmap}" Margin="-3,0" />
+                <Grid Height="18" Margin="0,12,0,0" TextElement.FontSize="13">
+                    <StackPanel x:Name="Stats" Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Base}" Opacity="0.52" Text="today" />
+                        <TextBlock Style="{StaticResource Base}" Margin="5,0,22,0" x:Name="Today" FontWeight="SemiBold" />
+                        <TextBlock Style="{StaticResource Base}" Opacity="0.52" Text="this week" />
+                        <TextBlock Style="{StaticResource Base}" Margin="5,0,22,0" x:Name="Week" FontWeight="SemiBold" />
+                        <TextBlock Style="{StaticResource Base}" Opacity="0.52" Text="streak" />
+                        <TextBlock Style="{StaticResource Base}" Margin="5,0,0,0" x:Name="Streak" FontWeight="SemiBold" />
+                    </StackPanel>
+                    <StackPanel x:Name="Legend" Orientation="Horizontal" HorizontalAlignment="Right" TextElement.FontSize="11">
+                        <TextBlock Style="{StaticResource Base}" Opacity="0.52" Text="less" Margin="0,0,4,0" VerticalAlignment="Center" />
+                        <StackPanel x:Name="Swatches" Orientation="Horizontal" VerticalAlignment="Center" />
+                        <TextBlock Style="{StaticResource Base}" Opacity="0.52" Text="more" Margin="4,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <StackPanel x:Name="DayCaption" Orientation="Horizontal" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource Base}" x:Name="DayName" />
+                        <TextBlock Style="{StaticResource Base}" Opacity="0.52" Text=" — " />
+                        <TextBlock Style="{StaticResource Base}" Opacity="0.52" x:Name="DayAmount" />
+                    </StackPanel>
                 </Grid>
             </StackPanel>
-            <StackPanel x:Name="Suggestions" Orientation="Horizontal" HorizontalAlignment="Center" Height="18" Margin="58,10,0,0" />
 
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,28,0,0">
-                <ink:InkLink x:Name="ResetLink" Content="reset" VerticalAlignment="Center" Margin="0,0,26,0" Click="OnReset" />
-                <ink:Capsule x:Name="Primary" Content="{Binding Model.PrimaryLabel}" MinWidth="128" Click="OnToggle" />
-                <ink:InkLink Content="skip" VerticalAlignment="Center" Margin="26,0,0,0" Click="OnSkip" />
+            <!-- The timer: ring, digits, what you're studying, and the three controls -->
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,4,0,12">
+                <Grid Width="270" Height="270">
+                    <ink:DoodleRing Progress="{Binding Model.Progress}" Boiling="{Binding Model.IsRunning}" />
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,4,0,0">
+                        <ink:FadingText x:Name="Status" FontSize="13" Opacity="0.52" HorizontalAlignment="Center" Height="18" />
+                        <ink:RollingText x:Name="Clock" AutomationProperties.HelpText="space or enter starts and pauses" FontSize="60" HorizontalAlignment="Center" Margin="0,2,0,6" />
+                        <ink:CycleDots Filled="{Binding Model.CyclePosition}" Count="{Binding Model.CycleLength}" HorizontalAlignment="Center" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,30,0,0">
+                    <TextBlock Text="studying" Style="{StaticResource Base}" FontSize="15" Opacity="0.52" VerticalAlignment="Bottom"
+                               Margin="0,0,8,4" />
+                    <Grid Width="150">
+                        <TextBlock x:Name="Hint" Text="anything" FontSize="15" Foreground="{DynamicResource Hint}"
+                                   FontFamily="{DynamicResource Text}" IsHitTestVisible="False" Margin="0,0,0,4" VerticalAlignment="Bottom" />
+                        <TextBox x:Name="TagBox" AutomationProperties.Name="studying" Style="{StaticResource Bare}" FontSize="15" Margin="0,0,0,4" MaxLength="40"
+                                 Text="{Binding Model.Tag, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Bottom" />
+                        <Rectangle x:Name="Underline" Height="1" VerticalAlignment="Bottom" Fill="{DynamicResource Ghost}" />
+                    </Grid>
+                </StackPanel>
+                <StackPanel x:Name="Suggestions" Orientation="Horizontal" HorizontalAlignment="Center" Height="18" Margin="58,10,0,0" />
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,28,0,0">
+                    <ink:InkLink x:Name="ResetLink" Content="reset" VerticalAlignment="Center" Margin="0,0,26,0" Click="OnReset" />
+                    <ink:Capsule x:Name="Primary" Content="{Binding Model.PrimaryLabel}" MinWidth="128" Click="OnToggle" />
+                    <ink:InkLink Content="skip" VerticalAlignment="Center" Margin="26,0,0,0" Click="OnSkip" />
+                </StackPanel>
             </StackPanel>
-        </StackPanel>
-    </DockPanel>
+        </DockPanel>
+    </Grid>
 </UserControl>

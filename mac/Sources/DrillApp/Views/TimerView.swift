@@ -7,6 +7,7 @@ import DrillCore
 struct TimerView: View {
     @Environment(AppModel.self) private var model
     @FocusState private var tagFocused: Bool
+    @Environment(\.paletteOpen) private var paletteOpen
 
     var body: some View {
         @Bindable var model = model
@@ -54,7 +55,7 @@ struct TimerView: View {
                     .disabled(!model.isActive)
                 Button(Copy.toggle(running: model.isRunning, active: model.isActive), action: model.toggle)
                     .buttonStyle(InkCapsuleStyle(minWidth: 128))
-                    .keyboardShortcut(.defaultAction)
+                    .keyboardShortcut(paletteOpen ? nil : .defaultAction)
                 Button("skip", action: model.skip)
                     .buttonStyle(.inkLink)
                     .opacity(model.isStopwatch ? 0 : 1)

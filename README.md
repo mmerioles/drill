@@ -46,6 +46,6 @@ then put its address under server in settings. details in [docs/SYNC.md](docs/SY
 
 ## shortcuts
 
-`space` start/pause · `⌘/ctrl →` skip · `⌘/ctrl R` reset · `⌘/ctrl ,` settings
+`space` start/pause · `⌘/ctrl →` skip · `⌘/ctrl R` reset · `⌘/ctrl ,` settings · `⌘/ctrl K` commands
 
 on mac, click the timer (or `⌘T`) to switch between pomodoro and a stopwatch.
