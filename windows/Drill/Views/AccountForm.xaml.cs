@@ -11,9 +11,9 @@ namespace Drill.Views;
 
 /// <summary>
 /// Sign in, or make an account, as AccountSheet.swift: a username and a
-/// password. On the create form the name is checked as you type, 300ms after
-/// the last keystroke; the password is typed twice. In the account dialog,
-/// and inline on the welcome.
+/// password. On the create form each field gets a mark as you type (the name
+/// checked 300ms after the last keystroke); the password is typed twice. In
+/// the account dialog, and inline on the welcome.
 /// </summary>
 public partial class AccountForm : UserControl
 {
@@ -52,9 +52,9 @@ public partial class AccountForm : UserControl
             Underline(Password, PasswordLine, () => _creating ? "CardLine" : null),
             Underline(Confirm, ConfirmLine, () => null),
         ];
-        Username.TextChanged += (_, _) => OnUsername();
-        Password.PasswordChanged += (_, _) => { PasswordHint.Visibility = HintFor(Password.Password); ShowPasswords(); };
-        Confirm.PasswordChanged += (_, _) => { ConfirmHint.Visibility = HintFor(Confirm.Password); ShowPasswords(); };
+        Username.TextChanged += (_, _) => { SetProblem(null); OnUsername(); };
+        Password.PasswordChanged += (_, _) => { SetProblem(null); PasswordHint.Visibility = HintFor(Password.Password); ShowPasswords(); };
+        Confirm.PasswordChanged += (_, _) => { SetProblem(null); ConfirmHint.Visibility = HintFor(Confirm.Password); ShowPasswords(); };
         _debounce.Tick += (_, _) => _ = CheckUsername();
         Unloaded += (_, _) => _debounce.Stop();
         Loaded += (_, _) =>
@@ -88,7 +88,6 @@ public partial class AccountForm : UserControl
         Heading.Text = _creating ? "make an account" : "sign in";
         SwitchMode.Content = _creating ? "have an account?" : "new here?";
         Primary.Content = _creating ? "create account" : "sign in";
-        PasswordHint.Text = _creating ? "password (8+ characters)" : "password";
         ConfirmRow.Visibility = _creating ? Visibility.Visible : Visibility.Collapsed;
         foreach (var rest in _rest) rest();
         OnUsername();
@@ -157,15 +156,27 @@ public partial class AccountForm : UserControl
         };
         UsernameMark.ToolTip = problem;
         AutomationProperties.SetHelpText(Username, problem ?? "");
-        Note(UsernameNote, "");
         ShowReady();
     }
 
+    // The passwords, marked on the create form: empty is no mark.
+
     private void ShowPasswords()
     {
-        var both = Password.Password.Length > 0 && Confirm.Password.Length > 0;
-        Note(ConfirmNote, _creating && both && Password.Password != Confirm.Password ? "passwords don't match" : "");
+        var password = Password.Password;
+        var confirm = Confirm.Password;
+        Mark(Password, PasswordMark, _creating && password.Length > 0, SupabaseApi.IsPassword(password), "6+ characters");
+        Mark(Confirm, ConfirmMark, _creating && confirm.Length > 0, SupabaseApi.IsConfirmed(password, confirm), "doesn't match");
         ShowReady();
+    }
+
+    /// <summary>A tick or a cross; the cross's words are for hover and screen readers.</summary>
+    private static void Mark(Control field, StatusMark mark, bool shown, bool good, string problem)
+    {
+        mark.Status = !shown ? StatusMark.Kind.None : good ? StatusMark.Kind.Done : StatusMark.Kind.Failed;
+        var text = shown && !good ? problem : null;
+        mark.ToolTip = text;
+        AutomationProperties.SetHelpText(field, text ?? "");
     }
 
     private static void Note(TextBlock note, string text)
@@ -174,9 +185,9 @@ public partial class AccountForm : UserControl
         note.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    private bool Ready => SupabaseApi.IsUsername(Username.Text) && (_creating
-        ? _check == Check.Available && Password.Password.Length >= 8 && Confirm.Password == Password.Password
-        : Password.Password.Length > 0);
+    private bool Ready => _creating
+        ? _check == Check.Available && SupabaseApi.IsConfirmed(Password.Password, Confirm.Password)
+        : Username.Text.Length > 0 && Password.Password.Length > 0;
 
     private void ShowReady() => Primary.IsEnabled = Ready && !_working;
 
@@ -225,12 +236,16 @@ public partial class AccountForm : UserControl
 
     private void OnCancel(object sender, RoutedEventArgs e) => _cancel?.Invoke();
 
-    /// <summary>For --render: the create form with a name already checked, without asking a server.</summary>
+    /// <summary>For --render: the create form with a name already checked, without asking a server; available also shows a good password and a confirm that doesn't match.</summary>
     internal void Pretend(string username, bool available)
     {
         _creating = true;
         Username.Text = username;
-        if (available) Password.Password = Confirm.Password = "kasane-0401";
+        if (available)
+        {
+            Password.Password = "kasane-0401";
+            Confirm.Password = "kasane-04";
+        }
         Show();
         _debounce.Stop();
         _checking?.Cancel();

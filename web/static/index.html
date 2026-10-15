@@ -125,13 +125,20 @@
           <input type="text" id="username" placeholder="username" aria-label="username" autocomplete="username" spellcheck="false" autocapitalize="off" maxlength="20">
           <svg class="field-mark" id="username-mark" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" hidden></svg>
         </div>
-        <p class="hint" id="username-hint" aria-live="polite"></p>
-        <input type="password" id="password" placeholder="password" aria-label="password" autocomplete="current-password">
-        <input type="password" id="confirm" placeholder="confirm password" aria-label="confirm password" autocomplete="new-password" hidden>
-        <p class="hint" id="confirm-hint" aria-live="polite" hidden></p>
+        <p class="sr" id="username-hint" aria-live="polite"></p>
+        <div class="field">
+          <input type="password" id="password" placeholder="password" aria-label="password" autocomplete="current-password">
+          <svg class="field-mark" id="password-mark" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" hidden></svg>
+        </div>
+        <p class="sr" id="password-hint" aria-live="polite"></p>
+        <div class="field" id="confirm-field" hidden>
+          <input type="password" id="confirm" placeholder="confirm password" aria-label="confirm password" autocomplete="new-password">
+          <svg class="field-mark" id="confirm-mark" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" hidden></svg>
+        </div>
+        <p class="sr" id="confirm-hint" aria-live="polite"></p>
       </div>
       <label class="stay"><span>stay signed in</span><input type="checkbox" class="switch" id="stay" checked></label>
-      <p class="message" id="account-error" aria-live="polite"></p>
+      <p class="message" id="account-error" aria-live="polite" hidden></p>
       <div class="account-actions">
         <button class="link" id="account-switch" type="button">new here?</button>
         <span class="spacer"></span>

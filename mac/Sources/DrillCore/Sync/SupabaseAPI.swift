@@ -168,7 +168,7 @@ public struct SupabaseAPI: Sendable {
         "invalid_grant": "wrong username or password",
         "user_already_exists": taken,
         "email_exists": taken,
-        "weak_password": "use at least 8 characters",
+        "weak_password": "use at least 6 characters",
         "email_address_invalid": "that username doesn't look right",
         "validation_failed": "that username doesn't look right",
         "signup_disabled": "sign-ups are closed for now",

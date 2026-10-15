@@ -14,3 +14,17 @@ public enum Username {
             && name.allSatisfy { $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "_") }
     }
 }
+
+/// Passwords: 6+ characters (Supabase's floor) and at most 72 UTF-8 bytes (bcrypt's limit).
+public enum Password {
+    public static let hint = "6+ characters"
+
+    public static func isValid(_ password: String) -> Bool {
+        password.count >= 6 && password.utf8.count <= 72
+    }
+
+    /// Whether the second field repeats a valid first one.
+    public static func confirms(_ confirm: String, _ password: String) -> Bool {
+        isValid(password) && confirm == password
+    }
+}

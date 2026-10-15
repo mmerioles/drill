@@ -11,6 +11,8 @@ public enum Ink {
     public static let accent = Color(light: 0xCF3A4F, dark: 0xF1F0EB)
     /// The one green: a check that something is fine.
     public static let ok = Color(light: 0x3B9B5E, dark: 0x5FBF80)
+    /// The "no" cross: crimson in both themes, since dark's accent is ink.
+    public static let bad = Color(light: 0xCF3A4F, dark: 0xCF3A4F)
     /// Secondary text and idle strokes.
     public static let faint = ink.opacity(0.45)
     /// Hairlines, empty cells, tracks.

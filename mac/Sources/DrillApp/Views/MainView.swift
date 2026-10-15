@@ -41,27 +41,32 @@ struct MainView: View {
         return Page.underHeader + min(Page.maxAbove, free * Page.aboveShare)
     }
 
+    /// The links, out of the way while the welcome shows.
+    @ViewBuilder private var header: some View {
+        if let error = model.lastError {
+            Text(error).font(Ink.text(13)).foregroundStyle(Ink.faint)
+        }
+        HStack(spacing: 20) {
+            // Offered between blocks only: updating relaunches the app.
+            if updater.state == .installing {
+                Text("updating…").font(Ink.text(15)).foregroundStyle(Ink.faint)
+            } else if let release = updater.available, !model.isActive {
+                Button("update to \(release.version.description)") { Task { await updater.install() } }
+            }
+            if sync.showsLink {
+                Button(sync.state == .offline ? "offline" : "sync", action: sync.syncNow)
+            }
+            Button("inspo") { openWindow(id: "inspo") }
+            SettingsLink { Text("settings") }
+        }
+        .buttonStyle(.inkLink(selected: false, size: 15))
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .center, spacing: 8) {
                 Spacer()
-                if let error = model.lastError {
-                    Text(error).font(Ink.text(13)).foregroundStyle(Ink.faint)
-                }
-                HStack(spacing: 20) {
-                    // Offered between blocks only: updating relaunches the app.
-                    if updater.state == .installing {
-                        Text("updating…").font(Ink.text(15)).foregroundStyle(Ink.faint)
-                    } else if let release = updater.available, !model.isActive {
-                        Button("update to \(release.version.description)") { Task { await updater.install() } }
-                    }
-                    if sync.showsLink {
-                        Button(sync.state == .offline ? "offline" : "sync", action: sync.syncNow)
-                    }
-                    Button("inspo") { openWindow(id: "inspo") }
-                    SettingsLink { Text("settings") }
-                }
-                .buttonStyle(.inkLink(selected: false, size: 15))
+                if !sync.showsWelcome { header }
             }
             .frame(height: Page.header - Page.underHeader)
             .padding(.top, Page.underHeader)

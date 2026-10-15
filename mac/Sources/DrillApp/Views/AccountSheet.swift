@@ -65,34 +65,29 @@ struct AccountForm: View {
             }
 
             fields {
-                row("username") {
-                    TextField("", text: $username)
+                row(mark: usernameMark, meaning: usernameProblem) {
+                    TextField("username", text: $username)
                         .focused($focused, equals: .username)
                         .textContentType(.username)
                         .autocorrectionDisabled()
-                    if creating {
-                        StatusMark(status: mark)
-                            .help(usernameProblem ?? "")
-                            .accessibilityLabel(usernameProblem ?? "")
-                    }
                 }
                 Divider().overlay(Ink.ghost)
-                row("password") {
-                    SecureField("", text: $password)
+                row(mark: passwordMark, meaning: passwordMark == .failed ? Password.hint : nil) {
+                    SecureField("password", text: $password)
                         .focused($focused, equals: .password)
                         .textContentType(creating ? .newPassword : .password)
                 }
                 if creating {
                     Divider().overlay(Ink.ghost)
-                    row("confirm") {
-                        SecureField("", text: $confirm)
+                    row(mark: confirmMark, meaning: confirmMark == .failed ? "doesn't match" : nil) {
+                        SecureField("confirm password", text: $confirm)
                             .focused($focused, equals: .confirm)
                             .textContentType(.newPassword)
                     }
-                    hint(confirmHint)
                 }
                 Divider().overlay(Ink.ghost)
-                row("stay signed in") {
+                HStack {
+                    Text("stay signed in").foregroundStyle(Ink.ink)
                     Spacer()
                     Toggle("", isOn: $staySignedIn)
                         .labelsHidden()
@@ -100,9 +95,11 @@ struct AccountForm: View {
                         .controlSize(.small)
                         .accessibilityLabel("stay signed in")
                 }
+                .font(Ink.text(15))
+                .frame(minHeight: 44)
             }
 
-            message(problem ?? (creating ? "password needs 8+ characters." : " "))
+            message(problem ?? " ")
 
             HStack {
                 Button(creating ? "have an account?" : "new here?") {
@@ -126,6 +123,7 @@ struct AccountForm: View {
             if clean != text { username = clean } else { recheck() }
         }
         .onChange(of: creating) { _, _ in recheck() }
+        .onChange(of: [username, password, confirm]) { _, _ in problem = nil }
     }
 
     // MARK: The live check
@@ -149,9 +147,10 @@ struct AccountForm: View {
         }
     }
 
-    private var mark: StatusMark.Status {
-        switch check {
-        case .none: creating && !username.isEmpty && !Username.isValid(username) ? .failed : .none
+    private var usernameMark: StatusMark.Status {
+        guard creating else { return .none }
+        return switch check {
+        case .none: !username.isEmpty && !Username.isValid(username) ? .failed : .none
         case .checking: .working
         case .available: .done
         case .taken: .failed
@@ -165,13 +164,19 @@ struct AccountForm: View {
         return check == .taken ? "taken" : nil
     }
 
-    private var confirmHint: String? {
-        !password.isEmpty && !confirm.isEmpty && password != confirm ? "passwords don't match" : nil
+    private var passwordMark: StatusMark.Status {
+        guard creating, !password.isEmpty else { return .none }
+        return Password.isValid(password) ? .done : .failed
+    }
+
+    private var confirmMark: StatusMark.Status {
+        guard creating, !confirm.isEmpty else { return .none }
+        return Password.confirms(confirm, password) ? .done : .failed
     }
 
     private var ready: Bool {
         if creating {
-            return check == .available && password.count >= 8 && confirm == password
+            return usernameMark == .done && passwordMark == .done && confirmMark == .done
         }
         return !username.isEmpty && !password.isEmpty
     }
@@ -212,25 +217,20 @@ struct AccountForm: View {
             .background(RoundedRectangle(cornerRadius: 10).fill(Ink.ink.opacity(0.045)))
     }
 
-    private func row(_ label: String, @ViewBuilder field: () -> some View) -> some View {
+    /// A field, and its mark at the trailing edge; `meaning` says what a cross means,
+    /// for hover and VoiceOver.
+    private func row(mark: StatusMark.Status, meaning: String?, @ViewBuilder field: () -> some View) -> some View {
         HStack(spacing: 12) {
-            Text(label).foregroundStyle(Ink.ink)
-            field().multilineTextAlignment(.trailing)
+            field()
+            if creating {
+                StatusMark(status: mark)
+                    .help(meaning ?? "")
+                    .accessibilityLabel(meaning ?? "")
+                    .accessibilityHidden(mark == .none)
+            }
         }
         .font(Ink.text(15))
         .frame(minHeight: 44)
-    }
-
-    /// A small note right under a row, when there's something to say.
-    @ViewBuilder private func hint(_ text: String?) -> some View {
-        if let text {
-            Text(text)
-                .font(Ink.text(13))
-                .foregroundStyle(Ink.faint)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.top, -8)
-                .padding(.bottom, 10)
-        }
     }
 
     private func message(_ text: String) -> some View {

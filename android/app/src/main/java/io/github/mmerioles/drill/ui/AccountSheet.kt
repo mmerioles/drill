@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.mmerioles.drill.AppModel
 import io.github.mmerioles.drill.data.Sync
+import io.github.mmerioles.drill.core.Password
 import io.github.mmerioles.drill.core.Username
 import io.github.mmerioles.drill.ink.LocalPalette
 import kotlinx.coroutines.delay
@@ -67,6 +68,8 @@ fun AccountForm(
     var busy by remember { mutableStateOf(false) }
     var check by remember { mutableStateOf(Check.None) }
     var stay by rememberSaveable { mutableStateOf(true) }
+    // Switching forms hides the marks until the next edit.
+    var marks by remember { mutableStateOf(true) }
 
     val valid = Username.valid(username)
 
@@ -96,11 +99,12 @@ fun AccountForm(
         }
     }
 
-    val mismatch = password.isNotEmpty() && confirm.isNotEmpty() && password != confirm
+    val passwordOk = Password.valid(password)
+    val confirmOk = Password.confirmed(password, confirm)
     val ready = if (creating) {
-        check == Check.Available && password.length >= 8 && confirm == password
+        check == Check.Available && passwordOk && confirmOk
     } else {
-        valid && password.isNotEmpty()
+        username.isNotEmpty() && password.isNotEmpty()
     }
 
     fun submit() {
@@ -113,52 +117,80 @@ fun AccountForm(
     }
 
     Column(modifier) {
-        Box(Modifier.fillMaxWidth()) {
-            Field(username, { username = Username.clean(it); error = "" }, Modifier.fillMaxWidth().padding(end = if (creating) 24.dp else 0.dp),
+        // The cross alone says it on screen; the words are for TalkBack.
+        val usernameProblem = when {
+            username.isEmpty() -> null
+            !valid -> "3–20 letters, digits or _"
+            check == Check.Taken -> "taken"
+            else -> null
+        }
+        Marked(
+            creating && marks,
+            when {
+                usernameProblem != null -> Mark.Failed
+                check == Check.Checking -> Mark.Working
+                check == Check.Available -> Mark.Done
+                else -> Mark.None
+            },
+            usernameProblem ?: if (check == Check.Available) "available" else null,
+        ) {
+            Field(username, { username = Username.clean(it); error = ""; marks = true }, it,
                 placeholder = "username", keyboard = KeyboardType.Ascii, weight = FontWeight.Normal, label = "username")
-            if (creating) {
-                // The cross alone says it on screen; the words are for TalkBack.
-                val problem = when {
-                    username.isEmpty() -> null
-                    !valid -> "3–20 letters, digits or _"
-                    check == Check.Taken -> "taken"
-                    else -> null
-                }
-                StatusMark(
-                    when {
-                        problem != null -> Mark.Failed
-                        check == Check.Checking -> Mark.Working
-                        check == Check.Available -> Mark.Done
-                        else -> Mark.None
-                    },
-                    Modifier.align(Alignment.CenterEnd).padding(bottom = 6.dp)
-                        .semantics { problem?.let { contentDescription = it } },
-                )
+        }
+        Marked(
+            creating && marks,
+            if (password.isEmpty()) Mark.None else if (passwordOk) Mark.Done else Mark.Failed,
+            if (password.isEmpty()) null else if (passwordOk) "ok" else "6+ characters",
+            Modifier.padding(top = 24.dp),
+        ) {
+            Field(password, { password = it; error = ""; marks = true }, it,
+                placeholder = "password", password = true, weight = FontWeight.Normal, label = "password",
+                done = ::submit)
+        }
+        if (creating) {
+            Marked(
+                marks,
+                if (confirm.isEmpty()) Mark.None else if (confirmOk) Mark.Done else Mark.Failed,
+                if (confirm.isEmpty()) null else if (confirmOk) "matches" else "doesn't match",
+                Modifier.padding(top = 24.dp),
+            ) {
+                Field(confirm, { confirm = it; error = ""; marks = true }, it,
+                    placeholder = "confirm password", password = true, weight = FontWeight.Normal, label = "confirm password",
+                    done = ::submit)
             }
         }
-        Field(password, { password = it; error = "" }, Modifier.fillMaxWidth().padding(top = 24.dp),
-            placeholder = "password", password = true, weight = FontWeight.Normal, label = "password",
-            done = ::submit)
-        if (creating) {
-            Field(confirm, { confirm = it; error = "" }, Modifier.fillMaxWidth().padding(top = 24.dp),
-                placeholder = "confirm password", password = true, weight = FontWeight.Normal, label = "confirm password", done = ::submit)
-            if (mismatch) Words("passwords don't match", Modifier.padding(top = 6.dp), size = 13.sp, color = ink.faint)
-        }
         Box(Modifier.padding(top = 12.dp)) { SwitchRow("stay signed in", stay) { stay = it } }
-        if (error.isNotEmpty()) {
-            Words(error, Modifier.padding(top = 10.dp), size = 13.sp, color = ink.accent)
-        } else if (creating) {
-            Words("password needs 8+ characters.", Modifier.padding(top = 10.dp), size = 13.sp, color = ink.faint)
-        }
+        if (error.isNotEmpty()) Words(error, Modifier.padding(top = 10.dp), size = 13.sp, color = ink.accent)
         Spacer(Modifier.height(24.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Link(if (creating) "have an account?" else "new here?") { switch(!creating); error = "" }
+            Link(if (creating) "have an account?" else "new here?") { switch(!creating); error = ""; marks = false }
             Spacer(Modifier.weight(1f))
             if (cancel != null) {
                 Link("cancel", action = cancel)
                 Spacer(Modifier.width(8.dp))
             }
             Capsule(if (creating) "create account" else "sign in", small = true, enabled = ready && !busy, action = ::submit)
+        }
+    }
+}
+
+/** A field with its mark at the right edge; [marked] off shows the field alone. */
+@Composable
+private fun Marked(
+    marked: Boolean,
+    mark: Mark,
+    description: String?,
+    modifier: Modifier = Modifier,
+    field: @Composable (Modifier) -> Unit,
+) {
+    Box(modifier.fillMaxWidth()) {
+        field(Modifier.fillMaxWidth().padding(end = if (marked) 24.dp else 0.dp))
+        if (marked) {
+            StatusMark(
+                mark,
+                Modifier.align(Alignment.CenterEnd).padding(bottom = 6.dp)
+                    .semantics { description?.let { contentDescription = it } },
+            )
         }
     }
 }

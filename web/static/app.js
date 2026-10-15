@@ -566,6 +566,7 @@ function resetAccount(create) {
   creating = create;
   problem = "";
   availability = null;
+  touched.clear();
   clearTimeout(checkTimer);
   $("account-form").reset();
   renderAccount();
@@ -644,33 +645,51 @@ function scheduleCheck() {
   }, 300);
 }
 
+/** 6+ characters, and at most 72 bytes (bcrypt's limit). */
+const goodPassword = (p) => p.length >= 6 && new TextEncoder().encode(p).length <= 72;
+
+/** Fields edited since the form last changed mode: only these show marks. */
+const touched = new Set();
+
 function renderAccount() {
   const name = username(), password = $("password").value, confirm = $("confirm").value;
   const state = creating && availability?.name === name ? availability.state : null;
+  const shows = (id) => creating && touched.has(id);
+  // Each mark: null (none), "checking", "ok" or "bad", with words for screen readers.
+  const marks = {
+    username: !shows("username") || !name ? [null, ""]
+      : !validName() ? ["bad", "3–20 letters, digits or _"]
+      : state === "taken" ? ["bad", "taken"]
+      : state === "available" ? ["ok", "available"]
+      : [state, ""],
+    password: !shows("password") || !password ? [null, ""]
+      : goodPassword(password) ? ["ok", ""] : ["bad", "6+ characters"],
+    confirm: !shows("confirm") || !confirm ? [null, ""]
+      : confirm === password && goodPassword(password) ? ["ok", ""] : ["bad", "doesn't match"],
+  };
   const ready = creating
-    ? state === "available" && password.length >= 8 && confirm === password
-    : validName() && password.length >= 8;
+    ? Object.values(marks).every(([m]) => m === "ok")
+    : !!name && !!password;
   $("account-title").textContent = creating ? "make an account" : "sign in";
   $("account-submit").textContent = creating ? "create account" : "sign in";
   $("account-submit").disabled = !ready || working;
   $("account-switch").textContent = creating ? "have an account?" : "new here?";
   $("password").autocomplete = creating ? "new-password" : "current-password";
-  $("confirm").hidden = $("confirm-hint").hidden = !creating;
-  $("confirm-hint").textContent = creating && password && confirm && confirm !== password ? "passwords don't match" : "";
-  $("account-error").textContent = problem || (creating ? "password needs 8+ characters." : " ");
-  // The cross alone says what's wrong on screen; the words stay for screen readers.
-  const invalid = creating && name && !validName();
-  $("username-hint").textContent = invalid ? "3–20 letters, digits or _" : state === "taken" ? "taken" : "";
-  const shown = invalid ? "taken" : state;
+  $("confirm-field").hidden = !creating;
+  $("account-error").textContent = problem;
+  $("account-error").hidden = !problem;
 
-  // The mark at the field's edge: the working arc, a green check or a red cross.
-  const mark = $("username-mark");
-  mark.toggleAttribute("hidden", !shown); // an <svg> has no .hidden
-  if (shown && mark.dataset.state !== shown) {
-    mark.dataset.state = shown;
-    const [kind, className] = { checking: ["working", "checking"], available: ["check", "ok"], taken: ["cross", "taken"] }[shown];
-    mark.setAttribute("class", `field-mark ${className}`);
-    mark.replaceChildren(...glyph(kind, 14, 0).map((d) => svgEl("path", { d })));
+  // The mark at each field's edge: the working arc, a green check or a red cross.
+  for (const [id, [shown, words]] of Object.entries(marks)) {
+    $(`${id}-hint`).textContent = words;
+    const mark = $(`${id}-mark`);
+    mark.toggleAttribute("hidden", !shown); // an <svg> has no .hidden
+    if (shown && mark.dataset.state !== shown) {
+      mark.dataset.state = shown;
+      const [kind, className] = { checking: ["working", "checking"], ok: ["check", "ok"], bad: ["cross", "taken"] }[shown];
+      mark.setAttribute("class", `field-mark ${className}`);
+      mark.replaceChildren(...glyph(kind, 14, 0).map((d) => svgEl("path", { d })));
+    }
   }
 }
 
@@ -962,11 +981,15 @@ $("account-action").addEventListener("click", () => {
 $("account-switch").addEventListener("click", () => {
   creating = !creating;
   problem = "";
-  scheduleCheck();
+  availability = null;
+  touched.clear();
+  clearTimeout(checkTimer);
   renderAccount();
 });
 $("account-form").addEventListener("submit", submitAccount);
 $("account-form").addEventListener("input", (e) => {
+  touched.add(e.target.id);
+  problem = "";
   if (e.target.id === "username") { tidyUsername(); scheduleCheck(); }
   renderAccount();
 });

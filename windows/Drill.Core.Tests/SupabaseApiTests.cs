@@ -23,6 +23,21 @@ public class SupabaseApiTests
     }
 
     [Fact]
+    public void PasswordRule()
+    {
+        Assert.False(SupabaseApi.IsPassword(""));
+        Assert.False(SupabaseApi.IsPassword("12345"));
+        Assert.True(SupabaseApi.IsPassword("123456"));
+        Assert.True(SupabaseApi.IsPassword("kä se ✨"));
+        Assert.True(SupabaseApi.IsPassword(new string('a', 72)));
+        Assert.False(SupabaseApi.IsPassword(new string('a', 73)));
+        Assert.False(SupabaseApi.IsPassword(new string('é', 37))); // 74 bytes
+        Assert.True(SupabaseApi.IsConfirmed("kasane", "kasane"));
+        Assert.False(SupabaseApi.IsConfirmed("kasane", "kasan"));
+        Assert.False(SupabaseApi.IsConfirmed("kasa", "kasa"));
+    }
+
+    [Fact]
     public void SyntheticEmail()
     {
         Assert.Equal("teto@users.mmerioles.github.io", SupabaseApi.EmailFor("teto"));
@@ -78,8 +93,8 @@ public class SupabaseApiTests
         Assert.Equal("that username is taken", await Sentence(HttpStatusCode.UnprocessableEntity,
             """{"code":422,"error_code":"user_already_exists","msg":"User already registered"}""",
             api => api.CreateAccount("teto", "kasane-0401")));
-        Assert.Equal("use at least 8 characters", await Sentence(HttpStatusCode.UnprocessableEntity,
-            """{"code":422,"error_code":"weak_password","msg":"Password should be at least 8 characters."}""",
+        Assert.Equal("use at least 6 characters", await Sentence(HttpStatusCode.UnprocessableEntity,
+            """{"code":422,"error_code":"weak_password","msg":"Password should be at least 6 characters."}""",
             api => api.CreateAccount("teto", "short")));
         Assert.Equal("wrong username or password", await Sentence(HttpStatusCode.BadRequest,
             """{"code":400,"error_code":"invalid_credentials","msg":"Invalid login credentials"}""",

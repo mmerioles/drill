@@ -18,6 +18,19 @@ struct UsernameTests {
         #expect(!Username.isValid("teto@users.mmerioles.github.io"))
     }
 
+    @Test func password() {
+        #expect(!Password.isValid(""))
+        #expect(!Password.isValid("12345"))
+        #expect(Password.isValid("123456"))
+        #expect(Password.isValid("a b é 🍅"))
+        #expect(Password.isValid(String(repeating: "a", count: 72)))
+        #expect(!Password.isValid(String(repeating: "a", count: 73)))
+        #expect(!Password.isValid(String(repeating: "é", count: 37)))
+        #expect(Password.confirms("kasane", "kasane"))
+        #expect(!Password.confirms("kasane", "kasan"))
+        #expect(!Password.confirms("teto", "teto"))
+    }
+
     @Test func cleaning() {
         #expect(Username.clean(" Te To ") == "teto")
         #expect(Username.clean("KASANE_0401") == "kasane_0401")
@@ -89,8 +102,8 @@ struct UsernameTests {
         await #expect(throws: SyncError.rejected("that username is taken")) {
             try await api.createAccount(username: "teto", password: "kasane-0401")
         }
-        Stub.reply = { _ in (422, #"{"code":422,"error_code":"weak_password","msg":"Password should be at least 8 characters."}"#) }
-        await #expect(throws: SyncError.rejected("use at least 8 characters")) {
+        Stub.reply = { _ in (422, #"{"code":422,"error_code":"weak_password","msg":"Password should be at least 6 characters."}"#) }
+        await #expect(throws: SyncError.rejected("use at least 6 characters")) {
             try await api.createAccount(username: "teto", password: "short")
         }
     }

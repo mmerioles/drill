@@ -144,7 +144,7 @@ class SupabaseApi(private val project: String, private val key: String) {
             "invalid_grant" to "wrong username or password",
             "user_already_exists" to TAKEN,
             "email_exists" to TAKEN,
-            "weak_password" to "use at least 8 characters",
+            "weak_password" to "use at least 6 characters",
             "signup_disabled" to "sign-ups are closed for now",
             "over_request_rate_limit" to TOO_MANY,
             "22023" to "couldn't sync. try updating the app.",

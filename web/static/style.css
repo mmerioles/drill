@@ -243,8 +243,8 @@ button, input { font: inherit; color: inherit; }
 .fields input:focus { box-shadow: inset 0 -2px var(--ink); }
 .fields input::placeholder { color: var(--faint); }
 .fields input[hidden] { display: none; }
-/* The username with its status mark at the trailing edge: a muted arc
-   while checking, a green check when free, a red cross when taken. */
+/* Each field with its mark at the trailing edge: a muted arc while
+   checking, a green check when good, a red cross when not. */
 .field { position: relative; display: flex; }
 .field input { flex: 1; padding-right: 22px; }
 .field-mark {
@@ -256,10 +256,11 @@ button, input { font: inherit; color: inherit; }
 .field-mark.taken { stroke: var(--bad); }
 .field-mark.checking { animation: turn .8s linear infinite; transform-origin: center; }
 @keyframes turn { to { transform: rotate(360deg); } }
-.hint { color: var(--faint); font-size: 12px; min-height: 16px; margin: -2px 0 0; }
-.hint[hidden] { display: none; }
-#username-hint { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); } /* read aloud; the mark shows it */
-.account .message { color: var(--faint); font-size: 13px; min-height: 18px; margin: 0 0 8px; }
+.field[hidden] { display: none; }
+/* Read aloud; the mark shows it. */
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.account .message { color: var(--faint); font-size: 13px; margin: 0 0 8px; }
+.account .message[hidden] { display: none; }
 .account-actions { display: flex; align-items: center; gap: 16px; }
 .account-actions .link:disabled { opacity: .5; cursor: default; }
 .account-actions .capsule { margin-left: -4px; }

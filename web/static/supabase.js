@@ -29,7 +29,7 @@ const SENTENCES = {
   invalid_grant: "wrong username or password",
   user_already_exists: "that username is taken",
   email_exists: "that username is taken",
-  weak_password: "use at least 8 characters",
+  weak_password: "use at least 6 characters",
   signup_disabled: "sign-ups are closed for now",
   over_request_rate_limit: TOO_MANY,
   22023: "couldn't sync. try updating the app.",

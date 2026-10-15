@@ -78,9 +78,9 @@ fun StatusMark(status: Mark, modifier: Modifier = Modifier, breathing: Boolean =
                     }
                 }
                 Mark.Failed -> Canvas(Modifier.size(size)) {
-                    drawCircle(ink.accent)
+                    drawCircle(ink.bad)
                     val w = this.size.width
-                    stroke(ink.paper) {
+                    stroke(Color.White) {
                         moveTo(w * 0.34f, w * 0.34f)
                         lineTo(w * 0.66f, w * 0.66f)
                         moveTo(w * 0.66f, w * 0.34f)

@@ -16,3 +16,11 @@ object Username {
     /** The username behind an account's email. */
     fun fromEmail(email: String) = email.removeSuffix("@$DOMAIN")
 }
+
+/** Supabase's floor is 6 characters; bcrypt reads at most 72 bytes. */
+object Password {
+    fun valid(password: String) =
+        password.codePointCount(0, password.length) >= 6 && password.toByteArray(Charsets.UTF_8).size <= 72
+
+    fun confirmed(password: String, confirm: String) = valid(password) && confirm == password
+}

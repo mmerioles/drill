@@ -41,6 +41,15 @@ public sealed class SupabaseApi(Uri project, string key, HttpClient? http = null
     public static string TidyUsername(string text) =>
         string.Concat(text.Where(c => !char.IsWhiteSpace(c))).ToLowerInvariant();
 
+    // Passwords
+
+    /// <summary>6+ characters, at most 72 UTF-8 bytes (bcrypt's limit); any characters.</summary>
+    public static bool IsPassword(string password) =>
+        password.EnumerateRunes().Count() >= 6 && Encoding.UTF8.GetByteCount(password) <= 72;
+
+    /// <summary>The second password matches a good first one.</summary>
+    public static bool IsConfirmed(string password, string confirm) => IsPassword(password) && confirm == password;
+
     // Accounts
 
     public Task<Account> SignIn(string username, string password, CancellationToken ct = default) =>
@@ -200,7 +209,7 @@ public sealed class SupabaseApi(Uri project, string key, HttpClient? http = null
         ["invalid_grant"] = "wrong username or password",
         ["user_already_exists"] = Taken,
         ["email_exists"] = Taken,
-        ["weak_password"] = "use at least 8 characters",
+        ["weak_password"] = "use at least 6 characters",
         ["email_address_invalid"] = "that username doesn't look right",
         ["validation_failed"] = "that username doesn't look right",
         ["signup_disabled"] = "sign-ups are closed for now",

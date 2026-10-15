@@ -20,7 +20,7 @@ struct StatusMark: View {
                     .transition(.scale(scale: 0.4).combined(with: .opacity))
             case .failed:
                 Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(Ink.accent)
+                    .foregroundStyle(Ink.bad)
                     .transition(.scale(scale: 0.4).combined(with: .opacity))
             case .pending:
                 Dot(breathing: breathing)
