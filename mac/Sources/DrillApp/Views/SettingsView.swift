@@ -5,9 +5,11 @@ import DrillCore
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @Environment(Updater.self) private var updater
+    @Environment(Sync.self) private var sync
 
     var body: some View {
         @Bindable var model = model
+        @Bindable var sync = sync
 
         Form {
             Section {
@@ -36,6 +38,9 @@ struct SettingsView: View {
             }
             Section {
                 AccountRow()
+                if sync.isSignedIn {
+                    Toggle("auto sync", isOn: $sync.autoSync)
+                }
                 ServerRow()
             }
             if updater.isEnabled {

@@ -89,7 +89,7 @@ public partial class App : Application, Shell
         Model = AppModel.Live();
         Palette.Apply(Model.Theme, Resources);
         Sync = new Sync(Model.Store, Model.DeviceID, Model.Prefs, onPulled: Model.Reload);
-        Model.OnLogged = Sync.SyncNow;
+        Model.OnLogged = Sync.Logged;
         Updater = new Updater();
 
         Model.Finished += Finished;

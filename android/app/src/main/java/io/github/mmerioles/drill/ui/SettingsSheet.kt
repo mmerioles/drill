@@ -67,6 +67,7 @@ fun SettingsSheet(model: AppModel, close: () -> Unit, signIn: () -> Unit) {
         }
         Group {
             AccountRow(sync) { sheet.close(signIn) }
+            if (sync.isSignedIn) SwitchRow("auto sync", sync.auto, sync::updateAuto)
             ServerRow(sync)
         }
         Group { UpdateRow(model) }

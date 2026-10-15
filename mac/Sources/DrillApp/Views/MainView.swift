@@ -5,7 +5,6 @@ struct MainView: View {
     @Environment(AppModel.self) private var model
     @Environment(Updater.self) private var updater
     @Environment(Sync.self) private var sync
-    @State private var signingIn = false
     /// The page holds focus so the tag field doesn't grab it and space toggles the timer.
     @FocusState private var pageFocused: Bool
     @Environment(\.openWindow) private var openWindow
@@ -13,10 +12,6 @@ struct MainView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .center, spacing: 8) {
-                Glyph(.drill, size: 22, boiling: model.isRunning, lineWidth: 1.8, tint: Ink.accent)
-                Text("drill")
-                    .font(Ink.word(20))
-                    .foregroundStyle(Ink.ink)
                 Spacer()
                 if let error = model.lastError {
                     Text(error).font(Ink.text(13)).foregroundStyle(Ink.faint)
@@ -28,14 +23,15 @@ struct MainView: View {
                     } else if let release = updater.available, !model.isActive {
                         Button("update to \(release.version.description)") { Task { await updater.install() } }
                     }
-                    Button(syncLabel) { sync.isSignedIn ? sync.syncNow() : (signingIn = true) }
+                    if sync.showsLink {
+                        Button(sync.state == .offline ? "offline" : "sync", action: sync.syncNow)
+                    }
                     Button("inspo") { openWindow(id: "inspo") }
                     SettingsLink { Text("settings") }
                 }
                 .buttonStyle(.inkLink)
             }
             .padding(.top, 8)
-            .sheet(isPresented: $signingIn) { AccountSheet() }
 
             Spacer(minLength: 20)
             TimerView()
@@ -60,16 +56,6 @@ struct MainView: View {
         .onAppear {
             model.applyTheme()
             model.reload()
-        }
-    }
-
-    private var syncLabel: String {
-        if sync.waiting?.confirmed == false { return "check email" }
-        return switch sync.state {
-        case .syncing: "syncing…"
-        case .offline: "offline"
-        case .unconfirmed: "confirm email"
-        case .signedOut, .idle: sync.justSynced ? "synced" : "sync"
         }
     }
 }

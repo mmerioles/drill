@@ -14,7 +14,7 @@ struct DrillApp: App {
         Rename.carryOver()
         let model = AppModel.live()
         let sync = Sync(store: model.store, deviceID: model.deviceID, onPulled: { [weak model] in model?.reload() })
-        model.onLogged = { [weak sync] in sync?.syncNow() }
+        model.onLogged = { [weak sync] in sync?.logged() }
         // Checks run from launch, whether or not the main window opens.
         let updater = Updater()
         updater.start()

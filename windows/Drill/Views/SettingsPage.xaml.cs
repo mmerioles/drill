@@ -38,6 +38,7 @@ public partial class SettingsPage : UserControl
         Toggled(AutoFocus, on => Model.Config = Model.Config with { AutoStartFocus = on });
         Toggled(Sound, on => Model.SoundOn = on);
         Toggled(Tray, on => Model.KeepInTray = on);
+        Toggled(AutoSync, on => _shell.Sync.AutoSync = on);
 
         Server.TextChanged += (_, _) => ServerHint.Visibility = Server.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         Server.KeyDown += (_, e) => { if (e.Key == Key.Enter) SaveServer(); };
@@ -132,6 +133,10 @@ public partial class SettingsPage : UserControl
                 SyncState.Offline => "offline. your sessions are safe here.",
                 _ => "confirm your email to start syncing.",
             };
+        AutoSyncRow.Visibility = sync.IsSignedIn ? Visibility.Visible : Visibility.Collapsed;
+        _showing = true;
+        AutoSync.IsOn = sync.AutoSync;
+        _showing = false;
         Server.IsEnabled = !sync.IsSignedIn;
         ServerNote.Text = sync.IsSignedIn ? "sign out to change servers." : "leave blank to use ours, or add your own.";
     }

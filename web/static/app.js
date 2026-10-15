@@ -1,6 +1,6 @@
 import { Engine, Phase, defaultConfig, isBreak } from "./engine.js";
 import { buildHeatmap, firstWeekday } from "./heatmap.js";
-import { BOIL_MS, drill, ring, square } from "./ink.js";
+import { BOIL_MS, ring, square } from "./ink.js";
 import { VIDEOS, markWatched, today as inspoToday, watched, watchedBefore } from "./inspo.js";
 import { SAMPLE_TAGS, sampleYear } from "./sample.js";
 import { chime, wakeAudio } from "./sound.js";
@@ -23,7 +23,7 @@ const save = (key, value) => {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
 };
 
-const settings = { sound: true, ...load(KEY.settings, {}) };
+const settings = { sound: true, autoSync: true, ...load(KEY.settings, {}) };
 // Dark unless picked; the site's demo starts in the visitor's own mode.
 // Old "auto" choices fall back the same way.
 if (!["light", "dark"].includes(settings.theme)) {
@@ -32,6 +32,7 @@ if (!["light", "dark"].includes(settings.theme)) {
 settings.config = { ...defaultConfig, ...settings.config };
 
 const store = new Store({ offline: demo });
+store.autoSync = settings.autoSync;
 const saved = load(KEY.timer, null);
 const engine = new Engine(settings.config, saved?.engine);
 /** The tag in effect for the running focus block, captured when it starts. */
@@ -188,7 +189,7 @@ function schedule() {
 const view = {
   status: $("status"), clock: $("clock"), toggle: $("toggle"), reset: $("reset"), dots: $("dots"),
   track: $("ring").querySelector(".track"), arc: $("ring").querySelector(".arc"),
-  tip: $("ring").querySelector(".tip"), mark: $("mark").querySelector("path"),
+  tip: $("ring").querySelector(".tip"),
 };
 const shown = {};
 /** Writes to the page only what changed since the last render. */
@@ -223,7 +224,7 @@ function renderTimer() {
   renderRing();
 }
 
-/** The ring and the mark. Boiling, they're redrawn every boil step; still,
+/** The ring. Boiling, it's redrawn every boil step; still,
  *  only when the arc would visibly move. */
 function renderRing() {
   const now = Date.now();
@@ -237,7 +238,6 @@ function renderRing() {
     view.tip.style.display = r.tip ? "" : "none";
     if (r.tip) { view.tip.setAttribute("cx", r.tip[0]); view.tip.setAttribute("cy", r.tip[1]); }
   });
-  put("mark", tick, (t) => view.mark.setAttribute("d", drill(22, t)));
 }
 
 /** Tags to offer, most recent first; the demo's sample classes come after yours. */
@@ -439,22 +439,13 @@ function dayAt(event) {
   return { ...heat.weeks[w][d], w, d };
 }
 
-let lastSyncState = store.syncState;
-let syncedFlash = null;
-
-/** The header word, the settings row, and a brief "synced" after a sync.
- *  Copy as in the mac's MainView and AccountRow. */
+/** The header link, shown only while there's something to push, and the
+ *  settings rows. Copy as in the mac's MainView and AccountRow. */
 function renderSync() {
   const state = store.syncState, account = store.account, waiting = store.waiting;
-  if (lastSyncState === "syncing" && state === "synced") {
-    clearTimeout(syncedFlash);
-    syncedFlash = setTimeout(() => { syncedFlash = null; renderSync(); }, 2000);
-  }
-  lastSyncState = state;
-  $("sync").textContent = waiting && !waiting.confirmed ? "check email" : {
-    signedOut: "sync", syncing: "syncing…", offline: "offline", unconfirmed: "confirm email",
-    synced: syncedFlash ? "synced" : "sync",
-  }[state];
+  $("sync").hidden = !account || state === "syncing" || store.unpushed() === 0;
+  $("sync").textContent = state === "offline" ? "offline" : "sync";
+  $("auto-sync-row").hidden = !account;
   $("account-line").textContent = account?.email ?? "sync";
   $("account-action").textContent = waiting && !waiting.confirmed ? "cancel" : account ? "sign out" : "sign in";
   $("sync-note").textContent = waiting
@@ -647,6 +638,7 @@ function openSettings() {
   $("autoStartBreaks").checked = c.autoStartBreaks;
   $("autoStartFocus").checked = c.autoStartFocus;
   $("sound").checked = settings.sound;
+  $("autoSync").checked = settings.autoSync;
   markTheme();
   renderSync();
   $("settings").showModal();
@@ -683,9 +675,13 @@ function saveSettings() {
     autoStartFocus: $("autoStartFocus").checked,
   };
   settings.sound = $("sound").checked;
+  const resumed = $("autoSync").checked && !settings.autoSync;
+  settings.autoSync = store.autoSync = $("autoSync").checked;
   engine.config = settings.config;
   save(KEY.settings, settings);
   changed();
+  syncLoop();
+  if (resumed) store.sync();
 }
 
 // MARK: Wiring
@@ -738,7 +734,7 @@ $("theme").addEventListener("keydown", (e) => {
   pickTheme(settings.theme === "light" ? "dark" : "light");
   [...$("theme").children].find((b) => b.value === settings.theme).focus();
 });
-$("sync").addEventListener("click", () => (store.account ? store.sync() : openAccount()));
+$("sync").addEventListener("click", () => store.sync());
 $("account-action").addEventListener("click", () => {
   if (store.account) return store.signOut(); // also "cancel" while waiting on the link
   $("settings").close();
@@ -778,7 +774,7 @@ new ResizeObserver(() => {
   resizing ||= requestAnimationFrame(() => { resizing = 0; renderYear(); fadeEdge(); });
 }).observe(grid);
 
-store.addEventListener("change", () => { renderTags(); renderYear(); });
+store.addEventListener("change", () => { renderTags(); renderYear(); renderSync(); });
 store.addEventListener("sync", renderSync);
 
 // Another tab started, paused or finished the timer.
@@ -791,11 +787,11 @@ addEventListener("storage", (e) => {
   renderTimer();
 });
 
-// Sync every five minutes while signed in and looking, never while the tab
-// is hidden. Coming back syncs too, unless one started in the last 20s.
+// With auto sync: every five minutes while signed in and looking, never while
+// the tab is hidden. Coming back syncs too, unless one started in the last 20s.
 let syncTimer = null;
 function syncLoop() {
-  const on = !demo && !!store.account && visible();
+  const on = !demo && settings.autoSync && !!store.account && visible();
   if (on && !syncTimer) syncTimer = setInterval(() => store.sync(), 5 * 60_000);
   else if (!on && syncTimer) { clearInterval(syncTimer); syncTimer = null; }
 }
@@ -815,7 +811,7 @@ document.addEventListener("visibilitychange", () => {
     advance();
     renderYear();
     scheduleMidnight();
-    if (!demo && store.account && Date.now() - store.lastStarted > 20_000) store.sync();
+    if (!demo && settings.autoSync && store.account && Date.now() - store.lastStarted > 20_000) store.sync();
   } else {
     schedule();
     renderTimer();
@@ -835,7 +831,7 @@ renderTags();
 renderYear();
 renderSync();
 scheduleMidnight();
-if (!demo) store.sync();
+if (!demo && settings.autoSync) store.sync();
 // Opened by a banner's start button when no tab was open.
 const startParam = new URLSearchParams(location.search).get("start");
 if (startParam) {

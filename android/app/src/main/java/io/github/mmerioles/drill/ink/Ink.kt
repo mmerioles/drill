@@ -109,21 +109,4 @@ object Doodle {
         val pts = jitter(List(n + 1) { point(it, n, 2 * PI * p) }, tick + 17, size / 270 * 0.9f)
         return Ring(track, curve(pts, false), pts.last())
     }
-
-    /** Teto's drill curl: a tapering corkscrew. */
-    fun drill(s: Float, tick: Long, roughness: Float = 1f): Path {
-        val turns = 3.4
-        val steps = 36
-        val amp = s / 60 * roughness
-        val next = wobble(tick + 5)
-        val pts = List(steps + 1) { i ->
-            val t = i.toFloat() / steps
-            val angle = t * turns * 2 * PI
-            val radius = s * (0.30f * (1 - t) + 0.04f)
-            val y = s * (0.10f + 0.78f * t) + sin(angle).toFloat() * radius * 0.32f
-            val a = amp * 0.6f * (1 - 0.7f * t) * 2
-            Offset(s * 0.5f + cos(angle).toFloat() * radius + next() * a, y + next() * a)
-        }
-        return curve(pts, false)
-    }
 }

@@ -3,7 +3,6 @@ package io.github.mmerioles.drill.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -59,9 +58,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
@@ -78,7 +74,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.github.mmerioles.drill.ink.Doodle
 import io.github.mmerioles.drill.ink.LocalPalette
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -179,19 +174,6 @@ fun Capsule(text: String, modifier: Modifier = Modifier, small: Boolean = false,
         contentAlignment = Alignment.Center,
     ) {
         Words(text, size = if (small) 14.sp else 16.sp, weight = FontWeight.SemiBold, color = ink.paper)
-    }
-}
-
-/** The drill mark; [tick] is read while drawing, so a boil step only redraws. */
-@Composable
-fun DrillMark(tick: () -> Long, modifier: Modifier = Modifier, size: Dp = 22.dp) {
-    val accent = LocalPalette.current.accent
-    Canvas(modifier.size(size)) {
-        val s = this.size.minDimension
-        drawPath(
-            Doodle.drill(s, tick()), accent,
-            style = Stroke(width = s * 1.8f / 22, cap = StrokeCap.Round, join = StrokeJoin.Round),
-        )
     }
 }
 

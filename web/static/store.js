@@ -47,6 +47,8 @@ export class Store extends EventTarget {
   constructor({ offline = false } = {}) {
     super();
     this.offline = offline;
+    /** Off: only signing in and an explicit sync() talk to the server. */
+    this.autoSync = true;
     this.deviceID = localStorage.getItem(KEY.device) || `web-${randomUUID()}`;
     try { localStorage.setItem(KEY.device, this.deviceID); } catch {}
     this.sessions = read(KEY.sessions, {});
@@ -60,7 +62,7 @@ export class Store extends EventTarget {
 
     // Another tab wrote: pick up its sessions.
     addEventListener("storage", (e) => {
-      if (e.key === KEY.sessions) {
+      if (e.key === KEY.sessions || e.key === KEY.dirty) {
         this.sessions = read(KEY.sessions, {});
         this.#changed();
       }
@@ -160,6 +162,9 @@ export class Store extends EventTarget {
     }
   }
 
+  /** How many local changes haven't been pushed yet. */
+  unpushed() { return read(KEY.dirty, []).length; }
+
   /** Live sessions, oldest first. */
   live() {
     return Object.values(this.sessions)
@@ -193,7 +198,7 @@ export class Store extends EventTarget {
       deletedAt: null,
     };
     this.#merge([session], true);
-    this.sync();
+    if (this.autoSync) this.sync();
   }
 
   /** Last-writer-wins on updatedAt. Local writes are queued for push. */

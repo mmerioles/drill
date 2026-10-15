@@ -44,6 +44,8 @@ import Testing
         try store.save(s)
         #expect(try store.sessions(from: .distantPast, to: .distantFuture).isEmpty)
         #expect(try store.changes(since: Date(timeIntervalSince1970: 300)).map(\.id) == [s.id])
+        #expect(try store.changeCount(since: Date(timeIntervalSince1970: 300)) == 1)
+        #expect(try store.changeCount(since: Date(timeIntervalSince1970: 400)) == 0)
     }
 
     @Test func tagsAreMostRecentFirst() throws {

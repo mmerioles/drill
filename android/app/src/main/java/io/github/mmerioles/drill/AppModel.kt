@@ -235,7 +235,8 @@ class AppModel(private val app: Application) {
             saved.exceptionOrNull()?.let { Log.e(TAG, "couldn't save a session", it) }
             lastError = if (saved.isSuccess) null else "couldn't save that session."
             reload()
-            sync.syncNow()
+            sync.recount()
+            sync.autoSync()
         }
         writes += job
         job.invokeOnCompletion { scope.launch { writes.remove(job) } }

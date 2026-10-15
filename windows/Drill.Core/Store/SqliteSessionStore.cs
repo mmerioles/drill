@@ -19,6 +19,9 @@ public interface ISessionStore
 
     /// <summary>Every row touched after `since`, tombstones included. The sync push set.</summary>
     IReadOnlyList<FocusSession> Changes(DateTimeOffset since);
+
+    /// <summary>How many rows made on `deviceID` were touched after `since`: local changes not yet pushed.</summary>
+    int Unpushed(DateTimeOffset since, string deviceID);
 }
 
 /// <summary>SQLite, with the mac app's schema (dates are Unix seconds).</summary>
@@ -127,6 +130,18 @@ public sealed class SqliteSessionStore : ISessionStore, IDisposable
 
     public IReadOnlyList<FocusSession> Changes(DateTimeOffset since) =>
         Read($"SELECT {Columns} FROM sessions WHERE updated_at > $a ORDER BY updated_at", ("$a", Seconds(since)));
+
+    public int Unpushed(DateTimeOffset since, string deviceID)
+    {
+        lock (_gate)
+        {
+            using var cmd = _db.CreateCommand();
+            cmd.CommandText = "SELECT COUNT(*) FROM sessions WHERE updated_at > $a AND device_id = $device";
+            cmd.Parameters.AddWithValue("$a", Seconds(since));
+            cmd.Parameters.AddWithValue("$device", deviceID);
+            return Convert.ToInt32(cmd.ExecuteScalar());
+        }
+    }
 
     private const string Columns =
         "id, started_at, ended_at, focus_seconds, planned_seconds, completed, tag, device_id, updated_at, deleted_at";

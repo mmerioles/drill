@@ -27,8 +27,11 @@ class Sync(
         private set
     var state by mutableStateOf(if (account == null) State.SignedOut else State.Idle)
         private set
-    /** True for a moment after a sync lands. */
-    var justSynced by mutableStateOf(false)
+    /** Local changes not yet pushed. */
+    var unpushed by mutableStateOf(0)
+        private set
+    /** Off: only signing in and the sync link sync. */
+    var auto by mutableStateOf(prefs.getBoolean(Keys.AUTO, true))
         private set
     /** A self-hosted server from settings, or null for ours. */
     var customServer by mutableStateOf(prefs.getString(Keys.SERVER, null))
@@ -38,6 +41,24 @@ class Sync(
     private var lastStarted = 0L
 
     val isSignedIn get() = account != null
+
+    init {
+        scope.launch { recount() }
+    }
+
+    fun updateAuto(on: Boolean) {
+        auto = on
+        prefs.edit().putBoolean(Keys.AUTO, on).apply()
+        if (on) syncNow()
+    }
+
+    suspend fun recount() {
+        withContext(Dispatchers.IO) { runCatching { store.unpushed() } }.onSuccess { unpushed = it }
+    }
+
+    fun autoSync() {
+        if (auto) syncNow()
+    }
 
     val backend: SyncBackend get() = customServer?.let(::SyncApi) ?: SupabaseApi.hosted
 
@@ -192,7 +213,7 @@ class Sync(
     }
 
     fun cameBack() {
-        if (System.currentTimeMillis() - lastStarted >= 20_000L) syncNow()
+        if (System.currentTimeMillis() - lastStarted >= 20_000L) autoSync()
     }
 
     suspend fun settle() {
@@ -218,9 +239,6 @@ class Sync(
             if (pulled) onPulled()
             if (account?.token != token) return // signed out meanwhile
             state = State.Idle
-            justSynced = true
-            delay(2000)
-            justSynced = false
         } catch (e: SyncBackend.SignedOut) {
             if (account?.email != start.email) return
             save(null)
@@ -233,6 +251,7 @@ class Sync(
             // A bad page, an unparseable date, the disk: call it offline and retry next time.
             if (account?.email == start.email) state = State.Offline
         }
+        recount()
     }
 
     private suspend fun fresh(api: SyncBackend, start: Account, force: Boolean): String {
@@ -291,5 +310,6 @@ class Sync(
         const val EXPIRES = "sync.expiresAt" // hosted only, epoch millis
         const val SERVER = "sync.server" // self-hosted only
         const val CURSOR = "sync.cursor"
+        const val AUTO = "sync.auto"
     }
 }

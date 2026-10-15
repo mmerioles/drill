@@ -12,9 +12,6 @@ struct HeatmapSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
-                Text("your year")
-                    .font(Ink.word(18))
-                    .foregroundStyle(Ink.ink)
                 Spacer()
                 TagFilter()
             }

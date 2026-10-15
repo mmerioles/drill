@@ -1,5 +1,5 @@
-// Hand-drawn strokes, ported from InkKit (Doodle.swift, Glyphs.swift,
-// DoodleRing.swift). Every stroke is jittered by a seeded wobble; stepping
+// Hand-drawn strokes, ported from InkKit (Doodle.swift, DoodleRing.swift).
+// Every stroke is jittered by a seeded wobble; stepping
 // the seed every 0.4s gives the hand-drawn "boil".
 
 export const BOIL_MS = 400;
@@ -68,17 +68,4 @@ export function ring(size, progress, tick, lineWidth = 2.6) {
   const n = Math.max(2, Math.floor(samples * p));
   const pts = jitter([...Array(n + 1)].map((_, i) => point(i, n, 2 * Math.PI * p)), tick + 17, 0.9);
   return { track, arc: curve(pts, false), tip: pts[pts.length - 1] };
-}
-
-/** Teto's drill curl: a tapering corkscrew. */
-export function drill(s, tick, roughness = 1) {
-  const turns = 3.4, steps = 36, amp = s / 60 * roughness, next = wobble(tick + 5);
-  const pts = [...Array(steps + 1)].map((_, i) => {
-    const t = i / steps, angle = t * turns * 2 * Math.PI;
-    const radius = s * (0.30 * (1 - t) + 0.04);
-    const y = s * (0.10 + 0.78 * t) + Math.sin(angle) * radius * 0.32;
-    const a = amp * 0.6 * (1 - 0.7 * t) * 2;
-    return [s * 0.5 + Math.cos(angle) * radius + next() * a, y + next() * a];
-  });
-  return curve(pts, false);
 }

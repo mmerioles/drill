@@ -9,16 +9,11 @@
 
         <!-- Header -->
         <DockPanel DockPanel.Dock="Top" Height="28" LastChildFill="False">
-            <ink:Glyph DockPanel.Dock="Left" Kind="Drill" Width="22" Height="22" LineWidth="1.8" Accent="True"
-                       Boiling="{Binding Model.IsRunning}" VerticalAlignment="Center" />
-            <TextBlock DockPanel.Dock="Left" Text="drill" Style="{StaticResource Base}" FontFamily="{DynamicResource Display}"
-                       FontWeight="Bold" FontSize="20" Margin="8,0,0,2" VerticalAlignment="Center"
-                       TextOptions.TextFormattingMode="Ideal" />
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Bottom" Margin="0,0,0,5" x:Name="Links">
                 <TextBlock x:Name="Updating" Text="updating…" Style="{StaticResource Base}" FontSize="14" Opacity="0.52"
                            Margin="0,0,16,0" Visibility="Collapsed" />
                 <ink:InkLink x:Name="UpdateLink" Margin="0,0,14,0" Visibility="Collapsed" Click="OnUpdate" />
-                <ink:InkLink x:Name="SyncLink" Content="{Binding Sync.Label}" Margin="0,0,14,0" Click="OnSync" />
+                <ink:InkLink x:Name="SyncLink" Content="{Binding Sync.Label}" Margin="0,0,14,0" Visibility="Collapsed" Click="OnSync" />
                 <ink:InkLink Content="inspo" Margin="0,0,14,0" Click="OnInspo" />
                 <ink:InkLink Content="settings" Click="OnSettings" />
             </StackPanel>
@@ -29,8 +24,6 @@
         <!-- Your year -->
         <StackPanel DockPanel.Dock="Bottom">
             <DockPanel Margin="0,0,0,12">
-                <TextBlock Text="your year" Style="{StaticResource Base}" FontFamily="{DynamicResource Display}" FontWeight="Bold"
-                           FontSize="18" VerticalAlignment="Bottom" TextOptions.TextFormattingMode="Ideal" />
                 <StackPanel x:Name="Filters" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom"
                             Margin="0,0,-2,1" />
             </DockPanel>

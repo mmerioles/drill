@@ -33,6 +33,7 @@ public sealed class Sync : Observable
     private Task? _running;
     private DateTimeOffset? _lastStarted;
     private CancellationTokenSource? _watching;
+    private bool _auto;
 
     public Sync(ISessionStore store, string deviceID, Prefs prefs, Action onPulled)
     {
@@ -42,36 +43,41 @@ public sealed class Sync : Observable
         _onPulled = onPulled;
         Account = LoadAccount();
         CustomServer = prefs.Get<string>(Keys.Server);
+        _auto = prefs.Get<bool?>(Keys.Auto) ?? true;
         State = Account is null ? SyncState.SignedOut : SyncState.Idle;
         _loop = new DispatcherTimer(DispatcherPriority.Background) { Interval = Every };
         _loop.Tick += (_, _) => SyncNow();
+        Refresh();
     }
 
-    public SyncState State { get; private set { if (Set(ref field, value)) Raise(nameof(Label)); } }
-    public Account? Account { get; private set { if (Set(ref field, value)) { Raise(nameof(IsSignedIn)); Raise(nameof(Label)); } } }
-    /// <summary>True for a moment after a sync lands, for a quiet "synced".</summary>
-    public bool JustSynced { get; private set { if (Set(ref field, value)) Raise(nameof(Label)); } }
+    public SyncState State { get; private set { if (Set(ref field, value)) { Raise(nameof(Label)); Raise(nameof(ShowsLink)); } } }
+    public Account? Account { get; private set { if (Set(ref field, value)) { Raise(nameof(IsSignedIn)); Raise(nameof(ShowsLink)); } } }
     /// <summary>A self-hosted server from settings, or null for ours.</summary>
     public string? CustomServer { get; private set => Set(ref field, value); }
-    public Waiting? WaitingFor { get; private set { if (Set(ref field, value)) Raise(nameof(Label)); } }
+    public Waiting? WaitingFor { get; private set => Set(ref field, value); }
+    /// <summary>Sessions logged here that haven't reached the server yet.</summary>
+    public bool HasUnpushed { get; private set { if (Set(ref field, value)) Raise(nameof(ShowsLink)); } }
 
     public bool IsSignedIn => Account is not null;
 
-    /// <summary>The header's word.</summary>
-    public string Label
+    /// <summary>Off: nothing syncs unless you ask. Back on: syncs at once.</summary>
+    public bool AutoSync
     {
-        get
+        get => _auto;
+        set
         {
-            if (WaitingFor is { Confirmed: false }) return "check email";
-            return State switch
-            {
-                SyncState.Syncing => "syncing…",
-                SyncState.Offline => "offline",
-                SyncState.Unconfirmed => "confirm email",
-                _ => JustSynced ? "synced" : "sync",
-            };
+            if (!Set(ref _auto, value)) return;
+            _prefs.Set(Keys.Auto, value);
+            _loop.IsEnabled = IsSignedIn && value;
+            if (value) SyncNow();
         }
     }
+
+    /// <summary>The header's link: only while there's something to push and nothing pushing it.</summary>
+    public bool ShowsLink => IsSignedIn && HasUnpushed && State != SyncState.Syncing;
+
+    /// <summary>The header link's word.</summary>
+    public string Label => State == SyncState.Offline ? "offline" : "sync";
 
     /// <summary>The self-hosted server from settings, or ours on Supabase.</summary>
     public ISyncBackend Backend =>
@@ -95,20 +101,33 @@ public sealed class Sync : Observable
         _prefs.Set(Keys.Server, CustomServer);
     }
 
-    /// <summary>Syncs at launch, every few minutes, and whenever you come back to the app.</summary>
+    /// <summary>With auto sync on: syncs at launch, every few minutes, and whenever you come back to the app.</summary>
     public void Start()
     {
         // The loop only runs while there's an account to sync: no wakeups signed out.
-        _loop.IsEnabled = IsSignedIn;
-        PropertyChanged += (_, e) => { if (e.PropertyName == nameof(IsSignedIn)) _loop.IsEnabled = IsSignedIn; };
-        SyncNow();
+        _loop.IsEnabled = IsSignedIn && AutoSync;
+        PropertyChanged += (_, e) => { if (e.PropertyName == nameof(IsSignedIn)) _loop.IsEnabled = IsSignedIn && AutoSync; };
+        if (AutoSync) SyncNow();
         Application.Current.Activated += (_, _) => CameBack();
     }
 
     private void CameBack()
     {
         // Not on every click back in: skip when a sync just started.
-        if (_lastStarted is not { } last || DateTimeOffset.UtcNow - last > TimeSpan.FromSeconds(20)) SyncNow();
+        if (AutoSync && (_lastStarted is not { } last || DateTimeOffset.UtcNow - last > TimeSpan.FromSeconds(20))) SyncNow();
+    }
+
+    /// <summary>A session was logged here.</summary>
+    public void Logged()
+    {
+        Refresh();
+        if (AutoSync) SyncNow();
+    }
+
+    private void Refresh()
+    {
+        var since = _prefs.Get<DateTimeOffset?>(Keys.PushedAt) ?? DateTimeOffset.MinValue;
+        try { HasUnpushed = _store.Unpushed(since, _deviceID) > 0; } catch (Exception) { HasUnpushed = false; }
     }
 
     // Account
@@ -281,7 +300,6 @@ public sealed class Sync : Observable
             }
             if (Account?.Token != token) return; // signed out meanwhile
             State = SyncState.Idle;
-            FlashSynced();
         }
         catch (SyncException e) when (e.Failure == SyncFailure.SignedOut)
         {
@@ -300,6 +318,7 @@ public sealed class Sync : Observable
         finally
         {
             _running = null;
+            Refresh();
             if (State == SyncState.Syncing) State = Account is null ? SyncState.SignedOut : SyncState.Idle;
         }
     }
@@ -334,13 +353,6 @@ public sealed class Sync : Observable
             _prefs.Set(Keys.Cursor, page.Cursor);
         } while (page.More);
         if (pulled) _onPulled();
-    }
-
-    private async void FlashSynced()
-    {
-        JustSynced = true;
-        await Task.Delay(TimeSpan.FromSeconds(2));
-        JustSynced = false;
     }
 
     // Keeping the account
@@ -379,5 +391,6 @@ public sealed class Sync : Observable
         public const string Server = "drill.sync.server"; // self-hosted only
         public const string Cursor = "drill.sync.cursor";
         public const string PushedAt = "drill.sync.pushedAt";
+        public const string Auto = "drill.sync.auto";
     }
 }

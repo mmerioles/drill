@@ -59,9 +59,6 @@ button, input { font: inherit; color: inherit; }
 /* Header */
 
 .top { display: flex; align-items: center; gap: 8px; }
-.mark { width: 22px; height: 22px; }
-.mark path { fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.word { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
 .spacer { flex: 1; }
 
 /* Buttons: one ink capsule per screen; everything else is a faint word. */
@@ -137,8 +134,7 @@ button, input { font: inherit; color: inherit; }
 
 /* Year */
 
-.year-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
-.year-head h2 { font-size: 18px; font-weight: 700; white-space: nowrap; flex: none; }
+.year-head { display: flex; justify-content: flex-end; margin-bottom: 14px; }
 .filter { position: relative; display: flex; gap: 12px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .filter::-webkit-scrollbar { display: none; }
 /* Too many tabs for the width: they scroll, and an edge with more tabs
@@ -183,6 +179,7 @@ button, input { font: inherit; color: inherit; }
   min-height: 42px; font-size: 14px;
 }
 .row + .row { border-top: 1px solid var(--ghost); }
+.row[hidden] { display: none; }
 .row.note { color: var(--faint); font-size: 12px; min-height: 36px; }
 .num { color: var(--faint); font-variant-numeric: tabular-nums; }
 .num input {
@@ -271,10 +268,6 @@ button, input { font: inherit; color: inherit; }
   .controls { gap: 20px; }
   .caption { gap: 14px; font-size: 12px; }
   .legend { display: none; }
-}
-/* Narrow phones: the tabs get their own row under the heading. */
-@media (max-width: 479px) {
-  .year-head { flex-direction: column; align-items: stretch; gap: 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

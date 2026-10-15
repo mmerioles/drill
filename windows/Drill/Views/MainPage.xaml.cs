@@ -70,6 +70,7 @@ public partial class MainPage : UserControl
         {
             Model.PropertyChanged += OnModel;
             _shell.Updater.PropertyChanged += OnUpdater;
+            _shell.Sync.PropertyChanged += OnSyncChanged;
             Palette.Changed += Recolor;
             Recolor();
             Show(); // whatever changed while away
@@ -78,11 +79,13 @@ public partial class MainPage : UserControl
         {
             Model.PropertyChanged -= OnModel;
             _shell.Updater.PropertyChanged -= OnUpdater;
+            _shell.Sync.PropertyChanged -= OnSyncChanged;
             Palette.Changed -= Recolor;
         }
     }
 
     private void OnUpdater(object? sender, PropertyChangedEventArgs e) => ShowUpdate();
+    private void OnSyncChanged(object? sender, PropertyChangedEventArgs e) => ShowSync();
 
     // Keys: space and Enter start and pause (not while typing a tag, nor
     // on a focused button, which they press), and the menu-less shortcuts
@@ -169,7 +172,11 @@ public partial class MainPage : UserControl
         ShowFilters();
         ShowStats();
         ShowUpdate();
+        ShowSync();
     }
+
+    private void ShowSync() =>
+        SyncLink.Visibility = _shell.Sync.ShowsLink ? Visibility.Visible : Visibility.Collapsed;
 
     private void ShowSuggestions()
     {
@@ -253,9 +260,5 @@ public partial class MainPage : UserControl
     private void OnInspo(object sender, RoutedEventArgs e) => _shell.OpenInspo();
     private void OnSettings(object sender, RoutedEventArgs e) => _shell.OpenSettings();
 
-    private void OnSync(object sender, RoutedEventArgs e)
-    {
-        if (_shell.Sync.IsSignedIn) _shell.Sync.SyncNow();
-        else _shell.ShowAccount(this);
-    }
+    private void OnSync(object sender, RoutedEventArgs e) => _shell.Sync.SyncNow();
 }

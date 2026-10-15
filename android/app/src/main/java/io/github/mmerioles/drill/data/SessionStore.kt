@@ -3,6 +3,7 @@ package io.github.mmerioles.drill.data
 import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
+import android.database.DatabaseUtils
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import io.github.mmerioles.drill.core.FocusSession
@@ -75,6 +76,10 @@ class SessionStore(context: Context) :
 
     @Synchronized
     fun dirty(): List<FocusSession> = query("SELECT * FROM sessions WHERE dirty = 1", emptyArray())
+
+    /** How many rows are waiting to be pushed. */
+    @Synchronized
+    fun unpushed(): Int = DatabaseUtils.queryNumEntries(readableDatabase, "sessions", "dirty = 1").toInt()
 
     /** Clears the push mark on rows the server took, unless they changed since. */
     @Synchronized

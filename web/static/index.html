@@ -18,10 +18,8 @@
 <body>
   <main class="app">
     <header class="top">
-      <svg class="mark" id="mark" viewBox="0 0 22 22" aria-hidden="true"><path/></svg>
-      <span class="word">drill</span>
       <span class="spacer"></span>
-      <button class="link" id="sync" type="button">sync</button>
+      <button class="link" id="sync" type="button" hidden>sync</button>
       <button class="link" id="open-inspo" type="button">inspo</button>
       <button class="link" id="open-settings" type="button">settings</button>
     </header>
@@ -55,7 +53,6 @@
 
     <section class="year" aria-label="your year">
       <div class="year-head">
-        <h2>your year</h2>
         <div class="filter" id="filter"></div>
       </div>
       <svg class="grid" id="grid" role="img" aria-label="your year"></svg>
@@ -87,6 +84,7 @@
       </div>
       <div class="group sync-group">
         <div class="row"><span id="account-line">sync</span><button class="link" id="account-action" type="button">sign in</button></div>
+        <label class="row" id="auto-sync-row" hidden><span>auto sync</span><input type="checkbox" class="switch" id="autoSync"></label>
         <p class="row note" id="sync-note"></p>
       </div>
       <div class="done"><button class="capsule small" value="done">done</button></div>

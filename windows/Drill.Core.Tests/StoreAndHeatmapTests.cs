@@ -52,6 +52,19 @@ public class SqliteSessionStoreTests
     }
 
     [Fact]
+    public void CountsUnpushedRowsFromThisDevice()
+    {
+        using var store = SqliteSessionStore.InMemory();
+        Assert.Equal(0, store.Unpushed(DateTimeOffset.MinValue, "test"));
+        store.Save(Session(100, 25, updated: 200));
+        store.Save(Session(300, 25, updated: 400));
+        store.Save(Session(500, 25, updated: 600) with { DeviceID = "other" });
+        Assert.Equal(2, store.Unpushed(DateTimeOffset.MinValue, "test"));
+        Assert.Equal(1, store.Unpushed(DateTimeOffset.FromUnixTimeSeconds(300), "test"));
+        Assert.Equal(0, store.Unpushed(DateTimeOffset.FromUnixTimeSeconds(400), "test"));
+    }
+
+    [Fact]
     public void TagsAreMostRecentFirst()
     {
         using var store = SqliteSessionStore.InMemory();

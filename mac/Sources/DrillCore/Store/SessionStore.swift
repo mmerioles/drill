@@ -12,4 +12,7 @@ public protocol SessionStore: AnyObject {
 
     /// Every row touched after `since`, tombstones included. The sync push set.
     func changes(since: Date) throws -> [FocusSession]
+
+    /// How many rows `changes(since:)` would return.
+    func changeCount(since: Date) throws -> Int
 }

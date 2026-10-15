@@ -74,6 +74,13 @@
                         <ink:FadingText x:Name="AccountNote" CollapseWhenEmpty="True" FontSize="12" Opacity="0.55" HorizontalAlignment="Left" Duration="250" />
                     </StackPanel>
                 </DockPanel>
+                <StackPanel x:Name="AutoSyncRow">
+                    <Rectangle Style="{StaticResource Rule}" />
+                    <DockPanel Height="48" Margin="16,0">
+                        <TextBlock Text="auto sync" Style="{StaticResource RowLabel}" />
+                        <ink:Toggle x:Name="AutoSync" AutomationProperties.Name="auto sync" HorizontalAlignment="Right" />
+                    </DockPanel>
+                </StackPanel>
                 <Rectangle Style="{StaticResource Rule}" />
                 <DockPanel MinHeight="60" Margin="16,0">
                     <Grid DockPanel.Dock="Right" Width="160" VerticalAlignment="Center">

@@ -33,7 +33,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -55,10 +54,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -193,10 +189,10 @@ fun Screen(model: AppModel) {
         }
     }
 
-    // Sync every five minutes while signed in and on screen.
-    val signedIn = model.sync.isSignedIn
-    LaunchedEffect(signedIn) {
-        if (!signedIn) return@LaunchedEffect
+    // Sync every five minutes while signed in, auto syncing and on screen.
+    val looping = model.sync.isSignedIn && model.sync.auto
+    LaunchedEffect(looping) {
+        if (!looping) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
                 delay(5 * 60_000L)
@@ -232,7 +228,7 @@ fun Screen(model: AppModel) {
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 8.dp),
         ) {
-            Header(model, { boil.longValue }) { open = it }
+            Header(model) { open = it }
             Spacer(Modifier.height(28.dp))
             TimerView(model, { clock.longValue }, { boil.longValue }, toggle)
             Spacer(Modifier.height(48.dp))
@@ -248,30 +244,21 @@ fun Screen(model: AppModel) {
     }
 }
 
-/** The mark, then the links. When they don't fit, "update" becomes a badge on
+/** The links, on the right. When they don't fit, "update" becomes a badge on
  *  "settings"; past that, they wrap. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Header(model: AppModel, boil: () -> Long, open: (Open) -> Unit) {
+private fun Header(model: AppModel, open: (Open) -> Unit) {
     val ink = LocalPalette.current
     val sync = model.sync
     val measurer = rememberTextMeasurer()
     val linkStyle = TextStyle(fontSize = 14.sp)
     val phone = LocalConfiguration.current.screenWidthDp < 600
     Row(verticalAlignment = Alignment.Top) {
-        Row(Modifier.height(TouchTarget), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DrillMark(boil)
-            Words("drill", Modifier.semantics { heading() }, size = 20.sp, weight = FontWeight.Bold)
-        }
-        Spacer(Modifier.width(12.dp))
-        val word = if (sync.waiting?.confirmed == false) "check email" else when (sync.state) {
-            Sync.State.SignedOut -> "sync"
-            Sync.State.Syncing -> "syncing…"
-            Sync.State.Offline -> "offline"
-            Sync.State.Unconfirmed -> "confirm email"
-            Sync.State.Idle -> if (sync.justSynced) "synced" else "sync"
-        }
+        // Only while there's something to push.
+        val word = if (sync.isSignedIn && sync.unpushed > 0 && sync.state != Sync.State.Syncing) {
+            if (sync.state == Sync.State.Offline) "offline" else "sync"
+        } else null
         // Offered only between blocks: installing restarts the app.
         val updater = model.updater
         val release = updater.available
@@ -287,7 +274,7 @@ private fun Header(model: AppModel, boil: () -> Long, open: (Open) -> Unit) {
             fun width(words: List<String>) = with(density) {
                 words.sumOf { measurer.measure(it, linkStyle).size.width }.toDp() + gap * (words.size - 1)
             }
-            val fixed = listOf(word, "inspo", "settings")
+            val fixed = listOfNotNull(word, "inspo", "settings")
             val showUpdate = update != null && width(listOf(update) + fixed) <= maxWidth
             FlowRow(
                 Modifier.fillMaxWidth(),
@@ -300,7 +287,7 @@ private fun Header(model: AppModel, boil: () -> Long, open: (Open) -> Unit) {
                     if (downloading) Words(update!!, Modifier.align(Alignment.CenterVertically), size = 14.sp, color = ink.faint)
                     else Link(update!!, compact = true, action = updater::install)
                 }
-                Link(word, compact = true) { if (sync.isSignedIn) sync.syncNow() else open(Open.Account) }
+                if (word != null) Link(word, compact = true, action = sync::syncNow)
                 Link("inspo", compact = true) { open(Open.Inspo) }
                 val badge = update != null && !showUpdate
                 Link("settings", compact = true, badge = badge,

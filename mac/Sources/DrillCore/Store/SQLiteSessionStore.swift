@@ -110,6 +110,14 @@ public final class SQLiteSessionStore: SessionStore {
         return out
     }
 
+    public func changeCount(since: Date) throws -> Int {
+        var count = 0
+        try query("SELECT COUNT(*) FROM sessions WHERE updated_at > ?", bind: [.date(since)]) {
+            count = Int($0.int(0))
+        }
+        return count
+    }
+
     private static let columns =
         "id, started_at, ended_at, focus_seconds, planned_seconds, completed, tag, device_id, updated_at, deleted_at"
 

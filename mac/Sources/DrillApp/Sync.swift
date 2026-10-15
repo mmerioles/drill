@@ -3,8 +3,8 @@ import Observation
 import DrillCore
 
 /// The account and the sync loop (docs/SYNC.md, "Client loop"): push, then
-/// pull. Runs at launch, after each write, every few minutes, on return to
-/// the app, and on demand.
+/// pull. With auto sync on, runs at launch, after each write, every few
+/// minutes and on return to the app; always on sign-in and on demand.
 ///
 /// The token lives in UserDefaults, not the Keychain: the app is ad-hoc
 /// signed, so each update would prompt for a password to read the Keychain.
@@ -16,8 +16,14 @@ final class Sync {
 
     private(set) var state: State
     private(set) var account: Account?
-    /// True for a moment after a sync lands.
-    private(set) var justSynced = false
+    /// Local rows not yet pushed.
+    private(set) var unpushed = 0
+    var autoSync: Bool {
+        didSet {
+            defaults.set(autoSync, forKey: Keys.auto)
+            if autoSync { startLoop() } else { stopLoop() }
+        }
+    }
     /// A self-hosted server from settings, or nil for ours.
     private(set) var customServer: String?
 
@@ -41,10 +47,26 @@ final class Sync {
         let account = defaults.data(forKey: Keys.account).flatMap { try? JSONDecoder().decode(Account.self, from: $0) }
         self.account = account
         customServer = defaults.string(forKey: Keys.server)
+        autoSync = defaults.object(forKey: Keys.auto) as? Bool ?? true
         state = account == nil ? .signedOut : .idle
+        countUnpushed()
     }
 
     var isSignedIn: Bool { account != nil }
+
+    /// The home link: only while there's something to send and nothing sending.
+    var showsLink: Bool { isSignedIn && unpushed > 0 && state != .syncing }
+
+    /// After a local write.
+    func logged() {
+        countUnpushed()
+        if autoSync { syncNow() }
+    }
+
+    private func countUnpushed() {
+        let since = defaults.object(forKey: Keys.pushedAt) as? Date ?? .distantPast
+        unpushed = (try? store.changeCount(since: since)) ?? 0
+    }
 
     var backend: any SyncBackend {
         customServer.flatMap(URL.init(string:)).map { SyncAPI(server: $0) } ?? SupabaseAPI.hosted
@@ -75,9 +97,9 @@ final class Sync {
         }
     }
 
-    /// The periodic loop runs only while signed in.
+    /// The periodic loop runs only while signed in with auto sync on.
     private func startLoop() {
-        guard started, loop == nil, isSignedIn else { return }
+        guard started, loop == nil, isSignedIn, autoSync else { return }
         loop = Task { [weak self] in
             while !Task.isCancelled {
                 self?.syncNow()
@@ -86,7 +108,13 @@ final class Sync {
         }
     }
 
+    private func stopLoop() {
+        loop?.cancel()
+        loop = nil
+    }
+
     private func cameBack() {
+        guard autoSync else { return }
         if lastStarted.map({ $0.timeIntervalSinceNow < -20 }) ?? true { syncNow() }
     }
 
@@ -176,6 +204,7 @@ final class Sync {
         defaults.removeObject(forKey: Keys.pushedAt)
         defaults.removeObject(forKey: Keys.cursor)
         state = .idle
+        countUnpushed()
         syncNow()
     }
 
@@ -214,6 +243,7 @@ final class Sync {
         running = Task { [weak self] in
             await self?.run(backend, as: account)
             self?.running = nil
+            self?.countUnpushed()
         }
     }
 
@@ -231,7 +261,6 @@ final class Sync {
             }
             guard account?.token == token else { return } // signed out meanwhile
             state = .idle
-            flashSynced()
         } catch SyncError.signedOut {
             guard account?.email == start.email else { return }
             save(nil)
@@ -271,14 +300,6 @@ final class Sync {
         if pulled { onPulled() }
     }
 
-    private func flashSynced() {
-        justSynced = true
-        Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2))
-            self?.justSynced = false
-        }
-    }
-
     private func save(_ account: Account?) {
         self.account = account
         if let account, let data = try? JSONEncoder().encode(account) {
@@ -286,8 +307,7 @@ final class Sync {
             startLoop()
         } else {
             defaults.removeObject(forKey: Keys.account)
-            loop?.cancel()
-            loop = nil
+            stopLoop()
         }
     }
 
@@ -296,5 +316,6 @@ final class Sync {
         static let server = "drill.sync.server" // self-hosted only
         static let cursor = "drill.sync.cursor"
         static let pushedAt = "drill.sync.pushedAt"
+        static let auto = "drill.sync.auto"
     }
 }
