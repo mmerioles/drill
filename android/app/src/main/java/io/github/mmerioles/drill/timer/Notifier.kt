@@ -11,12 +11,17 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.Icon
+import android.media.AudioAttributes
 import android.os.Build
+import android.os.VibrationAttributes
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import io.github.mmerioles.drill.AppModel
 import io.github.mmerioles.drill.DrillApp
 import io.github.mmerioles.drill.R
 import io.github.mmerioles.drill.core.Copy
-import io.github.mmerioles.drill.core.EngineState
+import io.github.mmerioles.drill.core.IntervalPhase
 import io.github.mmerioles.drill.core.Phase
 import io.github.mmerioles.drill.core.Status
 import io.github.mmerioles.drill.ui.MainActivity
@@ -56,15 +61,15 @@ object Notifier {
     /** What the countdown last showed, so a swiped-away paused notification isn't reposted. */
     private var posted: Any? = null
 
-    /** Sets the alarm and countdown for [state]; clears both when idle. [tag] gives "focus · maths". */
-    fun schedule(context: Context, state: EngineState, remaining: Long, tag: String? = null) {
+    /** Sets the alarm and countdown for [status]; clears both when idle. [name]
+     *  is "focus · maths" or "run · round 3"; [stop] names the last button. */
+    fun schedule(context: Context, status: Status, name: String, remaining: Long, stop: String = "reset") {
         val alarms = context.getSystemService(AlarmManager::class.java)
         val pending = PendingIntent.getBroadcast(
             context, 0, Intent(context, PhaseEndReceiver::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val nm = context.getSystemService(NotificationManager::class.java)
-        val status = state.status
         if (status !is Status.Running) alarms.cancel(pending)
         if (status is Status.Idle) {
             nm.cancel(RUNNING_ID)
@@ -78,8 +83,7 @@ object Notifier {
         }
 
         if (!allowed(context)) return
-        val name = Copy.phaseName(state.phase) + (tag?.let { " · $it" } ?: "")
-        val shows = listOf(state.phase, status, name)
+        val shows = listOf(status, name, stop)
         if (shows == posted) return
         val builder = Notification.Builder(context, TIMER)
             .setSmallIcon(R.drawable.ic_notification)
@@ -106,15 +110,20 @@ object Notifier {
         }
         builder
             .addAction(action(context, "skip", TimerActionReceiver.SKIP))
-            .addAction(action(context, "reset", TimerActionReceiver.RESET))
+            .addAction(action(context, stop, TimerActionReceiver.RESET))
         nm.notify(RUNNING_ID, builder.build())
         posted = shows
     }
 
     /** "focus done · take a break · 5 min", with a start button when the next phase [waits]. */
     fun ended(context: Context, finished: Phase, next: Phase, nextSeconds: Int, waits: Boolean, sound: Boolean) {
-        if (!allowed(context)) return
         val (title, body) = Copy.finished(finished, nextSeconds)
+        ended(context, title, body, sound, offered = next.takeIf { waits })
+    }
+
+    /** The chime is the channel's sound, so this is the cue for any phase ending. */
+    fun ended(context: Context, title: String, body: String, sound: Boolean, offered: Phase? = null) {
+        if (!allowed(context)) return
         val builder = Notification.Builder(context, if (sound) ENDS else ENDS_QUIET)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
@@ -122,8 +131,29 @@ object Notifier {
             .setAutoCancel(true)
             .setCategory(Notification.CATEGORY_ALARM)
             .setContentIntent(openApp(context))
-        if (waits) builder.addAction(action(context, Copy.startNext(next), TimerActionReceiver.START, offered = next))
+        if (offered != null) builder.addAction(action(context, Copy.startNext(offered), TimerActionReceiver.START, offered = offered))
         context.getSystemService(NotificationManager::class.java).notify(ENDED_ID, builder.build())
+    }
+
+    /** Two long pulses into a run, one short into a walk. Straight to the
+     *  vibrator: the channels keep vibration off, and this must work with
+     *  the screen off. */
+    fun vibrate(context: Context, phase: IntervalPhase) {
+        val pattern = if (phase == IntervalPhase.Run) longArrayOf(0, 400, 150, 400) else longArrayOf(0, 250)
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            context.getSystemService(VibratorManager::class.java).defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Vibrator::class.java)
+        }
+        if (!vibrator.hasVibrator()) return
+        val effect = VibrationEffect.createWaveform(pattern, -1)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            vibrator.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_ALARM))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(effect, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build())
+        }
     }
 
     fun clearEnded(context: Context) {

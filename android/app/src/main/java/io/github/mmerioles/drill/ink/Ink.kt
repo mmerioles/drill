@@ -91,6 +91,45 @@ object Doodle {
         }
     }
 
+    /** The interval marks, on a 48-unit grid like the mac's tomato, with a
+     *  little less wobble than the hand-drawn ring: they're already drawings. */
+    fun runner(size: Float, seed: Long): List<Path> = glyph(size, seed, listOf(
+        circle(31f, 8f, 4f),
+        listOf(28f to 13f, 22f to 26f),
+        listOf(27f to 15f, 19f to 17f, 15f to 12f),
+        listOf(27f to 15f, 33f to 21f, 39f to 20f),
+        listOf(22f to 26f, 30f to 32f, 26f to 42f),
+        listOf(22f to 26f, 14f to 30f, 7f to 36f),
+    ), closedFirst = true)
+
+    fun sneaker(size: Float, seed: Long): List<Path> = glyph(size, seed, listOf(
+        listOf(7f to 22f, 6f to 34f, 42f to 34f, 44f to 31f, 30f to 25f, 24f to 19f, 16f to 21f),
+        listOf(8f to 30f, 41f to 30f),
+        listOf(17f to 25f, 22f to 23f),
+        listOf(20f to 28f, 25f to 26f),
+    ), closedFirst = true)
+
+    private fun circle(cx: Float, cy: Float, r: Float) = List(10) { i ->
+        val a = 2 * PI * i / 10
+        (cx + cos(a) * r).toFloat() to (cy + sin(a) * r).toFloat()
+    }
+
+    private fun glyph(size: Float, seed: Long, strokes: List<List<Pair<Float, Float>>>, closedFirst: Boolean): List<Path> {
+        val k = size / 48
+        val next = wobble(seed)
+        val amp = size / 60 * 0.8f
+        return strokes.mapIndexed { i, pts ->
+            Path().apply {
+                pts.forEachIndexed { j, (x, y) ->
+                    val px = x * k + next() * amp * 2
+                    val py = y * k + next() * amp * 2
+                    if (j == 0) moveTo(px, py) else lineTo(px, py)
+                }
+                if (i == 0 && closedFirst) close()
+            }
+        }
+    }
+
     class Ring(val track: Path, val arc: Path?, val tip: Offset?)
 
     /** The timer face: a dotted track and an inked arc from twelve o'clock. */

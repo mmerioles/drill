@@ -19,8 +19,11 @@ struct MenuBarLabel: View {
     /// Nothing for running focus or stopwatch: the digits say enough.
     private var word: String {
         if !model.isRunning { return "paused" }
-        if model.isStopwatch { return "" }
-        return model.phase.isBreak ? "break" : ""
+        switch model.mode {
+        case .pomodoro: return model.phase.isBreak ? "break" : ""
+        case .stopwatch: return ""
+        case .intervals: return Copy.phaseName(model.intervals.phase)
+        }
     }
 
     /// A template image, so it tints like a system icon.
@@ -70,7 +73,8 @@ struct MenuBarPanel: View {
                     Button("skip", action: model.skip).buttonStyle(.inkLink(selected: false, size: 13))
                 }
                 if model.isActive {
-                    Button("reset", action: model.reset).buttonStyle(.inkLink(selected: false, size: 13))
+                    Button(Copy.reset(intervals: model.isIntervals), action: model.reset)
+                        .buttonStyle(.inkLink(selected: false, size: 13))
                 }
             }
 

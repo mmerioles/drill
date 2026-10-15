@@ -5,22 +5,40 @@ import DrillCore
 enum Copy {
     /// Nil when idle on focus: an idle timer needs no caption.
     static func status(_ phase: Phase, running: Bool, active: Bool) -> String? {
-        switch (phase, active, running) {
-        case (.focus, false, _): nil
-        case (_, true, false): "paused"
-        default: phaseName(phase)
-        }
+        phase == .focus && !active ? nil : status(phaseName(phase), running: running)
+    }
+
+    /// A live phase by name, or "paused".
+    static func status(_ name: String, running: Bool) -> String {
+        running ? name : "paused"
     }
 
     static func toggle(running: Bool, active: Bool) -> String {
         running ? "pause" : active ? "resume" : "start"
     }
 
+    /// Ending a workout logs it: "done", not "reset".
+    static func reset(intervals: Bool) -> String { intervals ? "done" : "reset" }
+
     /// The banner when a phase runs out. `next` is the next phase's length.
     static func finished(_ phase: Phase, next: TimeInterval) -> (title: String, body: String) {
         let minutes = max(1, Int((next / 60).rounded()))
         return phase == .focus ? ("focus done", "take a break · \(minutes) min") : ("break over", "back to focus")
     }
+
+    /// The banner when an interval ends, naming the one that starts.
+    static func interval(_ next: IntervalPhase, round: Int, length: TimeInterval) -> (title: String, body: String) {
+        let minutes = max(1, Int((length / 60).rounded()))
+        return (next == .run ? "run · round \(round)" : "walk", "\(minutes) min")
+    }
+
+    /// "round 3 · 18m".
+    static func round(_ round: Int, elapsed: TimeInterval) -> String {
+        "round \(round) · \(amount(elapsed))"
+    }
+
+    /// Every workout is logged under this tag.
+    static let intervalsTag = "intervals"
 
     static func startNext(_ next: Phase) -> String {
         next.isBreak ? "start break" : "start focus"
@@ -46,7 +64,7 @@ enum Copy {
         return total == 1 ? "1 second" : "\(total) seconds"
     }
 
-    static func modeName(stopwatch: Bool) -> String { stopwatch ? "stopwatch" : "pomodoro" }
+    static func modeName(_ mode: TimerMode) -> String { mode.rawValue }
 
     static func phaseName(_ phase: Phase) -> String {
         switch phase {
@@ -55,6 +73,8 @@ enum Copy {
         case .longBreak: "long break"
         }
     }
+
+    static func phaseName(_ phase: IntervalPhase) -> String { phase.rawValue }
 
     /// A countdown rounds up (it never shows 00:00 with time left); a count
     /// up rounds down (it never shows a second that hasn't passed).

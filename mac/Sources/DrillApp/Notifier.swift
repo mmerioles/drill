@@ -21,6 +21,7 @@ final class Notifier {
 
     /// One id per kind of phase: banners replace rather than pile up, and a
     /// delivered focus banner survives scheduling the break it started.
+    /// Intervals share them: a run ends like focus, a walk like a break.
     nonisolated static let focusID = "drill.end.focus"
     nonisolated static let breakID = "drill.end.break"
     nonisolated static let startAction = "drill.start"

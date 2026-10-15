@@ -1,6 +1,7 @@
 import { Engine, Phase, defaultConfig, isBreak } from "./engine.js";
 import { buildHeatmap, firstWeekday } from "./heatmap.js";
-import { BOIL_MS, ring, square } from "./ink.js";
+import { BOIL_MS, glyph, ring, square } from "./ink.js";
+import { IntervalEngine, IntervalPhase, defaultIntervalConfig } from "./intervals.js";
 import { createPalette } from "./palette.js";
 import { VIDEOS, markWatched, today as inspoToday, watched, watchedBefore } from "./inspo.js";
 import { SAMPLE_TAGS, sampleYear } from "./sample.js";
@@ -31,38 +32,58 @@ if (!["light", "dark"].includes(settings.theme)) {
   settings.theme = demo && matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
 settings.config = { ...defaultConfig, ...settings.config };
+settings.intervals = { ...defaultIntervalConfig, ...settings.intervals };
+if (!["pomodoro", "intervals"].includes(settings.mode)) settings.mode = "pomodoro";
 
 const store = new Store({ offline: demo });
 store.autoSync = settings.autoSync;
 const saved = load(KEY.timer, null);
 const engine = new Engine(settings.config, saved?.engine);
+const intervals = new IntervalEngine(settings.intervals, saved?.intervals);
+/** "pomodoro" or "intervals": which timer the face shows. Only one can be
+ *  off idle at a time, since the switch waits for idle. */
+let mode = settings.mode;
+const inIntervals = () => mode === "intervals";
+const timer = () => (inIntervals() ? intervals : engine);
 /** The tag in effect for the running focus block, captured when it starts. */
 let blockTag = saved?.blockTag ?? null;
 let tagFilter = null;
 let hovered = null;
 
 function persistTimer() {
-  save(KEY.timer, { engine: engine.state, blockTag });
+  save(KEY.timer, { engine: engine.state, intervals: intervals.state, blockTag });
+}
+
+/** Both timers, as another tab or the lock holder last saved them. */
+function restoreTimer(stored) {
+  if (!stored) return;
+  if (stored.engine) Object.assign(engine, stored.engine);
+  if (stored.intervals) Object.assign(intervals, stored.intervals);
+  blockTag = stored.blockTag ?? null;
 }
 
 // MARK: Copy (DrillApp/Copy.swift)
 
 const PHASE_NAME = { focus: "focus", shortBreak: "break", longBreak: "long break" };
 
+/** "focus" / "break", or "run" / "walk" in interval mode. */
+const phaseName = () => (inIntervals() ? intervals.phase : PHASE_NAME[engine.phase]);
+
 function statusWord() {
-  if (engine.phase === Phase.focus && engine.isIdle) return "";
-  if (!engine.isIdle && !engine.isRunning) return "paused";
-  return PHASE_NAME[engine.phase];
+  const t = timer();
+  if (t.isIdle) return inIntervals() || engine.phase === Phase.focus ? "" : PHASE_NAME[engine.phase];
+  if (!t.isRunning) return "paused";
+  return phaseName();
 }
 
 /** What a screen reader says for the countdown: "focus, 12 minutes left". */
 function spoken(ms) {
+  const t = timer();
   const total = Math.ceil(ms / 1000);
-  const name = PHASE_NAME[engine.phase];
   const m = Math.ceil(total / 60);
   const left = total >= 60 ? (m === 1 ? "1 minute left" : `${m} minutes left`)
     : total === 1 ? "1 second left" : `${total} seconds left`;
-  return `${name}${!engine.isIdle && !engine.isRunning ? ", paused" : ""}, ${left}`;
+  return `${phaseName()}${!t.isIdle && !t.isRunning ? ", paused" : ""}, ${left}`;
 }
 
 /** The banner when a phase runs out, as in Copy.finished. */
@@ -90,24 +111,45 @@ const monthFormat = new Intl.DateTimeFormat(undefined, { month: "short" });
 // MARK: Intents
 
 function toggle() {
-  const starting = engine.isIdle;
-  engine.toggle(Date.now());
+  const t = timer(), starting = t.isIdle;
+  t.toggle(Date.now());
   if (starting) {
     askForNotifications();
-    if (engine.phase === Phase.focus) captureTag();
+    if (!inIntervals() && engine.phase === Phase.focus) captureTag();
   }
   if (settings.sound) wakeAudio();
   changed();
 }
 
 function skip() {
-  handle(engine.skip(Date.now()));
+  if (inIntervals()) cue(intervals.skip(Date.now()));
+  else handle(engine.skip(Date.now()));
   changed();
 }
 
+/** "reset" on the pomodoro; "done" (stop and log the workout) on intervals. */
 function reset() {
-  const record = engine.reset(Date.now());
-  if (record) store.log(record, blockTag);
+  if (inIntervals()) {
+    const record = intervals.stop(Date.now());
+    if (record) logWorkout(record);
+  } else {
+    const record = engine.reset(Date.now());
+    if (record) store.log(record, blockTag);
+  }
+  changed();
+}
+
+/** A workout is an ordinary completed session tagged "intervals". */
+function logWorkout({ startedAt, endedAt, seconds }) {
+  const s = Math.round(seconds);
+  store.log({ startedAt, endedAt, focusSeconds: s, plannedSeconds: s, completed: true }, "intervals");
+}
+
+/** Switches the face between the pomodoro and intervals, while idle. */
+function switchMode(to = inIntervals() ? "pomodoro" : "intervals") {
+  if (to === mode || !timer().isIdle) return;
+  mode = settings.mode = to;
+  save(KEY.settings, settings);
   changed();
 }
 
@@ -126,6 +168,18 @@ function handle(t) {
   if (settings.sound) chime(t.finished === Phase.focus);
 }
 
+/** The cues at an interval end, natural or skipped: a buzz where the device
+ *  can, the chime, and a banner for a backgrounded tab. */
+function cue(t) {
+  if (!t) return;
+  const toRun = t.next === IntervalPhase.run;
+  const pulses = toRun ? [400, 150, 400] : [250];
+  try { navigator.vibrate?.(pulses); } catch {}
+  if (settings.sound) chime(toRun);
+  notify(toRun ? `run · round ${t.round}` : "walk",
+    `${Math.max(1, Math.round(intervals.config[t.next] / 60))} min`, null, pulses);
+}
+
 function changed() {
   persistTimer();
   schedule();
@@ -141,16 +195,15 @@ function advance() {
   let ran = false;
   const run = () => {
     ran = true;
-    const stored = load(KEY.timer, null);
-    if (stored) {
-      Object.assign(engine, stored.engine);
-      blockTag = stored.blockTag ?? null;
-    }
-    const t = engine.tick(Date.now());
-    if (t) {
+    restoreTimer(load(KEY.timer, null));
+    const now = Date.now();
+    const t = engine.tick(now), it = intervals.tick(now);
+    if (t || it) {
       // Saved first, so a throw below can't leave the phase to end, and log, again.
       persistTimer();
-      handle(t);
+      if (t) handle(t);
+      // Several interval ends while asleep cue once, for the latest.
+      if (it) cue(it);
       persistTimer();
     }
     schedule();
@@ -174,13 +227,14 @@ let ticker = null, boiler = null;
 function schedule() {
   clearTimeout(ticker);
   ticker = null;
-  if (engine.isRunning) {
-    const left = engine.status.endsAt - Date.now();
+  const t = timer();
+  if (t.isRunning) {
+    const left = t.status.endsAt - Date.now();
     // +5ms lands just past the boundary, so the clock has already turned.
     const wait = visible() ? (left % 1000 || 1000) + 5 : Math.min(left, left % 60_000 || 60_000) + 5;
     ticker = setTimeout(advance, Math.max(5, wait));
   }
-  const boil = engine.isRunning && visible() && !reduceMotion.matches;
+  const boil = t.isRunning && visible() && !reduceMotion.matches;
   if (boil && !boiler) boiler = setInterval(renderRing, BOIL_MS);
   else if (!boil && boiler) { clearInterval(boiler); boiler = null; }
 }
@@ -189,9 +243,11 @@ function schedule() {
 
 const view = {
   status: $("status"), clock: $("clock"), toggle: $("toggle"), reset: $("reset"), dots: $("dots"),
+  mark: $("mark"), glyph: $("glyph"), round: $("round"), tagBox: $("tag-box"),
   track: $("ring").querySelector(".track"), arc: $("ring").querySelector(".arc"),
   tip: $("ring").querySelector(".tip"),
 };
+const MARK = 20;
 const shown = {};
 /** Writes to the page only what changed since the last render. */
 function put(key, value, write) {
@@ -201,20 +257,30 @@ function put(key, value, write) {
 }
 
 function renderTimer() {
-  const now = Date.now(), left = engine.remaining(now);
+  const t = timer(), now = Date.now(), left = t.remaining(now);
   const text = clock(left);
   // A background tab shows only its title, and that in minutes: it's
   // redrawn once a minute there.
-  put("title", engine.isIdle ? "drill" : visible() ? `${text} · ${statusWord()}`
+  put("title", t.isIdle ? "drill" : visible() ? `${text} · ${statusWord()}`
     : `${Math.ceil(left / 60_000)} min · ${statusWord()}`, (v) => { document.title = v; });
   if (!visible()) return;
 
   put("status", statusWord() || "\u00a0", (v) => { view.status.textContent = v; });
   put("clock", text, (v) => { view.clock.textContent = v; });
   put("spoken", spoken(left), (v) => view.clock.setAttribute("aria-label", v));
-  put("toggle", engine.isRunning ? "pause" : engine.isIdle ? "start" : "resume",
+  put("switch", t.isIdle, (v) => view.clock.classList.toggle("switch-mode", v));
+  put("toggle", t.isRunning ? "pause" : t.isIdle ? "start" : "resume",
       (v) => { view.toggle.textContent = v; });
-  put("reset", engine.isIdle, (v) => { view.reset.hidden = v; });
+  put("reset", t.isIdle, (v) => { view.reset.hidden = v; });
+  put("resetWord", inIntervals() ? "done" : "reset", (v) => { view.reset.textContent = v; });
+  put("mode", mode, (v) => {
+    const on = v === "intervals";
+    view.dots.hidden = on;
+    view.mark.hidden = !on;
+    view.tagBox.hidden = on;
+  });
+  put("round", inIntervals() && !t.isIdle ? `round ${intervals.round} · ${amount(intervals.elapsed(now) / 1000)}` : "",
+      (v) => { view.round.textContent = v; });
   put("dots", `${engine.config.longBreakEvery}:${engine.cyclePosition}`, () => {
     const dots = view.dots;
     if (dots.children.length !== engine.config.longBreakEvery) {
@@ -228,16 +294,22 @@ function renderTimer() {
 /** The ring. Boiling, it's redrawn every boil step; still,
  *  only when the arc would visibly move. */
 function renderRing() {
-  const now = Date.now();
-  const boiling = engine.isRunning && !reduceMotion.matches;
+  const t = timer(), now = Date.now();
+  const boiling = t.isRunning && !reduceMotion.matches;
   const tick = boiling ? Math.floor(now / BOIL_MS) : 0;
-  const progress = engine.progress(now);
+  const progress = t.progress(now);
   put("ring", `${tick}:${Math.round(progress * 720)}`, () => {
     const r = ring(270, progress, tick);
     view.track.setAttribute("d", r.track);
     view.arc.setAttribute("d", r.arc);
     view.tip.style.display = r.tip ? "" : "none";
     if (r.tip) { view.tip.setAttribute("cx", r.tip[0]); view.tip.setAttribute("cy", r.tip[1]); }
+  });
+  if (!inIntervals()) return;
+  // The runner on a run (and at rest, since a run comes first), the sneaker on a walk.
+  const kind = intervals.phase === IntervalPhase.walk ? "sneaker" : "runner";
+  put("glyph", `${kind}:${tick}`, () => {
+    view.glyph.replaceChildren(...glyph(kind, MARK, tick).map((d) => svgEl("path", { d })));
   });
 }
 
@@ -564,11 +636,13 @@ function askForNotifications() {
 
 /** Shows the banner through the service worker where there is one (the only
  *  way on Android Chrome), with "start break" / "start focus" when `next`
- *  won't start by itself; else the plain kind. */
-async function notify(title, body, next) {
+ *  won't start by itself; else the plain kind. `vibrate` is a pulse pattern
+ *  for phones that buzz with a banner. */
+async function notify(title, body, next, vibrate = null) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   if (visible() && document.hasFocus()) return;
   const options = { body, icon: "icon-192.png", tag: "drill", renotify: true };
+  if (vibrate) options.vibrate = vibrate;
   try {
     const sw = await navigator.serviceWorker?.getRegistration();
     if (sw) {
@@ -585,7 +659,7 @@ async function notify(title, body, next) {
 /** The banner's start button names the phase it offered: start only if the
  *  timer is idle on that phase, never resume or start another. */
 function startFromBanner(next) {
-  if (engine.isIdle && engine.phase === next) toggle();
+  if (!inIntervals() && engine.isIdle && engine.phase === next) toggle();
 }
 
 function registerWorker() {
@@ -649,6 +723,8 @@ function openSettings() {
   $("shortBreak").value = c.shortBreak / 60;
   $("longBreak").value = c.longBreak / 60;
   $("longBreakEvery").value = c.longBreakEvery;
+  $("run").value = settings.intervals.run / 60;
+  $("walk").value = settings.intervals.walk / 60;
   $("autoStartBreaks").checked = c.autoStartBreaks;
   $("autoStartFocus").checked = c.autoStartFocus;
   $("sound").checked = settings.sound;
@@ -688,8 +764,10 @@ function saveSettings() {
     autoStartBreaks: $("autoStartBreaks").checked,
     autoStartFocus: $("autoStartFocus").checked,
   };
+  settings.intervals = { run: clamp("run", 1, 60) * 60, walk: clamp("walk", 1, 60) * 60 };
   settings.sound = $("sound").checked;
   engine.config = settings.config;
+  intervals.config = settings.intervals;
   changed();
   setAutoSync($("autoSync").checked);
 }
@@ -714,14 +792,16 @@ function openInspo() {
 
 /** What the palette offers right now, in the order of the spec. */
 function commands(query) {
-  const account = !demo && !!store.account;
+  const account = !demo && !!store.account, t = timer();
   const tags = tagList();
   const typed = query.trim().toLowerCase().slice(0, 40);
   return [
-    { id: "toggle", title: engine.isRunning ? "pause" : engine.isIdle ? "start" : "resume",
+    { id: "toggle", title: t.isRunning ? "pause" : t.isIdle ? "start" : "resume",
       keywords: ["timer"], hint: "space", run: toggle },
     { id: "skip", title: "skip", keywords: ["timer"], run: skip },
-    !engine.isIdle && { id: "reset", title: "reset", keywords: ["timer"], run: reset },
+    !t.isIdle && { id: "reset", title: inIntervals() ? "done" : "reset", keywords: ["timer"], run: reset },
+    t.isIdle && { id: "mode", title: inIntervals() ? "switch to pomodoro" : "switch to intervals",
+                  keywords: ["mode", "timer", "run", "walk"], run: () => switchMode() },
     { id: "settings", title: "open settings", keywords: ["preferences"], run: openSettings },
     { id: "inspo", title: "open inspo", keywords: ["videos"], run: openInspo },
     account && { id: "sync", title: "sync now", run: () => store.sync() },
@@ -739,6 +819,8 @@ function commands(query) {
 $("toggle").addEventListener("click", toggle);
 $("skip").addEventListener("click", skip);
 $("reset").addEventListener("click", reset);
+// The clock is the mode switch, while idle.
+$("clock").addEventListener("click", () => switchMode());
 $("open-settings").addEventListener("click", openSettings);
 $("open-inspo").addEventListener("click", openInspo);
 $("inspo").addEventListener("click", (e) => {
@@ -834,9 +916,7 @@ store.addEventListener("sync", renderSync);
 // Another tab started, paused or finished the timer.
 addEventListener("storage", (e) => {
   if (e.key !== KEY.timer) return;
-  const stored = load(KEY.timer, null);
-  if (stored) Object.assign(engine, stored.engine);
-  blockTag = stored?.blockTag ?? null;
+  restoreTimer(load(KEY.timer, null));
   schedule();
   renderTimer();
 });
@@ -874,7 +954,7 @@ document.addEventListener("visibilitychange", () => {
 });
 // Back from the back/forward cache, or the clock or time zone moved: redraw today.
 addEventListener("pageshow", () => { renderYear(); scheduleMidnight(); });
-addEventListener("focus", () => renderYear());
+addEventListener("focus", () => { advance(); renderYear(); });
 
 applyTheme();
 registerWorker();

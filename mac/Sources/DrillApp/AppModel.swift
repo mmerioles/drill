@@ -2,14 +2,21 @@ import AppKit
 import Foundation
 import Observation
 import DrillCore
+import InkKit
 
 enum Theme: String, CaseIterable, Identifiable {
     case light, dark
     var id: String { rawValue }
 }
 
-enum TimerMode: String {
-    case pomodoro, stopwatch
+enum TimerMode: String, CaseIterable {
+    case pomodoro, stopwatch, intervals
+
+    /// What ⌘T switches to.
+    var next: TimerMode {
+        let all = Self.allCases
+        return all[(all.firstIndex(of: self)! + 1) % all.count]
+    }
 }
 
 /// The app's single source of truth: owns the timers and their clock, writes
@@ -18,6 +25,7 @@ enum TimerMode: String {
 final class AppModel {
     private(set) var engine: PomodoroEngine
     private(set) var stopwatch = Stopwatch()
+    private(set) var intervals: IntervalEngine
     /// Which timer the face shows. Switches only between blocks.
     private(set) var mode: TimerMode {
         didSet { defaults.set(mode.rawValue, forKey: Keys.mode) }
@@ -46,6 +54,17 @@ final class AppModel {
             if engine.isRunning { scheduleBanner() }
             if let data = try? JSONEncoder().encode(newValue) {
                 defaults.set(data, forKey: Keys.config)
+            }
+        }
+    }
+
+    var intervalConfig: IntervalConfig {
+        get { intervals.config }
+        set {
+            intervals.config = newValue
+            if intervals.isRunning { scheduleIntervalBanner() }
+            if let data = try? JSONEncoder().encode(newValue) {
+                defaults.set(data, forKey: Keys.intervals)
             }
         }
     }
@@ -80,7 +99,8 @@ final class AppModel {
     private var blockTag: String?
     private var yearSessions: [FocusSession] = []
 
-    init(store: SessionStore, defaults: UserDefaults = .standard, configOverride: TimerConfig? = nil) {
+    init(store: SessionStore, defaults: UserDefaults = .standard, configOverride: TimerConfig? = nil,
+         intervalsOverride: IntervalConfig? = nil) {
         self.store = store
         self.defaults = defaults
         self.deviceID = DeviceIdentity.current(defaults)
@@ -88,6 +108,9 @@ final class AppModel {
         let saved = defaults.data(forKey: Keys.config)
             .flatMap { try? JSONDecoder().decode(TimerConfig.self, from: $0) }
         self.engine = PomodoroEngine(config: configOverride ?? saved ?? .standard)
+        let savedIntervals = defaults.data(forKey: Keys.intervals)
+            .flatMap { try? JSONDecoder().decode(IntervalConfig.self, from: $0) }
+        self.intervals = IntervalEngine(config: intervalsOverride ?? savedIntervals ?? .standard)
         self.tag = defaults.string(forKey: Keys.tag) ?? ""
         self.soundOn = defaults.object(forKey: Keys.sound) as? Bool ?? true
         self.dailyGoal = defaults.object(forKey: Keys.goal) as? Double ?? 2 * 3600
@@ -128,8 +151,10 @@ final class AppModel {
             store = try! SQLiteSessionStore.inMemory()
         }
         let fast = env["DRILL_FAST"] == "1"
-            ? TimerConfig(focus: 20, shortBreak: 5, longBreak: 10) : nil
-        let model = AppModel(store: store, configOverride: fast)
+        let model = AppModel(
+            store: store,
+            configOverride: fast ? TimerConfig(focus: 20, shortBreak: 5, longBreak: 10) : nil,
+            intervalsOverride: fast ? IntervalConfig(run: 15, walk: 5) : nil)
         if let theme = env["DRILL_THEME"].flatMap(Theme.init) { model.theme = theme }
         return model
     }
@@ -137,23 +162,61 @@ final class AppModel {
     // MARK: Derived
 
     var isStopwatch: Bool { mode == .stopwatch }
-    /// Time left on the pomodoro, or counted on the stopwatch.
-    var shown: TimeInterval { isStopwatch ? stopwatch.elapsed(at: now) : engine.remaining(at: now) }
+    var isIntervals: Bool { mode == .intervals }
+    /// Time left on the pomodoro or interval, or counted on the stopwatch.
+    var shown: TimeInterval {
+        switch mode {
+        case .pomodoro: engine.remaining(at: now)
+        case .stopwatch: stopwatch.elapsed(at: now)
+        case .intervals: intervals.remaining(at: now)
+        }
+    }
     /// The stopwatch's ring sweeps once an hour.
     var progress: Double {
-        isStopwatch ? stopwatch.elapsed(at: now).truncatingRemainder(dividingBy: 3600) / 3600 : engine.progress(at: now)
+        switch mode {
+        case .pomodoro: engine.progress(at: now)
+        case .stopwatch: stopwatch.elapsed(at: now).truncatingRemainder(dividingBy: 3600) / 3600
+        case .intervals: intervals.progress(at: now)
+        }
     }
     var clock: String { Copy.clock(shown, countingUp: isStopwatch) }
     /// The whole second shown, for animating only when it changes.
     var shownSecond: Int { Int(isStopwatch ? (shown + 1e-6).rounded(.down) : shown.rounded(.up)) }
     /// The word above the digits. The stopwatch only ever says "paused".
     var status: String? {
-        isStopwatch ? (isActive && !isRunning ? "paused" : nil)
-            : Copy.status(engine.phase, running: isRunning, active: isActive)
+        switch mode {
+        case .pomodoro: Copy.status(engine.phase, running: isRunning, active: isActive)
+        case .stopwatch: isActive && !isRunning ? "paused" : nil
+        case .intervals: isActive ? Copy.status(Copy.phaseName(intervals.phase), running: isRunning) : nil
+        }
     }
     var phase: Phase { engine.phase }
-    var isRunning: Bool { isStopwatch ? stopwatch.isRunning : engine.isRunning }
-    var isActive: Bool { isStopwatch ? !stopwatch.isIdle : !engine.isIdle }
+    /// The mark under the digits: which timer, and for intervals, which leg.
+    var mark: Glyph.Kind {
+        switch mode {
+        case .pomodoro: .tomato
+        case .stopwatch: .stopwatch
+        case .intervals: intervals.phase == .walk ? .sneaker : .runner
+        }
+    }
+    /// "round 3 · 18m" while a workout is on.
+    var roundLine: String? {
+        isIntervals && isActive ? Copy.round(intervals.round, elapsed: intervals.elapsed(at: now)) : nil
+    }
+    var isRunning: Bool {
+        switch mode {
+        case .pomodoro: engine.isRunning
+        case .stopwatch: stopwatch.isRunning
+        case .intervals: intervals.isRunning
+        }
+    }
+    var isActive: Bool {
+        switch mode {
+        case .pomodoro: !engine.isIdle
+        case .stopwatch: !stopwatch.isIdle
+        case .intervals: !intervals.isIdle
+        }
+    }
 
     // MARK: Intents
 
@@ -162,6 +225,14 @@ final class AppModel {
             now = Date()
             if stopwatch.isIdle { captureTag() }
             stopwatch.toggle(at: now)
+            syncTicking()
+            return
+        }
+        if isIntervals {
+            now = Date()
+            if intervals.isIdle { notifier.prepare() }
+            intervals.toggle(at: now)
+            if intervals.isRunning { scheduleIntervalBanner() } else { notifier.cancel() }
             syncTicking()
             return
         }
@@ -180,33 +251,50 @@ final class AppModel {
         guard !isStopwatch else { return }
         now = Date()
         notifier.cancel()
-        handle(engine.skip(at: now))
+        if isIntervals {
+            guard let t = intervals.skip(at: now) else { return }
+            // The banner for this transition was pending; a skip announces itself.
+            announce(t, at: now)
+            handle(t)
+        } else {
+            handle(engine.skip(at: now))
+        }
         syncTicking()
     }
 
+    /// Reset for the pomodoro and stopwatch; "done" for intervals, which
+    /// logs the workout.
     func reset() {
         now = Date()
-        if isStopwatch {
+        switch mode {
+        case .stopwatch:
             if let record = stopwatch.reset(at: now) { log(record) }
-            syncTicking()
-            return
+        case .intervals:
+            notifier.cancel()
+            if let record = intervals.stop(at: now) { log(record) }
+        case .pomodoro:
+            notifier.cancel()
+            if let record = engine.reset(at: now) { log(record) }
         }
-        notifier.cancel()
-        if let record = engine.reset(at: now) { log(record) }
         syncTicking()
     }
 
-    /// For --render: shows the face as of `date`, without ticking.
+    /// For --render: shows the face as of `date`, with no clock running.
     func freeze(at date: Date) {
         tickTask?.cancel()
         tickTask = nil
         now = date
+        _ = intervals.tick(at: date)
     }
 
     /// Only between blocks, so switching never drops time.
     func switchMode() {
-        guard !isActive else { return }
-        mode = isStopwatch ? .pomodoro : .stopwatch
+        switchMode(to: mode.next)
+    }
+
+    func switchMode(to new: TimerMode) {
+        guard !isActive, new != mode else { return }
+        mode = new
         now = Date()
     }
 
@@ -243,16 +331,28 @@ final class AppModel {
     }
 
     private func untilNextSecond() -> TimeInterval? {
-        isStopwatch ? stopwatch.untilNextSecond(at: Date()) : engine.untilNextSecond(at: Date())
+        switch mode {
+        case .pomodoro: engine.untilNextSecond(at: Date())
+        case .stopwatch: stopwatch.untilNextSecond(at: Date())
+        case .intervals: intervals.untilNextSecond(at: Date())
+        }
     }
 
     private func tick() {
         now = Date()
-        guard !isStopwatch else { return }
         // A no-op mutation of the observed engine would still redraw everything.
-        guard case .running(let endsAt) = engine.status, now >= endsAt,
-              let transition = engine.tick(at: now) else { return }
-        handle(transition)
+        switch mode {
+        case .stopwatch:
+            return
+        case .intervals:
+            guard case .running(let endsAt) = intervals.status, now >= endsAt,
+                  let transition = intervals.tick(at: now) else { return }
+            handle(transition)
+        case .pomodoro:
+            guard case .running(let endsAt) = engine.status, now >= endsAt,
+                  let transition = engine.tick(at: now) else { return }
+            handle(transition)
+        }
         syncTicking()
     }
 
@@ -269,7 +369,17 @@ final class AppModel {
 
         // This banner was already scheduled; an auto-started phase needs its own.
         if engine.isRunning { scheduleBanner() }
-        if soundOn { NSSound(named: t.finished == .focus ? "Glass" : "Tink")?.play() }
+        chime(focusDone: t.finished == .focus)
+    }
+
+    /// Every interval change is cued, skipped or not.
+    private func handle(_ t: IntervalTransition) {
+        chime(focusDone: t.next == .run)
+        if intervals.isRunning { scheduleIntervalBanner() }
+    }
+
+    private func chime(focusDone: Bool) {
+        if soundOn { NSSound(named: focusDone ? "Glass" : "Tink")?.play() }
     }
 
     private func scheduleBanner() {
@@ -278,6 +388,25 @@ final class AppModel {
         let copy = Copy.finished(engine.phase, next: config.duration(of: next.phase))
         notifier.schedule(title: copy.title, body: copy.body, breakEnding: engine.phase.isBreak,
                           at: endsAt, offering: next.autoStarts ? nil : next.phase)
+    }
+
+    /// The banner for the end of the current interval, ahead of time like
+    /// the pomodoro's.
+    private func scheduleIntervalBanner() {
+        guard case .running(let endsAt) = intervals.status else { return }
+        let next = intervals.upcoming
+        announce(next.phase, round: next.round, at: endsAt)
+    }
+
+    private func announce(_ t: IntervalTransition, at when: Date) {
+        announce(t.next, round: t.round, at: when)
+    }
+
+    private func announce(_ next: IntervalPhase, round: Int, at when: Date) {
+        let copy = Copy.interval(next, round: round, length: intervalConfig.duration(of: next))
+        // The run is the "focus" here: a walk ends like a break does.
+        notifier.schedule(title: copy.title, body: copy.body, breakEnding: next == .run,
+                          at: when, offering: nil)
     }
 
     // MARK: Data
@@ -292,6 +421,15 @@ final class AppModel {
             plannedSeconds: r.plannedSeconds, completed: r.completed, tag: blockTag,
             deviceID: deviceID, updatedAt: Date()),
              failure: "couldn't save that session.")
+    }
+
+    /// A workout is one completed session tagged "intervals".
+    private func log(_ r: WorkoutRecord) {
+        save(FocusSession(
+            startedAt: r.startedAt, endedAt: r.endedAt, focusSeconds: r.seconds,
+            plannedSeconds: r.seconds, completed: true, tag: Copy.intervalsTag,
+            deviceID: deviceID, updatedAt: Date()),
+             failure: "couldn't save that workout.")
     }
 
     private func save(_ session: FocusSession, failure: String) {
@@ -381,6 +519,7 @@ final class AppModel {
 
     private enum Keys {
         static let config = "drill.config"
+        static let intervals = "drill.intervals"
         static let tag = "drill.tag"
         static let sound = "drill.sound"
         static let theme = "drill.theme"

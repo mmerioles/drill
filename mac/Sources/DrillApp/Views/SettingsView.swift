@@ -19,12 +19,16 @@ struct SettingsView: View {
                 .pickerStyle(.segmented)
             }
             Section {
-                minutes("focus", \.focus, 5...120, step: 5)
-                minutes("short break", \.shortBreak, 1...30)
-                minutes("long break", \.longBreak, 5...60, step: 5)
+                minutes("focus", $model.config.focus, 5...120, step: 5)
+                minutes("short break", $model.config.shortBreak, 1...30)
+                minutes("long break", $model.config.longBreak, 5...60, step: 5)
                 Stepper(value: $model.config.longBreakEvery, in: 2...8) {
                     row("long break every", "\(model.config.longBreakEvery)")
                 }
+            }
+            Section("intervals") {
+                minutes("run", $model.intervalConfig.run, 1...60)
+                minutes("walk", $model.intervalConfig.walk, 1...60)
             }
             Section {
                 Stepper(value: goalMinutes, in: 0...720, step: 30) {
@@ -58,11 +62,11 @@ struct SettingsView: View {
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
     }
 
-    private func minutes(_ label: String, _ key: WritableKeyPath<TimerConfig, TimeInterval>,
+    private func minutes(_ label: String, _ seconds: Binding<TimeInterval>,
                          _ range: ClosedRange<Int>, step: Int = 1) -> some View {
         let value = Binding<Int>(
-            get: { Int(model.config[keyPath: key] / 60) },
-            set: { model.config[keyPath: key] = TimeInterval($0 * 60) })
+            get: { Int(seconds.wrappedValue / 60) },
+            set: { seconds.wrappedValue = TimeInterval($0 * 60) })
         return Stepper(value: value, in: range, step: step) {
             row(label, "\(value.wrappedValue) min")
         }

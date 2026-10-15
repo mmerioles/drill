@@ -167,7 +167,7 @@ fun Screen(model: AppModel, palette: MutableState<Boolean>) {
     // Ticks on each second boundary while running and on screen; only the
     // ring and digits read it. At zero, catch up rather than wait for the alarm.
     val clock = remember { mutableLongStateOf(System.currentTimeMillis()) }
-    val running = model.timer.status as? Status.Running
+    val running = model.status as? Status.Running
     LaunchedEffect(running) {
         clock.longValue = System.currentTimeMillis()
         if (running == null) return@LaunchedEffect
@@ -220,7 +220,7 @@ fun Screen(model: AppModel, palette: MutableState<Boolean>) {
         model.catchUp()
     }
     val toggle = {
-        if (model.timer.status is Status.Idle && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        if (model.status is Status.Idle && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         model.toggle()
@@ -257,14 +257,17 @@ fun Screen(model: AppModel, palette: MutableState<Boolean>) {
             val sync = model.sync
             val tags = model.recentTags
             buildList {
-                val title = when (model.timer.status) {
+                val title = when (model.status) {
                     is Status.Running -> "pause"
                     Status.Idle -> "start"
                     is Status.Paused -> "resume"
                 }
                 add(Command("toggle", title, "space", listOf("timer"), toggle))
                 add(Command("skip", "skip", keywords = listOf("timer"), run = model::skip))
-                if (model.isActive) add(Command("reset", "reset", keywords = listOf("timer"), run = model::reset))
+                if (model.isActive) add(Command("reset", if (model.isIntervals) "done" else "reset", keywords = listOf("timer"), run = model::reset))
+                if (!model.isActive) {
+                    add(Command("mode", "switch to ${Copy.modeName(!model.isIntervals)}", keywords = listOf("timer", "mode"), run = model::switchMode))
+                }
                 add(Command("settings", "open settings", keywords = listOf("preferences")) { open = Open.Settings })
                 add(Command("inspo", "open inspo", keywords = listOf("videos")) { open = Open.Inspo })
                 if (sync.isSignedIn) {

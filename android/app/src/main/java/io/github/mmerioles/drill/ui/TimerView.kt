@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -30,6 +31,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -43,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.mmerioles.drill.AppModel
 import io.github.mmerioles.drill.core.Copy
+import io.github.mmerioles.drill.core.IntervalPhase
 import io.github.mmerioles.drill.core.Phase
 import io.github.mmerioles.drill.core.Status
 import io.github.mmerioles.drill.ink.Doodle
@@ -57,14 +60,19 @@ fun TimerView(model: AppModel, now: () -> Long, boil: () -> Long, toggle: () -> 
     val haptics = LocalHapticFeedback.current
     val openPalette by rememberUpdatedState(palette)
     val timer = model.timer
+    val workout = model.workout
+    val intervals = model.isIntervals
+    val idle = model.status is Status.Idle
+    val paused = model.status is Status.Paused
+    val phaseName = if (intervals) Copy.phaseName(workout.phase) else Copy.phaseName(timer.phase)
     val status = when {
-        timer.phase == Phase.Focus && timer.status is Status.Idle -> ""
-        timer.status is Status.Paused -> "paused"
-        else -> Copy.phaseName(timer.phase)
+        paused -> "paused"
+        idle && (intervals || timer.phase == Phase.Focus) -> ""
+        else -> phaseName
     }
     // Changes once a minute, so TalkBack isn't re-read every second.
     val left by remember(model) { derivedStateOf { Copy.spokenLeft(model.remaining(now())) } }
-    val spoken = Copy.phaseName(timer.phase) + (if (timer.status is Status.Paused) ", paused" else "") + ", " + left
+    val spoken = phaseName + (if (paused) ", paused" else "") + ", " + left
 
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
@@ -72,12 +80,14 @@ fun TimerView(model: AppModel, now: () -> Long, boil: () -> Long, toggle: () -> 
                 .size(RING)
                 .clearAndSetSemantics {
                     contentDescription = spoken
+                    if (idle) onClick("switch to ${Copy.modeName(!intervals)}") { model.switchMode(); true }
                     onLongClick("commands") { palette(); true }
                 }
-                // A tap still just dismisses the keyboard; a long press opens the palette.
+                // A tap dismisses the keyboard and, between blocks, switches
+                // mode; a long press opens the palette.
                 .pointerInput(Unit) {
                     detectTapGestures(
-                        onTap = { focus.clearFocus() },
+                        onTap = { focus.clearFocus(); model.switchMode() },
                         onLongPress = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); openPalette() },
                     )
                 },
@@ -98,39 +108,47 @@ fun TimerView(model: AppModel, now: () -> Long, boil: () -> Long, toggle: () -> 
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Words(status, Modifier.heightIn(min = 18.dp), size = 13.sp, color = ink.faint)
                 Digits(model, now)
-                Row(Modifier.height(6.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    repeat(model.config.longBreakEvery) { i ->
-                        val on = i < model.cyclePosition
-                        Box(
-                            Modifier.size(6.dp).border(1.dp, if (on) ink.ink else ink.faint, CircleShape)
-                                .background(if (on) ink.ink else ink.paper.copy(alpha = 0f), CircleShape),
-                        )
+                if (intervals) {
+                    Glyph(workout.phase, boil)
+                    // Keeps its room while idle, so the digits don't jump at start.
+                    val line by remember(model) { derivedStateOf { Copy.workout(model.workout.round, model.elapsed(now())) } }
+                    Words(line, Modifier.alpha(if (idle) 0f else 1f), size = 13.sp, color = ink.faint)
+                } else {
+                    Row(Modifier.height(6.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        repeat(model.config.longBreakEvery) { i ->
+                            val on = i < model.cyclePosition
+                            Box(
+                                Modifier.size(6.dp).border(1.dp, if (on) ink.ink else ink.faint, CircleShape)
+                                    .background(if (on) ink.ink else ink.paper.copy(alpha = 0f), CircleShape),
+                            )
+                        }
                     }
                 }
             }
         }
 
         Spacer(Modifier.height(30.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Words("studying", Modifier.alignByBaseline(), color = ink.faint)
-            Field(model.tag, model::updateTag, Modifier.alignByBaseline().width(150.dp), placeholder = "anything", label = "studying")
-        }
-        val current = model.tag.trim().lowercase()
-        Row(Modifier.heightIn(min = TouchTarget), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            model.recentTags.filter { it != current }.take(4).forEach { t ->
-                Link(t, size = 12.sp) { model.updateTag(t) }
+        if (!intervals) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Words("studying", Modifier.alignByBaseline(), color = ink.faint)
+                Field(model.tag, model::updateTag, Modifier.alignByBaseline().width(150.dp), placeholder = "anything", label = "studying")
             }
+            val current = model.tag.trim().lowercase()
+            Row(Modifier.heightIn(min = TouchTarget), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                model.recentTags.filter { it != current }.take(4).forEach { t ->
+                    Link(t, size = 12.sp) { model.updateTag(t) }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
         }
 
-        Spacer(Modifier.height(8.dp))
         // Equal-weight sides keep the capsule centred at any font size.
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            val idle = timer.status is Status.Idle
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                if (!idle) Link("reset", action = model::reset)
+                if (!idle) Link(if (intervals) "done" else "reset", action = model::reset)
             }
             Capsule(
-                when (timer.status) {
+                when (model.status) {
                     is Status.Running -> "pause"
                     Status.Idle -> "start"
                     is Status.Paused -> "resume"
@@ -145,6 +163,19 @@ fun TimerView(model: AppModel, now: () -> Long, boil: () -> Long, toggle: () -> 
 }
 
 private val RING = 270.dp
+
+/** The runner or the sneaker, boiling like the ring while it runs. */
+@Composable
+private fun Glyph(phase: IntervalPhase, boil: () -> Long) {
+    val ink = LocalPalette.current
+    Canvas(Modifier.size(22.dp)) {
+        val s = size.minDimension
+        val seed = boil() + if (phase == IntervalPhase.Run) 21 else 29
+        val paths = if (phase == IntervalPhase.Run) Doodle.runner(s, seed) else Doodle.sneaker(s, seed)
+        val style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        paths.forEach { drawPath(it, ink.ink, style = style) }
+    }
+}
 
 /** The countdown; shrinks to fit the ring at large font sizes. */
 @Composable

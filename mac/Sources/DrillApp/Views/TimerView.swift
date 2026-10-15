@@ -3,7 +3,7 @@ import SwiftUI
 import DrillCore
 
 /// The ring, digits, tag field and controls. Between blocks, clicking the
-/// face switches pomodoro ⇄ stopwatch.
+/// face cycles pomodoro → stopwatch → intervals.
 struct TimerView: View {
     @Environment(AppModel.self) private var model
     @FocusState private var tagFocused: Bool
@@ -33,23 +33,39 @@ struct TimerView: View {
                         .animation(.snappy, value: model.mode)
                         .modifier(SpokenTimer())
                     ModeMark()
-                    // A stopwatch has no cycle; the dots fade but keep their room.
-                    CycleDots(filled: model.engine.cyclePosition, of: model.config.longBreakEvery)
-                        .opacity(model.isStopwatch ? 0 : 1)
-                        .animation(Ink.ease, value: model.mode)
+                    // Only the pomodoro has a cycle; the dots fade but keep
+                    // their room, which intervals borrow for the round.
+                    ZStack {
+                        CycleDots(filled: model.engine.cyclePosition, of: model.config.longBreakEvery)
+                            .opacity(model.mode == .pomodoro ? 1 : 0)
+                        Text(model.roundLine ?? " ")
+                            .font(Ink.text(12))
+                            .foregroundStyle(Ink.faint)
+                            .fixedSize()
+                            .frame(height: 6)
+                            .offset(y: 3)
+                            .opacity(model.roundLine == nil ? 0 : 1)
+                            .contentTransition(.numericText())
+                            .animation(Ink.ease, value: model.roundLine)
+                    }
+                    .animation(Ink.ease, value: model.mode)
                 }
             }
             .frame(width: 270, height: 270)
             .contentShape(Circle())
             .onTapGesture(perform: model.switchMode)
             .pointerStyle(model.isActive ? nil : .link)
-            .help(model.isActive ? "" : "switch to \(Copy.modeName(stopwatch: !model.isStopwatch))")
+            .help(model.isActive ? "" : "switch to \(Copy.modeName(model.mode.next))")
 
+            // A workout has no tag; the field fades but keeps its room.
             tagField
                 .padding(.top, 30)
+                .opacity(model.isIntervals ? 0 : 1)
+                .allowsHitTesting(!model.isIntervals)
+                .accessibilityHidden(model.isIntervals)
 
             HStack(spacing: 28) {
-                Button("reset", action: model.reset)
+                Button(Copy.reset(intervals: model.isIntervals), action: model.reset)
                     .buttonStyle(.inkLink)
                     .opacity(model.isActive ? 1 : 0)
                     .disabled(!model.isActive)
@@ -114,17 +130,17 @@ private struct ModeMark: View {
 
     var body: some View {
         Button(action: model.switchMode) {
-            Glyph(model.isStopwatch ? .stopwatch : .tomato, size: 18, boiling: model.isRunning, lineWidth: 1.5)
-                .id(model.mode)
+            Glyph(model.mark, size: 18, boiling: model.isRunning, lineWidth: 1.5)
+                .id(model.mark)
                 .transition(.scale(scale: 0.5).combined(with: .opacity))
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
         // Not .disabled: that would grey the mark mid-block. Switching
         // already waits for the block to end.
-        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: model.mode)
-        .accessibilityLabel(Copy.modeName(stopwatch: model.isStopwatch))
-        .accessibilityHint(model.isActive ? "" : "switches to \(Copy.modeName(stopwatch: !model.isStopwatch))")
+        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: model.mark)
+        .accessibilityLabel(Copy.modeName(model.mode))
+        .accessibilityHint(model.isActive ? "" : "switches to \(Copy.modeName(model.mode.next))")
     }
 }
 
@@ -155,7 +171,15 @@ struct SpokenTimer: ViewModifier {
     func body(content: Content) -> some View {
         let amount = model.isStopwatch ? Copy.spokenCounted(model.shown) : Copy.spokenLeft(model.shown)
         content
-            .accessibilityLabel(model.isStopwatch ? "stopwatch" : Copy.phaseName(model.phase))
+            .accessibilityLabel(label)
             .accessibilityValue(model.isActive && !model.isRunning ? "paused, \(amount)" : amount)
+    }
+
+    private var label: String {
+        switch model.mode {
+        case .pomodoro: Copy.phaseName(model.phase)
+        case .stopwatch: "stopwatch"
+        case .intervals: Copy.phaseName(model.intervals.phase)
+        }
     }
 }

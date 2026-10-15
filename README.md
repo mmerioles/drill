@@ -49,4 +49,4 @@ then put its address under server in settings. details in [docs/SYNC.md](docs/SY
 `space` start/pause · `⌘/ctrl →` skip · `⌘/ctrl R` reset · `⌘/ctrl ,` settings · `⌘/ctrl K` commands
 
 on mac, click the timer (or `⌘T`) to switch between pomodoro and a stopwatch.
-on android, long-press the clock for commands.
+on android, long-press the clock for commands. tap it (or click it on mac and web) to switch to interval training: 5 minutes running, 1 walking, on repeat.

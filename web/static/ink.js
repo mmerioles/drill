@@ -55,6 +55,38 @@ export function square(x, y, size, seed, amp = 0.35) {
   return "M" + pts.map(([px, py]) => `${f(px)} ${f(py)}`).join("L") + "Z";
 }
 
+/** The interval marks, as in InkKit's Glyphs: strokes on a 48-unit grid
+ *  scaled to `size`, with a little less wobble than the hand-drawn marks.
+ *  Returns one SVG path per stroke. */
+export function glyph(kind, size, tick) {
+  const k = size / 48, amp = size / 60 * 0.8;
+  const next = wobble(tick + (kind === "runner" ? 37 : 41));
+  const p = ([x, y]) => [x * k + next() * amp, y * k + next() * amp];
+  const line = (pts, closed = false) =>
+    "M" + pts.map(p).map(([x, y]) => `${f(x)} ${f(y)}`).join("L") + (closed ? "Z" : "");
+
+  if (kind === "runner") {
+    const head = [...Array(12)].map((_, i) => {
+      const a = i / 12 * 2 * Math.PI;
+      return [31 + Math.cos(a) * 4, 8 + Math.sin(a) * 4];
+    });
+    return [
+      curve(head.map(p), true),
+      line([[28, 13], [22, 26]]),
+      line([[27, 15], [19, 17], [15, 12]]),
+      line([[27, 15], [33, 21], [39, 20]]),
+      line([[22, 26], [30, 32], [26, 42]]),
+      line([[22, 26], [14, 30], [7, 36]]),
+    ];
+  }
+  return [
+    line([[7, 22], [6, 34], [42, 34], [44, 31], [30, 25], [24, 19], [16, 21]], true),
+    line([[8, 30], [41, 30]]),
+    line([[17, 25], [22, 23]]),
+    line([[20, 28], [25, 26]]),
+  ];
+}
+
 /** The timer face: a dotted track and an inked arc from twelve o'clock. */
 export function ring(size, progress, tick, lineWidth = 2.6) {
   const c = size / 2, r = size / 2 - lineWidth * 2, samples = 72;

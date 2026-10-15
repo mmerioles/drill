@@ -1,9 +1,9 @@
 import SwiftUI
 
 /// Small hand-drawn marks: Teto's drill twintail (the logo), a check, and a
-/// tomato and stopwatch for the timer's two modes.
+/// tomato, stopwatch, runner and sneaker for the timer's modes.
 public struct Glyph: View {
-    public enum Kind: Hashable, Sendable { case drill, check, tomato, stopwatch }
+    public enum Kind: Hashable, Sendable { case drill, check, tomato, stopwatch, runner, sneaker }
 
     let kind: Kind
     var size: CGFloat
@@ -46,6 +46,14 @@ public struct Glyph: View {
                     }
                 case .stopwatch:
                     for path in Self.stopwatch(s, seed: tick &+ 29, amp: amp) {
+                        ctx.stroke(path, with: .color(tint), style: style)
+                    }
+                case .runner:
+                    for path in Self.runner(s, seed: tick &+ 37, amp: amp) {
+                        ctx.stroke(path, with: .color(tint), style: style)
+                    }
+                case .sneaker:
+                    for path in Self.sneaker(s, seed: tick &+ 41, amp: amp) {
                         ctx.stroke(path, with: .color(tint), style: style)
                     }
                 }
@@ -141,5 +149,61 @@ public struct Glyph: View {
         hand.addLine(to: CGPoint(x: c.x + 0.13 * s + w.next() * amp, y: c.y - 0.20 * s + w.next() * amp))
         paths.append(hand)
         return paths
+    }
+
+    /// Points on the tomato's 48-unit grid, with its lighter wobble.
+    private struct Grid {
+        let k: CGFloat
+        var w: Wobble
+        let amp: Double
+
+        init(_ s: CGFloat, seed: UInt64, amp: Double) {
+            k = s / 48
+            w = Wobble(seed: seed)
+            self.amp = amp * 0.8
+        }
+
+        mutating func p(_ x: Double, _ y: Double) -> CGPoint {
+            CGPoint(x: x * k + w.next() * amp, y: y * k + w.next() * amp)
+        }
+
+        mutating func line(_ pts: [(Double, Double)], closed: Bool = false) -> Path {
+            var path = Path()
+            path.addLines(pts.map { p($0.0, $0.1) })
+            if closed { path.closeSubpath() }
+            return path
+        }
+
+        mutating func circle(_ cx: Double, _ cy: Double, _ r: Double) -> Path {
+            let pts = (0..<10).map { i -> CGPoint in
+                let a = Double(i) / 10 * 2 * .pi
+                return p(cx + cos(a) * r, cy + sin(a) * r)
+            }
+            return Doodle.path(pts, closed: true)
+        }
+    }
+
+    /// A stick figure mid-stride, leaning into the run: the intervals' run.
+    private static func runner(_ s: CGFloat, seed: UInt64, amp: Double) -> [Path] {
+        var g = Grid(s, seed: seed, amp: amp)
+        return [
+            g.circle(31, 8, 4),
+            g.line([(28, 13), (22, 26)]),
+            g.line([(27, 15), (19, 17), (15, 12)]),
+            g.line([(27, 15), (33, 21), (39, 20)]),
+            g.line([(22, 26), (30, 32), (26, 42)]),
+            g.line([(22, 26), (14, 30), (7, 36)]),
+        ]
+    }
+
+    /// A shoe from the side, toe to the right: the intervals' walk.
+    private static func sneaker(_ s: CGFloat, seed: UInt64, amp: Double) -> [Path] {
+        var g = Grid(s, seed: seed, amp: amp)
+        return [
+            g.line([(7, 22), (6, 34), (42, 34), (44, 31), (30, 25), (24, 19), (16, 21)], closed: true),
+            g.line([(8, 30), (41, 30)]),
+            g.line([(17, 25), (22, 23)]),
+            g.line([(20, 28), (25, 26)]),
+        ]
     }
 }

@@ -60,6 +60,13 @@ fun SettingsSheet(model: AppModel, close: () -> Unit, signIn: () -> Unit) {
             StepperRow("long break every", c.longBreakEvery, 2..8,
                 less = "fewer blocks before a long break", more = "more blocks before a long break") { model.updateConfig(c.copy(longBreakEvery = it)) }
         }
+        val i = model.intervalConfig
+        Group {
+            StepperRow("run", i.run / 60, 1..60, unit = "min",
+                less = "fewer run minutes", more = "more run minutes") { model.updateIntervals(i.copy(run = it * 60)) }
+            StepperRow("walk", i.walk / 60, 1..60, unit = "min",
+                less = "fewer walk minutes", more = "more walk minutes") { model.updateIntervals(i.copy(walk = it * 60)) }
+        }
         Group {
             SwitchRow("auto-start breaks", c.autoStartBreaks) { model.updateConfig(c.copy(autoStartBreaks = it)) }
             SwitchRow("auto-start focus", c.autoStartFocus) { model.updateConfig(c.copy(autoStartFocus = it)) }

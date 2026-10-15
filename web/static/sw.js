@@ -4,7 +4,7 @@
 
 const CACHE = "drill-v1";
 const SHELL = [
-  "./", "index.html", "style.css", "theme.js", "app.js", "engine.js", "heatmap.js", "ink.js",
+  "./", "index.html", "style.css", "theme.js", "app.js", "engine.js", "intervals.js", "heatmap.js", "ink.js",
   "inspo.js", "inspo-videos.js", "fuzzy.js", "palette.js", "sample.js", "sound.js", "store.js", "manifest.webmanifest",
   "icon.png", "icon-192.png", "icon-512.png",
 ];

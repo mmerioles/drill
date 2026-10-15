@@ -32,11 +32,17 @@
         <div class="readout">
           <p class="status" id="status">&nbsp;</p>
           <p class="clock" id="clock" role="timer" aria-live="off" aria-label="focus, 25 minutes left">25:00</p>
-          <div class="dots" id="dots" aria-hidden="true"></div>
+          <div class="under">
+            <div class="dots" id="dots" aria-hidden="true"></div>
+            <div class="mark" id="mark" hidden>
+              <svg id="glyph" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"></svg>
+              <p class="round" id="round"></p>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="tag">
+      <div class="tag" id="tag-box">
         <label class="tag-field">
           <span>studying</span>
           <input id="tag" type="text" placeholder="anything" autocomplete="off" spellcheck="false" maxlength="40">
@@ -76,6 +82,11 @@
         <label class="row"><span>short break</span><span class="num"><input type="number" id="shortBreak" min="1" max="30"> min</span></label>
         <label class="row"><span>long break</span><span class="num"><input type="number" id="longBreak" min="5" max="60" step="5"> min</span></label>
         <label class="row"><span>long break every</span><span class="num"><input type="number" id="longBreakEvery" min="2" max="8"></span></label>
+      </div>
+      <div class="group">
+        <p class="row note">intervals</p>
+        <label class="row"><span>run</span><span class="num"><input type="number" id="run" min="1" max="60"> min</span></label>
+        <label class="row"><span>walk</span><span class="num"><input type="number" id="walk" min="1" max="60"> min</span></label>
       </div>
       <div class="group">
         <label class="row"><span>auto-start breaks</span><input type="checkbox" class="switch" id="autoStartBreaks"></label>

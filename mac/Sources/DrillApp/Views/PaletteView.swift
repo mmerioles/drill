@@ -43,10 +43,14 @@ struct PaletteView: View {
         }
         add("toggle", Copy.toggle(running: model.isRunning, active: model.isActive), ["timer"], hint: "space", model.toggle)
         if !model.isStopwatch { add("skip", "skip", ["timer", "next"], hint: "⌘→", model.skip) }
-        if model.isActive { add("reset", "reset", ["timer", "stop"], hint: "⌘R", model.reset) }
+        if model.isActive {
+            add("reset", Copy.reset(intervals: model.isIntervals), ["timer", "stop"], hint: "⌘R", model.reset)
+        }
         if !model.isActive {
-            add("mode", "switch to \(Copy.modeName(stopwatch: !model.isStopwatch))", ["timer", "mode"],
-                hint: "⌘T", model.switchMode)
+            for mode in TimerMode.allCases where mode != model.mode {
+                add("mode:\(mode.rawValue)", "switch to \(Copy.modeName(mode))", ["timer", "mode"],
+                    hint: mode == model.mode.next ? "⌘T" : nil) { model.switchMode(to: mode) }
+            }
         }
         add("settings", "open settings", ["preferences"], hint: "⌘,") { openSettings() }
         add("inspo", "open inspo", ["videos"]) { openWindow(id: "inspo") }

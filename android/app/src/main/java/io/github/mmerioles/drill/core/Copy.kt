@@ -44,6 +44,17 @@ object Copy {
         Phase.LongBreak -> "long break"
     }
 
+    fun phaseName(phase: IntervalPhase) = if (phase == IntervalPhase.Run) "run" else "walk"
+
+    /** The interval's notification title: "run · round 3" or "walk". */
+    fun intervalName(phase: IntervalPhase, round: Int) =
+        if (phase == IntervalPhase.Run) "run · round $round" else "walk"
+
+    /** "round 3 · 18m", under the clock. */
+    fun workout(round: Int, seconds: Double) = "round $round · ${amount(seconds)}"
+
+    fun modeName(intervals: Boolean) = if (intervals) "intervals" else "pomodoro"
+
     /** What TalkBack says for the countdown: "12 minutes left". */
     fun spokenLeft(ms: Long): String {
         val total = ((ms + 999) / 1000).toInt()

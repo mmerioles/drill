@@ -170,7 +170,8 @@ private struct SessionRow: View {
     var body: some View {
         HStack(spacing: 10) {
             // Stopwatch and added blocks have no plan; pomodoro blocks do.
-            Glyph(session.plannedSeconds == 0 ? .stopwatch : .tomato, size: 13, boiling: false,
+            Glyph(session.tag == Copy.intervalsTag ? .runner : session.plannedSeconds == 0 ? .stopwatch : .tomato,
+                  size: 13, boiling: false,
                   lineWidth: 1.2, tint: Ink.faint)
             Text(session.startedAt.formatted(Copy.timeFormat).lowercased())
                 .foregroundStyle(Ink.faint)

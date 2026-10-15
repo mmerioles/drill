@@ -76,10 +76,10 @@ private struct TimerCommands: Commands {
             Button("Skip", action: model.skip)
                 .keyboardShortcut(.rightArrow, modifiers: .command)
                 .disabled(model.isStopwatch)
-            Button("Reset", action: model.reset)
+            Button(Copy.reset(intervals: model.isIntervals).capitalized, action: model.reset)
                 .keyboardShortcut("r", modifiers: .command)
             Divider()
-            Button(model.isStopwatch ? "Switch to Pomodoro" : "Switch to Stopwatch", action: model.switchMode)
+            Button("Switch to \(Copy.modeName(model.mode.next).capitalized)", action: model.switchMode)
                 .keyboardShortcut("t", modifiers: .command)
                 .disabled(model.isActive)
         }
