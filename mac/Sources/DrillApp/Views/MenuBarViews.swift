@@ -43,8 +43,8 @@ struct MenuBarPanel: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 7) {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 8) {
                 Glyph(.drill, size: 16, boiling: model.isRunning, lineWidth: 1.4, tint: Ink.accent)
                 Text("drill").font(Ink.word(14)).foregroundStyle(Ink.ink)
                 Spacer()
@@ -68,7 +68,7 @@ struct MenuBarPanel: View {
 
             HStack(spacing: 16) {
                 Button(Copy.toggle(running: model.isRunning, active: model.isActive), action: model.toggle)
-                    .buttonStyle(InkCapsuleStyle(size: 13, minWidth: 64))
+                    .buttonStyle(InkCapsuleStyle(size: 13, minWidth: 64, height: 36))
                 if !model.isStopwatch {
                     Button("skip", action: model.skip).buttonStyle(.inkLink(selected: false, size: 13))
                 }
@@ -88,7 +88,7 @@ struct MenuBarPanel: View {
                     GoalRing(progress: model.todayTotal / model.dailyGoal)
                 }
                 Spacer()
-                HStack(spacing: 14) {
+                HStack(spacing: 16) {
                     Button("open") {
                         openWindow(id: "main")
                         NSApp.activate()
@@ -99,7 +99,7 @@ struct MenuBarPanel: View {
             }
             .font(Ink.text(13))
         }
-        .padding(18)
+        .padding(16)
         .frame(width: 260)
         .background(Ink.paper)
     }

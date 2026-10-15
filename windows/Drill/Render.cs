@@ -27,11 +27,11 @@ internal static class Render
         Directory.CreateDirectory(folder);
         Motion.Disable();
         var failures = 0;
-        void Shot(string name, Func<FrameworkElement> make)
+        void Shot(string name, Func<FrameworkElement> make, Size? size = null)
         {
             try
             {
-                Save(make(), Path.Combine(folder, name + ".png"));
+                Save(make(), Path.Combine(folder, name + ".png"), size);
                 Console.WriteLine($"rendered {name}");
             }
             catch (Exception e)
@@ -47,6 +47,8 @@ internal static class Render
             Shot($"main-{t}-idle", () => MainScreen(theme, running: false, paused: false));
             Shot($"main-{t}-running", () => MainScreen(theme, running: true, paused: false));
             Shot($"main-{t}-paused", () => MainScreen(theme, running: true, paused: true));
+            // The window pulled taller than its stack: the spare height splits 2:3 around it.
+            Shot($"main-{t}-tall", () => MainScreen(theme, running: false, paused: false), new Size(780, 960));
             Shot($"palette-{t}", () =>
             {
                 var page = new MainPage(new Demo(theme));
@@ -158,19 +160,22 @@ internal static class Render
         return rows;
     }
 
-    /// <summary>Lays `element` out in a hidden window (so it loads like the real thing) and saves it at 2×.</summary>
-    private static void Save(FrameworkElement element, string path)
+    /// <summary>
+    /// Lays `element` out in a hidden window (so it loads like the real thing)
+    /// and saves it at 2×: at its own size, or at `fixedSize` (a window pulled bigger).
+    /// </summary>
+    private static void Save(FrameworkElement element, string path, Size? fixedSize = null)
     {
         using var host = new HwndSource(new HwndSourceParameters("drill render") { Width = 1, Height = 1, WindowStyle = unchecked((int)0x80000000) });
         host.RootVisual = element;
         for (var i = 0; i < 3; i++)
         {
-            element.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            element.Arrange(new Rect(element.DesiredSize));
+            element.Measure(fixedSize ?? new Size(double.PositiveInfinity, double.PositiveInfinity));
+            element.Arrange(new Rect(fixedSize ?? element.DesiredSize));
             element.UpdateLayout();
             Application.Current.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
         }
-        var size = element.DesiredSize;
+        var size = fixedSize ?? element.DesiredSize;
         var bitmap = new RenderTargetBitmap((int)Math.Ceiling(size.Width * 2), (int)Math.Ceiling(size.Height * 2), 192, 192, PixelFormats.Pbgra32);
         bitmap.Render(element);
         var png = new PngBitmapEncoder();

@@ -62,7 +62,7 @@ fun InspoSheet(model: AppModel, close: () -> Unit) {
                 Link("all", on = all, selectable = true, compact = true) { all = true }
             }
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(16.dp))
         if (all) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Inspo.videos.forEach { v ->

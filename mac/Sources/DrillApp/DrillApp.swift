@@ -30,7 +30,7 @@ struct DrillApp: App {
                 .environment(model)
                 .environment(updater)
                 .environment(sync)
-                .frame(width: 780, height: 700)
+                .frame(width: MainView.windowSize.width, height: MainView.windowSize.height)
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)

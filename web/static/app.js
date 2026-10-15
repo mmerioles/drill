@@ -15,6 +15,8 @@ const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
  *  a sample year so the heatmap shows what it's for. */
 const demo = new URLSearchParams(location.search).has("demo");
 if (demo) document.documentElement.classList.add("demo");
+// Framed on the download site, the page is sized by its content instead of the viewport.
+if (demo && window.self !== window.top) document.documentElement.classList.add("framed");
 
 // MARK: Persistence
 
@@ -332,7 +334,7 @@ function renderTags() {
   const key = JSON.stringify([tags, tagFilter, current]);
   if (key === tagsDrawn) return;
   tagsDrawn = key;
-  $("suggest").replaceChildren(...tags.filter((t) => t !== current).slice(0, 4).map((t) =>
+  $("suggest").replaceChildren(...tags.filter((t) => t !== current && t !== "intervals").slice(0, 4).map((t) =>
     button(t, () => setTag(t))));
 
   const filter = $("filter");
@@ -384,8 +386,10 @@ function button(label, action, pressed) {
   return b;
 }
 
-// Heatmap geometry, as in HeatmapView.swift: the grid stretches to the width.
-const GAP = 0.24, MONTH_ROW = 16, MARGIN = 3;
+// Heatmap geometry, as in HeatmapView.swift: square cells 2 apart, 11 to 14
+// wide, as many trailing weeks as fit the column (up to the year). The
+// month row keeps the labels 6 above the grid.
+const CELL_GAP = 2, CELL_MIN = 11, CELL_MAX = 14, MONTH_ROW = 18, MARGIN = 3;
 const INK = [0, 0.16, 0.36, 0.62, 0.92];
 let heat = null, metrics = null;
 
@@ -398,9 +402,10 @@ const cellFill = (level) =>
 /** Draws the year. With `fade` (a new tab), the same grid stays and only
  *  the colours change, so cells fade from one subject to the next. */
 function renderYear(fade = false) {
-  const svg = $("grid");
-  const width = svg.clientWidth || 700;
-  const weeks = width < 520 ? 26 : 53;
+  const svg = $("grid"), column = svg.closest(".app"), cs = getComputedStyle(column);
+  const width = column.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) || 700;
+  const room = width - MARGIN * 2;
+  const weeks = Math.max(1, Math.min(53, Math.floor((room + CELL_GAP) / (CELL_MIN + CELL_GAP))));
   const sessions = [...(demo ? sampleYear() : []), ...store.live()]
     .filter((s) => !tagFilter || s.tag === tagFilter);
   heat = buildHeatmap(sessions, weeks, Date.now(), weekStart);
@@ -415,11 +420,15 @@ function renderYear(fade = false) {
   drawn = shape;
   cells = [];
 
-  const pitch = (width - MARGIN * 2) / (weeks - GAP), size = pitch * (1 - GAP);
-  const height = MONTH_ROW + 7 * pitch - (pitch - size) + MARGIN;
+  const size = Math.min(CELL_MAX, (room - (weeks - 1) * CELL_GAP) / weeks), pitch = size + CELL_GAP;
+  const gridWidth = weeks * pitch - CELL_GAP + MARGIN * 2;
+  const height = MONTH_ROW + 7 * pitch - CELL_GAP + MARGIN;
   metrics = { pitch, size };
-  svg.setAttribute("viewBox", `${-MARGIN} 0 ${width} ${height}`);
+  svg.setAttribute("viewBox", `${-MARGIN} 0 ${gridWidth} ${height}`);
+  svg.style.width = `${gridWidth}px`;
   svg.style.height = `${height}px`;
+  // The filter and the stats align to the grid's own edges.
+  svg.parentElement.style.width = `${gridWidth}px`;
 
   const nodes = [];
   const today = new Date().setHours(0, 0, 0, 0);
@@ -431,7 +440,7 @@ function renderYear(fade = false) {
       // Label a month at its first full column, not the half-column at the left edge.
       if (month !== lastMonth) {
         if (lastMonth !== -1 || d.getDate() <= 7) {
-          const t = svgEl("text", { x: w * pitch, y: 9, class: "month" });
+          const t = svgEl("text", { x: w * pitch, y: MONTH_ROW - 6, class: "month" });
           t.textContent = monthFormat.format(d).toLowerCase();
           nodes.push(t);
         }
@@ -837,7 +846,7 @@ function commands(query) {
     account && { id: "sync", title: "sync now", run: () => store.sync() },
     account && { id: "autoSync", title: settings.autoSync ? "turn auto sync off" : "turn auto sync on",
                  keywords: ["sync"], run: () => setAutoSync(!settings.autoSync) },
-    ...tags.map((t) => ({ id: `tag:${t}`, title: `studying ${t}`, keywords: ["tag"], run: () => setTag(t) })),
+    ...tags.filter((t) => t !== "intervals").map((t) => ({ id: `tag:${t}`, title: `studying ${t}`, keywords: ["tag"], run: () => setTag(t) })),
     { id: "show:", title: "show all", keywords: ["filter"], run: () => showTag(null) },
     ...tags.map((t) => ({ id: `show:${t}`, title: `show ${t}`, keywords: ["filter"], run: () => showTag(t) })),
     typed && !tags.includes(typed) && { id: "tag", title: `studying "${typed}"`, last: true, run: () => setTag(typed) },
@@ -931,11 +940,12 @@ grid.addEventListener("pointermove", (e) => {
   renderHover();
 });
 grid.addEventListener("pointerleave", () => { hovered = null; renderHover(); });
-// At most once a frame, however many resizes arrive.
+// At most once a frame, however many resizes arrive. The column is watched,
+// not the grid: the grid is sized from it.
 let resizing = 0;
 new ResizeObserver(() => {
   resizing ||= requestAnimationFrame(() => { resizing = 0; renderYear(); fadeEdge(); });
-}).observe(grid);
+}).observe(grid.closest(".app"));
 
 store.addEventListener("change", () => { renderTags(); renderYear(); renderSync(); });
 store.addEventListener("sync", renderSync);

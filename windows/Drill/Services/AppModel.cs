@@ -129,7 +129,7 @@ public sealed class AppModel : Observable
 
     /// <summary>Recent tags to tap, leaving out the one already typed.</summary>
     public IReadOnlyList<string> Suggestions =>
-        RecentTags.Where(t => t != Tag.Trim().ToLowerInvariant()).Take(4).ToList();
+        RecentTags.Where(t => t != Tag.Trim().ToLowerInvariant() && t != "intervals").Take(4).ToList();
 
     private string? _tagFilter;
     /// <summary>Null shows every session.</summary>

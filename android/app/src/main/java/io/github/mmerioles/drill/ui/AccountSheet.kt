@@ -93,7 +93,7 @@ fun AccountSheet(model: AppModel, close: () -> Unit) {
 
     Sheet(sheet) {
         Column {
-            SheetTitle(if (creating) "create account" else "sign in", Modifier.padding(bottom = 8.dp))
+            SheetTitle(if (creating) "create account" else "sign in")
             Box(Modifier.fillMaxWidth().padding(top = 16.dp)) {
                 Field(username, { username = Username.clean(it); error = "" }, Modifier.fillMaxWidth().padding(end = if (creating) 24.dp else 0.dp),
                     placeholder = "username", keyboard = KeyboardType.Ascii, weight = FontWeight.Normal, label = "username")
@@ -131,9 +131,9 @@ fun AccountSheet(model: AppModel, close: () -> Unit) {
             }
             Spacer(Modifier.height(24.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Link(if (creating) "have an account?" else "new here?", size = 13.sp) { creating = !creating; error = "" }
+                Link(if (creating) "have an account?" else "new here?") { creating = !creating; error = "" }
                 Spacer(Modifier.weight(1f))
-                Link("cancel", size = 13.sp) { sheet.close() }
+                Link("cancel") { sheet.close() }
                 Spacer(Modifier.width(8.dp))
                 Capsule(if (creating) "create account" else "sign in", small = true, enabled = ready && !busy, action = ::submit)
             }

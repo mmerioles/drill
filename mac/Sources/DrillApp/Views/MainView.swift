@@ -13,6 +13,31 @@ struct MainView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var paletteShown = false
     @State private var openToday = 0
+    @State private var pageHeight: CGFloat = 0
+    @State private var stackHeight: CGFloat = 0
+
+    /// The window is sized to the stack: header, 24, the stack, 32.
+    static let windowSize = CGSize(width: 780, height: Page.header + Page.underHeader + Page.stack + Page.bottom)
+
+    enum Page {
+        /// 24 of padding over 24 of links.
+        static let header: CGFloat = 48
+        static let underHeader: CGFloat = 24
+        static let bottom: CGFloat = 32
+        /// Timer block (ring, tag, controls), 56, year block (filter, grid, stats).
+        static let stack: CGFloat = 683
+        static let gutter: CGFloat = 40
+        /// Of a taller window's free space, 2 parts go above the stack and 3 below.
+        static let aboveShare: CGFloat = 0.4
+        static let maxAbove: CGFloat = 160
+    }
+
+    /// Free room beyond the window the stack was sized for, split 2 : 3.
+    private var above: CGFloat {
+        guard stackHeight > 0 else { return Page.underHeader }
+        let free = max(0, pageHeight - Page.header - Page.underHeader - stackHeight - Page.bottom)
+        return Page.underHeader + min(Page.maxAbove, free * Page.aboveShare)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -21,10 +46,10 @@ struct MainView: View {
                 if let error = model.lastError {
                     Text(error).font(Ink.text(13)).foregroundStyle(Ink.faint)
                 }
-                HStack(spacing: 16) {
+                HStack(spacing: 20) {
                     // Offered between blocks only: updating relaunches the app.
                     if updater.state == .installing {
-                        Text("updating…").font(Ink.text(14)).foregroundStyle(Ink.faint)
+                        Text("updating…").font(Ink.text(15)).foregroundStyle(Ink.faint)
                     } else if let release = updater.available, !model.isActive {
                         Button("update to \(release.version.description)") { Task { await updater.install() } }
                     }
@@ -34,19 +59,24 @@ struct MainView: View {
                     Button("inspo") { openWindow(id: "inspo") }
                     SettingsLink { Text("settings") }
                 }
-                .buttonStyle(.inkLink)
+                .buttonStyle(.inkLink(selected: false, size: 15))
             }
-            .padding(.top, 8)
+            .frame(height: Page.header - Page.underHeader)
+            .padding(.top, Page.underHeader)
 
-            Spacer(minLength: 20)
-            TimerView()
-            Spacer(minLength: 32)
+            VStack(spacing: 0) {
+                TimerView()
+                HeatmapSection(openToday: openToday)
+                    .padding(.top, 56)
+            }
+            .onGeometryChange(for: CGFloat.self, of: \.size.height) { stackHeight = $0 }
+            .padding(.top, above)
 
-            HeatmapSection(openToday: openToday)
+            Spacer(minLength: Page.bottom)
         }
-        .padding(.horizontal, 40)
-        .padding(.bottom, 32)
-        .padding(.top, 20)
+        .padding(.horizontal, Page.gutter)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onGeometryChange(for: CGFloat.self, of: \.size.height) { pageHeight = $0 }
         .background(Ink.paper)
         .focusable()
         .focusEffectDisabled()

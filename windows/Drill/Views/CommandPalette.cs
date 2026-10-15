@@ -12,7 +12,7 @@ namespace Drill.Views;
 /// <summary>Ctrl+K over the main page: type to find a command, Enter runs it.</summary>
 public sealed class CommandPalette : Grid
 {
-    private const double RowHeight = 32;
+    private const double RowHeight = 36;
     private const int VisibleRows = 8;
     private static readonly List<string> Recent = [];
 
@@ -70,7 +70,7 @@ public sealed class CommandPalette : Grid
         };
         _input.PreviewKeyDown += OnKey;
 
-        var field = new Grid { Margin = new Thickness(16, 12, 16, 12) };
+        var field = new Grid { Margin = new Thickness(16, 10, 16, 10) }; // 15px text: a 40-tall input
         field.Children.Add(_placeholder);
         field.Children.Add(_input);
         var rule = new Border { Height = 1 };
@@ -150,7 +150,7 @@ public sealed class CommandPalette : Grid
             Add(new("sync", "sync now"), sync.SyncNow);
             Add(new("autosync", sync.AutoSync ? "turn auto sync off" : "turn auto sync on"), () => sync.AutoSync = !sync.AutoSync);
         }
-        foreach (var tag in model.RecentTags) Add(new($"tag:{tag}", $"studying {tag}"), () => model.Tag = tag);
+        foreach (var tag in model.RecentTags.Where(t => t != "intervals")) Add(new($"tag:{tag}", $"studying {tag}"), () => model.Tag = tag);
         Add(new("filter:", "show all"), () => model.TagFilter = null);
         foreach (var tag in model.RecentTags) Add(new($"filter:{tag}", $"show {tag}"), () => model.TagFilter = tag);
         return list;

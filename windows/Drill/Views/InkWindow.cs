@@ -108,21 +108,22 @@ public sealed class InkFrame : Grid
 /// <summary>
 /// A drill window: the frame, Windows 11's rounded corners and shadow, and
 /// a title bar that's just paper. Sized to its page, and scaled down to fit
-/// small screens rather than cut off.
+/// small screens rather than cut off. A resizable one (the main window) can
+/// only grow from there; its page spreads the extra room.
 /// </summary>
 public class InkWindow : Window
 {
     public InkFrame Frame { get; }
     private readonly App _app;
 
-    public InkWindow(FrameworkElement page, string title, bool minimizable = true, bool underCaption = false)
+    public InkWindow(FrameworkElement page, string title, bool minimizable = true, bool underCaption = false, bool resizable = false)
     {
         _app = (App)Application.Current;
         Frame = new InkFrame(page, minimizable, underCaption);
         Title = title;
         Content = Frame;
         SetResourceReference(BackgroundProperty, "Paper");
-        ResizeMode = minimizable ? ResizeMode.CanMinimize : ResizeMode.NoResize;
+        ResizeMode = resizable ? ResizeMode.CanResize : minimizable ? ResizeMode.CanMinimize : ResizeMode.NoResize;
         SizeToContent = SizeToContent.WidthAndHeight;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         UseLayoutRounding = true;
@@ -130,7 +131,7 @@ public class InkWindow : Window
         WindowChrome.SetWindowChrome(this, new WindowChrome
         {
             CaptionHeight = InkFrame.CaptionHeight,
-            ResizeBorderThickness = new Thickness(0),
+            ResizeBorderThickness = new Thickness(resizable ? 6 : 0),
             GlassFrameThickness = new Thickness(-1),
             CornerRadius = new CornerRadius(0),
             UseAeroCaptionButtons = false,
@@ -184,6 +185,12 @@ public class InkWindow : Window
         var want = Frame.DesiredSize;
         var scale = Math.Min(1, Math.Min((work.Height - 16) / want.Height, (work.Width - 16) / want.Width));
         if (scale < 0.999) Frame.LayoutTransform = new ScaleTransform(scale, scale);
+        if (ResizeMode == ResizeMode.CanResize)
+        {
+            // Never smaller than the page wants: its natural size, at this screen's scale.
+            MinWidth = Math.Ceiling(want.Width * scale);
+            MinHeight = Math.Ceiling(want.Height * scale);
+        }
     }
 
     protected override void OnClosing(CancelEventArgs e)
@@ -217,7 +224,7 @@ public sealed class DialogHost : Grid
         BorderThickness = new Thickness(1),
         HorizontalAlignment = HorizontalAlignment.Center,
         VerticalAlignment = VerticalAlignment.Center,
-        Width = 400,
+        Width = 440,
         Padding = new Thickness(24),
         RenderTransformOrigin = new Point(0.5, 0.5),
         Effect = new System.Windows.Media.Effects.DropShadowEffect

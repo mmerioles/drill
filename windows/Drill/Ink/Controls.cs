@@ -363,7 +363,7 @@ public sealed class Stepper : UserControl
         AutomationProperties.SetName(_more, "more");
         _label.SetResourceReference(TextBlock.ForegroundProperty, "Ink");
         _label.SetResourceReference(TextBlock.FontFamilyProperty, "Text");
-        _label.FontSize = 14;
+        _label.FontSize = 15;
         Typography.SetNumeralAlignment(_label, FontNumeralAlignment.Tabular);
         var row = new StackPanel { Orientation = Orientation.Horizontal };
         row.Children.Add(_less);

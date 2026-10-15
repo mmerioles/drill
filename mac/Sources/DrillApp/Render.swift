@@ -3,9 +3,10 @@ import DrillCore
 import InkKit
 import SwiftUI
 
-/// `Drill --render <folder>`: draws the main window, a day's popover, the
-/// account sheet and the marks to PNGs at 2×, light and dark, from a made-up
-/// year in memory.
+/// `Drill --render <folder>`: draws the main window (and one taller than the
+/// stack), settings, inspo, the menu bar panel, a day's popover, the account
+/// sheet and the marks to PNGs at 2×, light and dark, from a made-up year in
+/// memory.
 /// (Offscreen rendering draws the AppKit tag field as a placeholder box.)
 @MainActor
 enum Render {
@@ -17,7 +18,8 @@ enum Render {
         _ = NSApplication.shared
         var failed = 0
         for theme in Theme.allCases {
-            for (name, mode, state, query) in shots {
+            // The window as sized to the stack, and one made taller.
+            for (name, mode, state, query, height) in shots + [("tall", .pomodoro, { _ in }, nil, 960)] {
                 let model = demo(theme: theme)
                 model.switchMode(to: mode)
                 state(model)
@@ -26,11 +28,22 @@ enum Render {
                     .environment(Updater())
                     .environment(Sync(store: model.store, deviceID: model.deviceID,
                                       defaults: UserDefaults(suiteName: "drill.render")!, onPulled: {}))
-                    .frame(width: 780, height: 700)
+                    .frame(width: MainView.windowSize.width, height: height ?? MainView.windowSize.height)
                 if !write(view, theme: theme, to: folder.appending(path: "\(name)-\(theme.rawValue).png")) {
                     failed += 1
                 }
             }
+            let model = demo(theme: theme)
+            let sync = Sync(store: model.store, deviceID: model.deviceID,
+                            defaults: UserDefaults(suiteName: "drill.render")!, onPulled: {})
+            write(SettingsView().environment(model).environment(Updater()).environment(sync),
+                  theme: theme, to: folder.appending(path: "settings-\(theme.rawValue).png"))
+            write(InspoView(), theme: theme, to: folder.appending(path: "inspo-\(theme.rawValue).png"))
+            model.tag = "15-213"
+            model.toggle()
+            model.freeze(at: Date() + 863)
+            write(MenuBarPanel().environment(model), theme: theme,
+                  to: folder.appending(path: "menubar-\(theme.rawValue).png"))
         }
         // The popover opens in its own window, which offscreen rendering can't reach.
         for (theme, preview) in [(Theme.light, DayDetail.Preview.none), (.dark, .none),
@@ -84,17 +97,17 @@ enum Render {
         return true
     }
 
-    private static let shots: [(String, TimerMode, (AppModel) -> Void, String?)] = [
-        ("pomodoro-idle", .pomodoro, { _ in }, nil),
-        ("pomodoro-running", .pomodoro, { m in m.tag = "15-213"; m.toggle(); m.freeze(at: Date() + 863) }, nil),
-        ("stopwatch-idle", .stopwatch, { _ in }, nil),
-        ("stopwatch-running", .stopwatch, { m in m.tag = "piano"; m.toggle(); m.freeze(at: Date() + 2537) }, nil),
-        ("intervals-idle", .intervals, { _ in }, nil),
+    private static let shots: [(String, TimerMode, (AppModel) -> Void, String?, CGFloat?)] = [
+        ("pomodoro-idle", .pomodoro, { _ in }, nil, nil),
+        ("pomodoro-running", .pomodoro, { m in m.tag = "15-213"; m.toggle(); m.freeze(at: Date() + 863) }, nil, nil),
+        ("stopwatch-idle", .stopwatch, { _ in }, nil, nil),
+        ("stopwatch-running", .stopwatch, { m in m.tag = "piano"; m.toggle(); m.freeze(at: Date() + 2537) }, nil, nil),
+        ("intervals-idle", .intervals, { _ in }, nil, nil),
         // 300/60 intervals: 743s in is the third run, 1040s the third walk.
-        ("intervals-running", .intervals, { m in m.toggle(); m.freeze(at: Date() + 743) }, nil),
-        ("intervals-walk", .intervals, { m in m.toggle(); m.freeze(at: Date() + 1040) }, nil),
-        ("goal-met", .pomodoro, { m in m.dailyGoal = 30 * 60 }, nil),
-        ("palette", .pomodoro, { _ in }, "st"),
+        ("intervals-running", .intervals, { m in m.toggle(); m.freeze(at: Date() + 743) }, nil, nil),
+        ("intervals-walk", .intervals, { m in m.toggle(); m.freeze(at: Date() + 1040) }, nil, nil),
+        ("goal-met", .pomodoro, { m in m.dailyGoal = 30 * 60 }, nil, nil),
+        ("palette", .pomodoro, { _ in }, "st", nil),
     ]
 
     /// An in-memory store with a few months of sessions, and throwaway defaults.

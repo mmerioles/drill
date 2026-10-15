@@ -111,7 +111,7 @@ private fun UpdateRow(model: AppModel) {
         is Updater.State.Failed -> state.message
         else -> null
     }
-    Row(Modifier.fillMaxWidth().heightIn(min = 46.dp).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Words("version ${BuildConfig.VERSION_NAME}")
             AnimatedContent(note, transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) }, label = "note") { n ->
@@ -130,13 +130,13 @@ private fun UpdateRow(model: AppModel) {
                 Updater.State.Checking -> Words("checking…", size = 13.sp, color = ink.faint)
                 Updater.State.Downloading -> Words("updating…", size = 13.sp, color = ink.faint)
                 is Updater.State.Available ->
-                    Link("update to ${s.release.version}", size = 13.sp, on = !model.isActive,
+                    Link("update to ${s.release.version}", on = !model.isActive,
                         enabled = !model.isActive, action = updater::install)
-                is Updater.State.Failed -> Link(if (updater.available != null) "try again" else "check", size = 13.sp,
+                is Updater.State.Failed -> Link(if (updater.available != null) "try again" else "check",
                     enabled = !(updater.available != null && model.isActive)) {
                     if (updater.available != null) updater.install() else scope.launch { updater.check(manual = true) }
                 }
-                else -> Link("check", size = 13.sp) { scope.launch { updater.check(manual = true) } }
+                else -> Link("check") { scope.launch { updater.check(manual = true) } }
             }
         }
     }

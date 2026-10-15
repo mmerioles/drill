@@ -10,18 +10,18 @@ struct InspoView: View {
     @State private var watched = Watched()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .firstTextBaseline) {
-                Text("inspo").font(Ink.word(20)).foregroundStyle(Ink.ink)
+                Text("inspo").font(Ink.text(20, .semibold)).foregroundStyle(Ink.ink)
                 Spacer()
-                HStack(spacing: 14) {
-                    Button("today") { page = .today }.buttonStyle(.inkLink(selected: page == .today))
-                    Button("all") { page = .all }.buttonStyle(.inkLink(selected: page == .all))
+                HStack(spacing: 16) {
+                    Button("today") { page = .today }.buttonStyle(.inkLink(selected: page == .today, size: 15))
+                    Button("all") { page = .all }.buttonStyle(.inkLink(selected: page == .all, size: 15))
                 }
             }
             switch page {
             case .today:
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 0) {
                     ForEach(Inspo.today(skipping: watched.seen(before: Inspo.day()))) { InspoRow(video: $0, numbered: false) }
                 }
             case .all:
@@ -29,8 +29,8 @@ struct InspoView: View {
             }
         }
         .environment(watched)
-        .padding(28)
-        .frame(width: 420, alignment: .leading)
+        .padding(24)
+        .frame(width: 440, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
         .background(Ink.paper)
     }
@@ -44,8 +44,8 @@ private struct AllVideos: View {
     private let columns = Array(repeating: GridItem(.fixed(11), spacing: 3.5), count: 25)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 12) {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 3.5) {
                     ForEach(Inspo.videos) { video in
                         Button {
@@ -64,7 +64,7 @@ private struct AllVideos: View {
                     .font(Ink.text(13)).foregroundStyle(Ink.faint)
             }
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
+                LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(Inspo.videos) { InspoRow(video: $0, numbered: true) }
                 }
             }
@@ -94,7 +94,7 @@ private struct InspoRow: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(video.title).font(Ink.text(14, .medium)).foregroundStyle(Ink.ink)
+                        Text(video.title).font(Ink.text(15, .medium)).foregroundStyle(Ink.ink)
                         if watched.contains(video) {
                             Circle().fill(Ink.accent).frame(width: 5, height: 5)
                         }
@@ -104,7 +104,7 @@ private struct InspoRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

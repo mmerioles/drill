@@ -28,7 +28,7 @@ struct PaletteView: View {
     /// Most recent first; kept for the life of the process.
     @MainActor private static var recent: [String] = []
 
-    private static let rowHeight: CGFloat = 34
+    private static let rowHeight: CGFloat = 36
 
     private struct Command {
         let item: PaletteItem
@@ -59,7 +59,7 @@ struct PaletteView: View {
             add("autosync", "turn auto sync \(sync.autoSync ? "off" : "on")", ["sync"]) { sync.autoSync.toggle() }
         }
         add("today", "today", ["sessions", "day"], openToday)
-        for tag in model.recentTags {
+        for tag in model.recentTags where tag != Copy.intervalsTag {
             add("studying:\(tag)", "studying \(tag)", ["tag"]) { model.tag = tag }
         }
         for tag in model.recentTags {
@@ -89,7 +89,7 @@ struct PaletteView: View {
         VStack(spacing: 0) {
             field
                 .padding(.horizontal, 16)
-                .frame(height: 46)
+                .frame(height: 40)
             Rectangle().fill(Ink.ghost).frame(height: 1)
             if rows.isEmpty {
                 Text("no matches")

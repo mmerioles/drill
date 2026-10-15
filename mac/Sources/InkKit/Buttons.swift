@@ -4,21 +4,24 @@ import SwiftUI
 public struct InkCapsuleStyle: ButtonStyle {
     var size: CGFloat
     var minWidth: CGFloat?
+    var height: CGFloat
 
     /// `minWidth` keeps the capsule steady when its label changes, e.g.
-    /// start → pause.
-    public init(size: CGFloat = 16, minWidth: CGFloat? = nil) {
+    /// start → pause. The main action is 48 tall; buttons in sheets, 40.
+    public init(size: CGFloat = 16, minWidth: CGFloat? = nil, height: CGFloat = 48) {
         self.size = size
         self.minWidth = minWidth
+        self.height = height
     }
 
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(Ink.text(size, .semibold))
             .foregroundStyle(Ink.paper)
+            // One word, never wrapped: the capsule grows past `minWidth` instead.
+            .fixedSize()
             .padding(.horizontal, size * 2.6)
-            .frame(minWidth: minWidth)
-            .padding(.vertical, size * 0.85)
+            .frame(minWidth: minWidth, minHeight: height)
             .background(Capsule().fill(Ink.ink))
             .modifier(HoverFade())
             .scaleEffect(configuration.isPressed ? 0.96 : 1)

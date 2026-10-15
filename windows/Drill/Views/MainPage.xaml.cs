@@ -52,6 +52,8 @@ public partial class MainPage : UserControl
         // Clicking empty paper ends tag editing.
         Paper.MouseLeftButtonDown += (_, _) => Focus();
         Year.HoveredChanged += ShowCaption;
+        Year.SizeChanged += (_, _) => ShowCaption(); // the legend needs a 600-wide grid
+        SizeChanged += (_, _) => Fit();
         Loaded += (_, _) => Focus();
 
         for (var level = 0; level < 5; level++)
@@ -190,7 +192,7 @@ public partial class MainPage : UserControl
         Suggestions.Children.Clear();
         foreach (var tag in Model.Suggestions)
         {
-            var link = new InkLink { Content = tag, FontSize = 12, Margin = new Thickness(0, 0, 14, 0) };
+            var link = new InkLink { Content = tag, FontSize = 13, Margin = new Thickness(0, 0, 12, 0) };
             link.Click += (_, _) => Model.Tag = tag;
             Suggestions.Children.Add(link);
         }
@@ -201,7 +203,7 @@ public partial class MainPage : UserControl
         Filters.Children.Clear();
         void Add(string label, string? tag)
         {
-            var link = new InkLink { Content = label, FontSize = 13, Margin = new Thickness(12, 0, 0, 0), IsSelected = Model.TagFilter == tag };
+            var link = new InkLink { Content = label, FontSize = 15, Margin = new Thickness(12, 0, 0, 0), IsSelected = Model.TagFilter == tag };
             link.Click += (_, _) => Model.TagFilter = tag;
             Filters.Children.Add(link);
         }
@@ -230,8 +232,34 @@ public partial class MainPage : UserControl
         else
         {
             DayCaption.Visibility = Visibility.Collapsed;
-            Stats.Visibility = Legend.Visibility = Visibility.Visible;
+            Stats.Visibility = Visibility.Visible;
+            Legend.Visibility = Year.ActualWidth >= 600 ? Visibility.Visible : Visibility.Collapsed;
         }
+    }
+
+    // The ring's diameter R, and everything inside it sized from it. 270 in
+    // the window as it opens; 300 once the window is 900 wide and has the 30
+    // of spare height the bigger ring takes.
+
+    private double _ring = 270;
+
+    private void Fit()
+    {
+        var spare = Paper.ActualHeight - Header.ActualHeight - Stack.Margin.Top - Stack.ActualHeight;
+        var big = ActualWidth >= 900 && spare >= (_ring >= 300 ? 0 : 30);
+        SizeRing(big ? 300 : 270);
+    }
+
+    private void SizeRing(double r)
+    {
+        if (r == _ring) return;
+        _ring = r;
+        Ring.Width = Ring.Height = r;
+        Status.FontSize = Math.Clamp(Math.Round(r * 0.055), 13, 17);
+        Status.Height = Math.Round(Status.FontSize * 4 / 3);
+        Clock.FontSize = Math.Round(r * 0.22);
+        Clock.Margin = new Thickness(0, Math.Round(r * 0.03), 0, Math.Round(r * 0.04));
+        MarkSlot.Height = Math.Round(r * 0.08);
     }
 
     /// <summary>Offered between blocks only: updating restarts the app.</summary>

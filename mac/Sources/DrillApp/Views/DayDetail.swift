@@ -35,15 +35,15 @@ struct DayDetail: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .firstTextBaseline) {
                 Text(day.formatted(Copy.dayFormat).lowercased())
-                    .font(Ink.word(15))
+                    .font(Ink.text(20, .semibold))
                     .foregroundStyle(Ink.ink)
                 Spacer(minLength: 16)
                 if total > 0 {
                     Text(Copy.amount(total))
-                        .font(Ink.text(13, .medium))
+                        .font(Ink.text(15, .semibold))
                         .foregroundStyle(Ink.ink)
                         .monospacedDigit()
                         .contentTransition(.numericText())
@@ -52,7 +52,7 @@ struct DayDetail: View {
 
             if sessions.isEmpty && editing != .adding {
                 Text("nothing logged.")
-                    .font(Ink.text(13))
+                    .font(Ink.text(15))
                     .foregroundStyle(Ink.faint)
             } else if sessions.count <= 8 {
                 list
@@ -60,7 +60,7 @@ struct DayDetail: View {
                 // A busy day scrolls rather than growing past the screen.
                 ScrollView { list }
                     .scrollIndicators(.never)
-                    .frame(height: 300)
+                    .frame(height: 7 * 44)
             }
 
             if editing != .adding {
@@ -70,11 +70,12 @@ struct DayDetail: View {
                     Label("add a block", systemImage: "plus")
                         .labelStyle(AddLabel())
                 }
-                .buttonStyle(.inkLink(selected: false, size: 13))
+                .buttonStyle(.inkLink(selected: false, size: 15))
+                .frame(minHeight: 24)
             }
         }
-        .padding(18)
-        .frame(width: 320)
+        .padding(24)
+        .frame(width: 440)
         .background(Ink.paper)
         .animation(Ink.snap, value: editing)
         .animation(Ink.snap, value: removed.keys.sorted { $0.uuidString < $1.uuidString })
@@ -84,7 +85,7 @@ struct DayDetail: View {
     }
 
     private var list: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 0) {
             ForEach(sessions) { session in
                 Group {
                     if removed[session.id] != nil {
@@ -171,12 +172,12 @@ private struct SessionRow: View {
         HStack(spacing: 10) {
             // Stopwatch and added blocks have no plan; pomodoro blocks do.
             Glyph(session.tag == Copy.intervalsTag ? .runner : session.plannedSeconds == 0 ? .stopwatch : .tomato,
-                  size: 13, boiling: false,
-                  lineWidth: 1.2, tint: Ink.faint)
+                  size: 15, boiling: false,
+                  lineWidth: 1.3, tint: Ink.faint)
             Text(session.startedAt.formatted(Copy.timeFormat).lowercased())
                 .foregroundStyle(Ink.faint)
                 .monospacedDigit()
-                .frame(width: 64, alignment: .leading)
+                .frame(width: 72, alignment: .leading)
             Text(session.tag ?? "untagged")
                 .foregroundStyle(session.tag == nil ? Ink.faint : Ink.ink)
                 .lineLimit(1)
@@ -190,19 +191,19 @@ private struct SessionRow: View {
                     .opacity(hovered ? 0 : 1)
                 Button(action: remove) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 10, weight: .semibold))
-                        .frame(width: 20, height: 20)
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 24, height: 24)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.inkLink(selected: false, size: 13))
+                .buttonStyle(.inkLink(selected: false, size: 15))
                 .opacity(hovered ? 1 : 0)
                 .help("remove")
                 .accessibilityLabel("remove")
             }
         }
-        .font(Ink.text(13))
+        .font(Ink.text(15))
         .padding(.horizontal, 8)
-        .frame(height: 30)
+        .frame(height: 44)
         .background(RoundedRectangle(cornerRadius: 6).fill(hovered ? Ink.ink.opacity(0.05) : .clear))
         .contentShape(Rectangle())
         .onTapGesture(perform: open)
@@ -225,12 +226,12 @@ private struct RemovedRow: View {
                 .foregroundStyle(Ink.faint)
             Text("·").foregroundStyle(Ink.faint)
             Button("undo", action: undo)
-                .buttonStyle(.inkLink(selected: true, size: 13))
+                .buttonStyle(.inkLink(selected: true, size: 15))
             Spacer()
         }
-        .font(Ink.text(13))
+        .font(Ink.text(15))
         .padding(.horizontal, 8)
-        .frame(height: 30)
+        .frame(height: 44)
     }
 }
 
@@ -267,13 +268,13 @@ private struct BlockEditor: View {
                 VStack(spacing: 3) {
                     TextField("", text: $tag)
                         .textFieldStyle(.plain)
-                        .font(Ink.text(13, .medium))
+                        .font(Ink.text(15, .medium))
                         .foregroundStyle(Ink.ink)
                         .focused($tagFocused)
                         .onSubmit(commit)
                         .background(alignment: .leading) {
                             if tag.isEmpty {
-                                Text("anything").font(Ink.text(13)).foregroundStyle(Ink.ink.opacity(0.28))
+                                Text("anything").font(Ink.text(15)).foregroundStyle(Ink.ink.opacity(0.28))
                                     .allowsHitTesting(false)
                             }
                         }
@@ -285,20 +286,20 @@ private struct BlockEditor: View {
                 HStack(spacing: 2) {
                     step("minus", by: -5 * 60).disabled(length <= 60)
                     Text(Copy.amount(length))
-                        .font(Ink.text(13, .medium))
+                        .font(Ink.text(15, .medium))
                         .foregroundStyle(Ink.ink)
                         .monospacedDigit()
-                        .frame(minWidth: 46)
+                        .frame(minWidth: 52)
                         .contentTransition(.numericText())
                     step("plus", by: 5 * 60).disabled(length >= Self.longest)
                 }
                 Spacer(minLength: 8)
                 Button("cancel", action: cancel)
-                    .buttonStyle(.inkLink(selected: false, size: 13))
+                    .buttonStyle(.inkLink(selected: false, size: 15))
                     .keyboardShortcut(.cancelAction)
                     .fixedSize()
                 Button("save", action: commit)
-                    .buttonStyle(InkCapsuleStyle(size: 12))
+                    .buttonStyle(InkCapsuleStyle(size: 14, height: 40))
                     .keyboardShortcut(.defaultAction)
                     .fixedSize()
                     .disabled(!valid)
@@ -307,12 +308,12 @@ private struct BlockEditor: View {
 
             if let problem {
                 Text(problem)
-                    .font(Ink.text(12))
+                    .font(Ink.text(13))
                     .foregroundStyle(Ink.faint)
                     .transition(.opacity)
             }
         }
-        .padding(10)
+        .padding(12)
         .background(RoundedRectangle(cornerRadius: 8).fill(Ink.ink.opacity(0.045)))
         .animation(Ink.snap, value: length)
         .onAppear { tagFocused = tag.isEmpty }
@@ -342,11 +343,11 @@ private struct BlockEditor: View {
             length = min(Self.longest, max(60, next))
         } label: {
             Image(systemName: symbol)
-                .font(.system(size: 10, weight: .semibold))
-                .frame(width: 22, height: 22)
+                .font(.system(size: 11, weight: .semibold))
+                .frame(width: 24, height: 24)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.inkLink(selected: false, size: 13))
+        .buttonStyle(.inkLink(selected: false, size: 15))
         .accessibilityLabel(delta > 0 ? "longer" : "shorter")
     }
 
@@ -360,7 +361,7 @@ private struct BlockEditor: View {
 private struct AddLabel: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: 6) {
-            configuration.icon.font(.system(size: 10, weight: .semibold))
+            configuration.icon.font(.system(size: 11, weight: .semibold))
             configuration.title
         }
     }

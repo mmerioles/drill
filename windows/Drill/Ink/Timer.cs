@@ -46,6 +46,14 @@ public sealed class RollingText : FrameworkElement
 
     protected override int VisualChildrenCount => 1;
     protected override Visual GetVisualChild(int index) => _row;
+
+    /// <summary>A new size redraws the digits at it (the ring grows with the window).</summary>
+    protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        if (e.Property == FontSizeProperty && _cells.Count > 0) Rebuild(Text);
+    }
+
     protected override Size MeasureOverride(Size available)
     {
         _row.Measure(available);
@@ -210,7 +218,8 @@ public sealed class HeatGrid : FrameworkElement
     public event Action? HoveredChanged;
 
     public static readonly double[] Levels = [0, 0.16, 0.36, 0.62, 0.92];
-    private const double GapRatio = 0.24, MonthRow = 16, Margin_ = 3;
+    /// <summary>Square cells 2 apart, 11 to 14 across; month labels (12) in a row 6 above the cells.</summary>
+    private const double Gap = 2, CellMin = 11, CellMax = 14, MonthRow = 22, Margin_ = 3;
 
     /// <summary>
     /// The cells and month labels, drawn once per heatmap, width, scale and
@@ -250,15 +259,17 @@ public sealed class HeatGrid : FrameworkElement
     }
 
     /// <summary>
-    /// The exact pitch, and the cell size in whole device pixels. Each column
-    /// is placed by <see cref="Column"/>, rounded on its own, so the grid's
-    /// outer edges land exactly on the content's and gaps differ by at most a pixel.
+    /// The exact pitch (cell + gap), and the cell size in whole device pixels:
+    /// the width shared by the weeks with 2 between, kept between 11 and 14.
+    /// Each column is placed by <see cref="Column"/>, rounded on its own, so the
+    /// grid's outer edges land exactly on the content's and gaps differ by at
+    /// most a pixel.
     /// </summary>
     private (double Pitch, double Cell) Metrics(double width, double scale)
     {
         var n = Math.Max(Heatmap.Weeks.Count, 1);
-        var pitch = (width - Margin_ * 2) / (n - GapRatio);
-        return (pitch, Math.Round(pitch * (1 - GapRatio) * scale) / scale);
+        var cell = Math.Clamp((width - Margin_ * 2 - (n - 1) * Gap) / n, CellMin, CellMax);
+        return (cell + Gap, Math.Round(cell * scale) / scale);
     }
 
     private static double Column(int w, double pitch, double scale) => Snap(Margin_ + w * pitch, scale);
@@ -341,7 +352,7 @@ public sealed class HeatGrid : FrameworkElement
                 if (lastMonth != -1 || first.Date.Day <= 7)
                 {
                     var label = new FormattedText(Copy.Month(first.Date), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-                                                  face, 10, faint, dpi);
+                                                  face, 12, faint, dpi);
                     dc.DrawText(label, new Point(Column(w, pitch, scale), 0));
                 }
                 lastMonth = first.Date.Month;

@@ -2,6 +2,25 @@ import InkKit
 import SwiftUI
 import DrillCore
 
+/// Everything inside the face, sized from the ring's diameter R so the
+/// readout keeps its proportion on every platform.
+enum Ring {
+    static let size: CGFloat = 270
+    /// Status word, 0.055 R; its line is kept even when there's nothing to say.
+    static let status = (size * 0.055).rounded()
+    static let statusLine: CGFloat = 18
+    static let statusGap = (size * 0.03).rounded()
+    /// The numerals, 0.22 R.
+    static let clock = (size * 0.22).rounded()
+    static let slotGap = (size * 0.04).rounded()
+    /// The mark, 0.08 R, with the cycle dots or the round line 4 under it.
+    static let mark = (size * 0.08).rounded()
+    static let round = (size * 0.055).rounded()
+    static let roundLine: CGFloat = 18
+    /// Fixed, so the digits never move between modes.
+    static let slot = mark + 4 + roundLine
+}
+
 /// The ring, digits, tag field and controls. Between blocks, clicking the
 /// face cycles pomodoro → stopwatch → intervals.
 struct TimerView: View {
@@ -16,42 +35,47 @@ struct TimerView: View {
             ZStack {
                 DoodleRing(progress: model.progress, boiling: model.isRunning)
                     .accessibilityHidden(true)
-                VStack(spacing: 8) {
+                VStack(spacing: 0) {
                     // A single quiet word, only when there's something to say;
                     // the fixed height keeps the digits from jumping.
                     Text(model.status ?? " ")
-                        .font(Ink.text(13))
+                        .font(Ink.text(Ring.status))
                         .foregroundStyle(Ink.faint)
+                        .frame(height: Ring.statusLine)
                         .contentTransition(.opacity)
                         .animation(Ink.ease, value: model.status)
                         .accessibilityHidden(true)
                     Text(model.clock)
-                        .font(Ink.digits(58))
+                        .font(Ink.digits(Ring.clock))
                         .foregroundStyle(Ink.ink)
+                        .padding(.top, Ring.statusGap)
                         .contentTransition(.numericText(countsDown: !model.isStopwatch))
                         .animation(.snappy, value: model.shownSecond)
                         .animation(.snappy, value: model.mode)
                         .modifier(SpokenTimer())
-                    ModeMark()
-                    // Only the pomodoro has a cycle; the dots fade but keep
-                    // their room, which intervals borrow for the round.
-                    ZStack {
-                        CycleDots(filled: model.engine.cyclePosition, of: model.config.longBreakEvery)
-                            .opacity(model.mode == .pomodoro ? 1 : 0)
-                        Text(model.roundLine ?? " ")
-                            .font(Ink.text(12))
-                            .foregroundStyle(Ink.faint)
-                            .fixedSize()
-                            .frame(height: 6)
-                            .offset(y: 3)
-                            .opacity(model.roundLine == nil ? 0 : 1)
-                            .contentTransition(.numericText())
-                            .animation(Ink.ease, value: model.roundLine)
+                    VStack(spacing: 4) {
+                        ModeMark()
+                        // Only the pomodoro has a cycle; the dots fade but keep
+                        // their room, which intervals borrow for the round.
+                        ZStack {
+                            CycleDots(filled: model.engine.cyclePosition, of: model.config.longBreakEvery)
+                                .opacity(model.mode == .pomodoro ? 1 : 0)
+                            Text(model.roundLine ?? " ")
+                                .font(Ink.text(Ring.round))
+                                .foregroundStyle(Ink.faint)
+                                .fixedSize()
+                                .opacity(model.roundLine == nil ? 0 : 1)
+                                .contentTransition(.numericText())
+                                .animation(Ink.ease, value: model.roundLine)
+                        }
+                        .frame(height: Ring.roundLine)
+                        .animation(Ink.ease, value: model.mode)
                     }
-                    .animation(Ink.ease, value: model.mode)
+                    .frame(height: Ring.slot)
+                    .padding(.top, Ring.slotGap)
                 }
             }
-            .frame(width: 270, height: 270)
+            .frame(width: Ring.size, height: Ring.size)
             .contentShape(Circle())
             .onTapGesture(perform: model.switchMode)
             .pointerStyle(model.isActive ? nil : .link)
@@ -59,25 +83,27 @@ struct TimerView: View {
 
             // A workout has no tag; the field fades but keeps its room.
             tagField
-                .padding(.top, 30)
+                .padding(.top, 40)
                 .opacity(model.isIntervals ? 0 : 1)
                 .allowsHitTesting(!model.isIntervals)
                 .accessibilityHidden(model.isIntervals)
 
-            HStack(spacing: 28) {
+            HStack(spacing: 32) {
                 Button(Copy.reset(intervals: model.isIntervals), action: model.reset)
-                    .buttonStyle(.inkLink)
+                    .buttonStyle(.inkLink(selected: false, size: 15))
+                    .frame(minHeight: 44)
                     .opacity(model.isActive ? 1 : 0)
                     .disabled(!model.isActive)
                 Button(Copy.toggle(running: model.isRunning, active: model.isActive), action: model.toggle)
                     .buttonStyle(InkCapsuleStyle(minWidth: 128))
                     .keyboardShortcut(paletteOpen ? nil : .defaultAction)
                 Button("skip", action: model.skip)
-                    .buttonStyle(.inkLink)
+                    .buttonStyle(.inkLink(selected: false, size: 15))
+                    .frame(minHeight: 44)
                     .opacity(model.isStopwatch ? 0 : 1)
                     .disabled(model.isStopwatch)
             }
-            .padding(.top, 28)
+            .padding(.top, 32)
         }
         .animation(Ink.ease, value: model.isActive)
         .animation(Ink.ease, value: model.mode)
@@ -85,7 +111,7 @@ struct TimerView: View {
 
     private var tagField: some View {
         @Bindable var model = model
-        return VStack(spacing: 10) {
+        return VStack(spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("studying")
                     .font(Ink.text(15))
@@ -111,14 +137,15 @@ struct TimerView: View {
                 }
                 .frame(width: 150)
             }
-            let suggestions = model.recentTags.filter { $0 != model.tag.lowercased() }.prefix(4)
-            HStack(spacing: 14) {
+            .frame(height: 32)
+            let suggestions = model.recentTags.filter { $0 != model.tag.lowercased() && $0 != Copy.intervalsTag }.prefix(4)
+            HStack(spacing: 16) {
                 ForEach(Array(suggestions), id: \.self) { tag in
                     Button(tag) { model.tag = tag }
-                        .buttonStyle(.inkLink(selected: false, size: 12))
+                        .buttonStyle(.inkLink(selected: false, size: 13))
                 }
             }
-            .frame(height: 14)
+            .frame(height: 16)
         }
     }
 }
@@ -130,7 +157,7 @@ private struct ModeMark: View {
 
     var body: some View {
         Button(action: model.switchMode) {
-            Glyph(model.mark, size: 18, boiling: model.isRunning, lineWidth: 1.5)
+            Glyph(model.mark, size: Ring.mark, boiling: model.isRunning, lineWidth: 1.6)
                 .id(model.mark)
                 .transition(.scale(scale: 0.5).combined(with: .opacity))
         }

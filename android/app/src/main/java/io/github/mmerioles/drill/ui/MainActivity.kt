@@ -20,9 +20,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -31,10 +31,12 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -51,12 +53,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -227,26 +232,37 @@ fun Screen(model: AppModel, palette: MutableState<Boolean>) {
     }
 
     val focus = LocalFocusManager.current
-    Box(
+    BoxWithConstraints(
         Modifier
             .fillMaxSize()
             .background(ink.paper)
             // A tap outside the tag field dismisses the keyboard.
-            .pointerInput(Unit) { detectTapGestures { focus.clearFocus() } },
+            .pointerInput(Unit) { detectTapGestures { focus.clearFocus() } }
+            .windowInsetsPadding(WindowInsets.safeDrawing),
         contentAlignment = Alignment.TopCenter,
     ) {
-        Column(
+        // The column: at most 780 wide, a 16 gutter on a phone and 40 past 600.
+        val phone = maxWidth < 600.dp
+        val gutter = if (phone) 16.dp else 40.dp
+        val column = minOf(COLUMN, maxWidth - gutter * 2)
+        // The ring: 240 on a narrow column, 300 on a tablet, 270 between.
+        val tablet = minOf(maxWidth, maxHeight) >= 600.dp
+        val ring = when {
+            tablet -> 300.dp
+            column < 480.dp -> 240.dp
+            else -> 270.dp
+        }
+        Composition(
+            viewport = maxHeight - PAD * 2,
             Modifier
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .widthIn(max = 780.dp)
+                .widthIn(max = COLUMN + gutter * 2)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 8.dp),
+                .padding(horizontal = gutter, vertical = PAD),
+            header = { Header(model) { open = it } },
         ) {
-            Header(model) { open = it }
-            Spacer(Modifier.height(28.dp))
-            TimerView(model, { clock.longValue }, { boil.longValue }, toggle) { palette.value = true }
-            Spacer(Modifier.height(48.dp))
+            TimerView(model, ring, phone, { clock.longValue }, { boil.longValue }, toggle) { palette.value = true }
+            Spacer(Modifier.height(if (phone) 48.dp else 56.dp))
             YearView(model, filter, { filter = it }, picked, { picked = it })
         }
     }
@@ -275,7 +291,7 @@ fun Screen(model: AppModel, palette: MutableState<Boolean>) {
                     add(Command("auto", if (sync.auto) "turn auto sync off" else "turn auto sync on") { sync.updateAuto(!sync.auto) })
                 }
                 add(Command("today", "today", keywords = listOf("sessions")) { picked = model.today })
-                tags.forEach { t -> add(Command("study:$t", "studying $t") { model.updateTag(t) }) }
+                tags.filter { it != "intervals" }.forEach { t -> add(Command("study:$t", "studying $t") { model.updateTag(t) }) }
                 tags.forEach { t -> add(Command("show:$t", "show $t", keywords = listOf("filter")) { filter = t }) }
                 add(Command("show all", "show all", keywords = listOf("filter")) { filter = null })
             }
@@ -296,17 +312,43 @@ fun Screen(model: AppModel, palette: MutableState<Boolean>) {
     }
 }
 
-/** The links, on the right. When they don't fit, "update" becomes a badge on
- *  "settings"; past that, they wrap. */
+private val HEADER = 24.dp
+private val COLUMN = 780.dp
+/** Above the header and below the year. */
+private val PAD = 24.dp
+
+/** The header over the stack (timer, then year). When the stack fits in the
+ *  [viewport], the free space splits 2 : 3 above : below, never more than 160
+ *  above; when it doesn't, 24 under the header and the column scrolls. */
+@Composable
+private fun Composition(
+    viewport: Dp, modifier: Modifier,
+    header: @Composable () -> Unit, stack: @Composable ColumnScope.() -> Unit,
+) {
+    Layout({ header(); Column(content = stack) }, modifier) { measurables, constraints ->
+        val loose = constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity)
+        val head = measurables[0].measure(loose)
+        val body = measurables[1].measure(loose)
+        val free = viewport.roundToPx() - head.height - body.height
+        val above = if (free < 0) PAD.roundToPx() else minOf(160.dp.roundToPx(), free * 2 / 5)
+        layout(constraints.maxWidth, head.height + above + body.height) {
+            head.place(0, 0)
+            body.place(0, head.height + above)
+        }
+    }
+}
+
+/** The links, on the right, 24 tall. When they don't fit, "update" becomes a
+ *  badge on "settings"; past that, they wrap. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Header(model: AppModel, open: (Open) -> Unit) {
     val ink = LocalPalette.current
     val sync = model.sync
     val measurer = rememberTextMeasurer()
-    val linkStyle = TextStyle(fontSize = 14.sp)
+    val linkStyle = TextStyle(fontSize = 15.sp)
     val phone = LocalConfiguration.current.screenWidthDp < 600
-    Row(verticalAlignment = Alignment.Top) {
+    Row(Modifier.heightIn(min = HEADER), verticalAlignment = Alignment.Top) {
         // Only while there's something to push.
         val word = if (sync.isSignedIn && sync.unpushed > 0 && sync.state != Sync.State.Syncing) {
             if (sync.state == Sync.State.Offline) "offline" else "sync"
@@ -321,7 +363,7 @@ private fun Header(model: AppModel, open: (Open) -> Unit) {
             else -> null
         }
         BoxWithConstraints(Modifier.weight(1f)) {
-            val gap = 16.dp
+            val gap = 20.dp
             val density = LocalDensity.current
             fun width(words: List<String>) = with(density) {
                 words.sumOf { measurer.measure(it, linkStyle).size.width }.toDp() + gap * (words.size - 1)
@@ -333,16 +375,16 @@ private fun Header(model: AppModel, open: (Open) -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(gap, Alignment.End),
             ) {
                 model.lastError?.let {
-                    Words(it, Modifier.align(Alignment.CenterVertically), size = 13.sp, color = ink.faint)
+                    Words(it, Modifier.height(HEADER).wrapContentHeight(), size = 13.sp, color = ink.faint)
                 }
                 if (showUpdate) {
-                    if (downloading) Words(update!!, Modifier.align(Alignment.CenterVertically), size = 14.sp, color = ink.faint)
-                    else Link(update!!, compact = true, action = updater::install)
+                    if (downloading) Words(update!!, Modifier.height(HEADER).wrapContentHeight(), color = ink.faint)
+                    else Link(update!!, compact = true, height = HEADER, action = updater::install)
                 }
-                if (word != null) Link(word, compact = true, action = sync::syncNow)
-                Link("inspo", compact = true) { open(Open.Inspo) }
+                if (word != null) Link(word, compact = true, height = HEADER, action = sync::syncNow)
+                Link("inspo", compact = true, height = HEADER) { open(Open.Inspo) }
                 val badge = update != null && !showUpdate
-                Link("settings", compact = true, badge = badge,
+                Link("settings", compact = true, height = HEADER, badge = badge,
                     description = if (badge) "settings, update available" else null) { open(Open.Settings) }
             }
         }

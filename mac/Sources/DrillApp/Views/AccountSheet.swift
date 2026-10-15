@@ -38,7 +38,7 @@ struct AccountSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(creating ? "make an account" : "sign in")
-                .font(Ink.word(20))
+                .font(Ink.text(20, .semibold))
                 .foregroundStyle(Ink.ink)
 
             fields {
@@ -74,14 +74,14 @@ struct AccountSheet: View {
                     creating.toggle()
                     problem = nil
                 }
-                .buttonStyle(.inkLink(selected: false, size: 13))
+                .buttonStyle(.inkLink(selected: false, size: 15))
                 Spacer()
                 cancel
                 primary(creating ? "create account" : "sign in", ready: ready, action: submit)
             }
         }
         .textFieldStyle(.plain)
-        .padding(28)
+        .padding(24)
         .frame(width: 440)
         .background(Ink.paper)
         .onAppear { focused = .username }
@@ -180,15 +180,15 @@ struct AccountSheet: View {
             Text(label).foregroundStyle(Ink.ink)
             field().multilineTextAlignment(.trailing)
         }
-        .font(Ink.text(14))
-        .frame(minHeight: 42)
+        .font(Ink.text(15))
+        .frame(minHeight: 44)
     }
 
     /// A small note right under a row, when there's something to say.
     @ViewBuilder private func hint(_ text: String?) -> some View {
         if let text {
             Text(text)
-                .font(Ink.text(12))
+                .font(Ink.text(13))
                 .foregroundStyle(Ink.faint)
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.top, -8)
@@ -205,13 +205,13 @@ struct AccountSheet: View {
 
     private var cancel: some View {
         Button("cancel") { dismiss() }
-            .buttonStyle(.inkLink(selected: false, size: 13))
+            .buttonStyle(.inkLink(selected: false, size: 15))
             .keyboardShortcut(.cancelAction)
     }
 
     private func primary(_ title: String, ready: Bool, action: @escaping () -> Void) -> some View {
         Button(title, action: action)
-            .buttonStyle(InkCapsuleStyle(size: 14))
+            .buttonStyle(InkCapsuleStyle(size: 14, height: 40))
             .fixedSize()
             .keyboardShortcut(.defaultAction)
             .disabled(!ready || working)

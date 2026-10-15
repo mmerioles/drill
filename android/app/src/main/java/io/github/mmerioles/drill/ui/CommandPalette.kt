@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -77,7 +78,7 @@ import io.github.mmerioles.drill.core.Commands
 import io.github.mmerioles.drill.core.Hit
 import io.github.mmerioles.drill.ink.LocalPalette
 
-private val ROW = 44.dp
+private val ROW = 36.dp
 private const val ROWS = 8
 
 /** Ids of the last commands run, most recent first; kept for the process. */
@@ -110,9 +111,8 @@ fun CommandPalette(
                 .windowInsetsPadding(WindowInsets.safeDrawing),
             contentAlignment = Alignment.TopCenter,
         ) {
-            val phone = LocalConfiguration.current.screenWidthDp < 600
-            // On a phone the keyboard takes the bottom half, so sit near the top.
-            val top = if (phone) 12.dp else (LocalConfiguration.current.screenHeightDp * 0.2f).dp
+            // A fifth of the way down; the keyboard takes the bottom half on a phone.
+            val top = (LocalConfiguration.current.screenHeightDp * 0.2f).dp
             val shift = with(LocalDensity.current) { 6.dp.roundToPx() }
             Panel(
                 Modifier
@@ -165,8 +165,8 @@ private fun Panel(modifier: Modifier, commands: () -> List<Command>, fallback: (
 
     Column(
         modifier
-            .widthIn(max = 520.dp)
             .padding(horizontal = 16.dp)
+            .widthIn(max = 520.dp)
             .fillMaxWidth()
             .shadow(16.dp, RoundedCornerShape(14.dp), ambientColor = Color.Black.copy(alpha = 0.3f))
             .clip(RoundedCornerShape(14.dp))
@@ -195,7 +195,9 @@ private fun Panel(modifier: Modifier, commands: () -> List<Command>, fallback: (
                         else -> false
                     }
                 }
-                .padding(horizontal = 12.dp, vertical = 12.dp),
+                .height(40.dp)
+                .padding(horizontal = 12.dp)
+                .wrapContentHeight(),
             singleLine = true,
             textStyle = TextStyle(color = ink.ink, fontSize = 16.sp),
             cursorBrush = SolidColor(ink.ink),

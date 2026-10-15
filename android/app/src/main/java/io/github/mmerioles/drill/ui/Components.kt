@@ -59,6 +59,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -99,19 +100,21 @@ val UpdateYellow = Color(0xFFF2C21B)
 
 /** A faint word that does something. [on] marks the chosen one; [selectable]
  *  makes it a tab; [description] replaces [text] for TalkBack; [primary] is
- *  ink and heavier; [compact] is only as wide as the word (Compose still
- *  widens the touch area); [badge] adds the update dot. */
+ *  ink and heavier; [compact] is only as wide as the word and [height] is
+ *  how tall it lays out (Compose still widens the touch area to 48);
+ *  [badge] adds the update dot. */
 @Composable
 fun Link(
     text: String,
     modifier: Modifier = Modifier,
-    size: TextUnit = 14.sp,
+    size: TextUnit = 15.sp,
     on: Boolean = false,
     selectable: Boolean = false,
     enabled: Boolean = true,
     description: String? = null,
     primary: Boolean = false,
     compact: Boolean = false,
+    height: Dp = TouchTarget,
     badge: Boolean = false,
     action: () -> Unit,
 ) {
@@ -135,7 +138,7 @@ fun Link(
         modifier
             .then(touch)
             .then(if (description != null) Modifier.semantics { contentDescription = description } else Modifier)
-            .defaultMinSize(minWidth = if (compact) 0.dp else TouchTarget, minHeight = TouchTarget),
+            .defaultMinSize(minWidth = if (compact) 0.dp else TouchTarget, minHeight = height),
         contentAlignment = Alignment.Center,
     ) {
         BasicText(
@@ -168,9 +171,9 @@ fun Capsule(text: String, modifier: Modifier = Modifier, small: Boolean = false,
             .clip(CircleShape)
             .background(if (enabled) ink.ink else ink.faint)
             .clickable(source, indication = null, enabled = enabled, role = Role.Button, onClick = action)
-            .defaultMinSize(minHeight = TouchTarget)
+            .defaultMinSize(minHeight = if (small) 40.dp else 48.dp)
             .widthIn(min = if (small) 0.dp else 128.dp)
-            .padding(horizontal = if (small) 28.dp else 42.dp, vertical = if (small) 10.dp else 14.dp),
+            .padding(horizontal = if (small) 28.dp else 42.dp, vertical = if (small) 8.dp else 12.dp),
         contentAlignment = Alignment.Center,
     ) {
         Words(text, size = if (small) 14.sp else 16.sp, weight = FontWeight.SemiBold, color = ink.paper)
@@ -179,7 +182,7 @@ fun Capsule(text: String, modifier: Modifier = Modifier, small: Boolean = false,
 
 @Composable
 fun SheetTitle(text: String, modifier: Modifier = Modifier) {
-    Words(text, modifier.semantics { heading() }, size = 20.sp, weight = FontWeight.Bold)
+    Words(text, modifier.semantics { heading() }, size = 20.sp, weight = FontWeight.SemiBold)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -204,15 +207,16 @@ fun rememberSheet(onDismiss: () -> Unit): SheetHandle {
     return remember(state, scope) { SheetHandle(state, scope) { latest() } }
 }
 
-/** A Material bottom sheet on drill's paper. */
+/** A Material bottom sheet on drill's paper: the phone's width, 440 on a tablet. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Sheet(handle: SheetHandle, content: @Composable ColumnScope.() -> Unit) {
     val ink = LocalPalette.current
+    val wide = LocalConfiguration.current.screenWidthDp >= 600
     ModalBottomSheet(
         onDismissRequest = handle.dismissed,
         sheetState = handle.state,
-        sheetMaxWidth = Dp.Unspecified,
+        sheetMaxWidth = if (wide) 440.dp else Dp.Unspecified,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         containerColor = ink.paper,
         contentColor = ink.ink,
@@ -232,7 +236,7 @@ fun Sheet(handle: SheetHandle, content: @Composable ColumnScope.() -> Unit) {
                 .fillMaxWidth()
                 .imePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 22.dp, end = 22.dp, bottom = 22.dp),
+                .padding(start = 24.dp, end = 24.dp, bottom = 24.dp),
             content = content,
         )
     }
@@ -244,7 +248,7 @@ fun Group(content: @Composable ColumnScope.() -> Unit) {
     val ink = LocalPalette.current
     Column(
         Modifier
-            .padding(bottom = 14.dp)
+            .padding(bottom = 24.dp)
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(ink.wash)
@@ -256,7 +260,7 @@ fun Group(content: @Composable ColumnScope.() -> Unit) {
 @Composable
 fun SettingRow(label: String, content: @Composable RowScope.() -> Unit) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 46.dp),
+        Modifier.fillMaxWidth().heightIn(min = 44.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {

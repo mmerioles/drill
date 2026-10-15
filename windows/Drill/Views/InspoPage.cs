@@ -17,7 +17,7 @@ namespace Drill.Views;
 public sealed class InspoPage : UserControl
 {
     private readonly Watched _watched;
-    private readonly InkLink _today = new() { Content = "today", Margin = new Thickness(0, 0, 14, 0) };
+    private readonly InkLink _today = new() { Content = "today", Margin = new Thickness(0, 0, 16, 0) };
     private readonly InkLink _all = new() { Content = "all" };
     private readonly StackPanel _body = new();
     private bool _showingAll;
@@ -28,7 +28,7 @@ public sealed class InspoPage : UserControl
         Width = 440;
         var root = new StackPanel { Margin = new Thickness(24, 0, 24, 24) };
 
-        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 18) };
+        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 16) };
         var links = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Bottom };
         links.Children.Add(_today);
         links.Children.Add(_all);
@@ -108,7 +108,7 @@ public sealed class InspoPage : UserControl
         }
         var words = new StackPanel();
         var title = new StackPanel { Orientation = Orientation.Horizontal };
-        var name = Text(video.Title, 14);
+        var name = Text(video.Title, 15);
         name.FontWeight = FontWeights.SemiBold;
         title.Children.Add(name);
         if (_watched.Contains(video))
@@ -164,7 +164,7 @@ public sealed class InspoPage : UserControl
 
     internal static TextBlock Heading(string text)
     {
-        var t = new TextBlock { Text = text, FontSize = 20, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Bottom };
+        var t = new TextBlock { Text = text, FontSize = 20, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Bottom };
         t.SetResourceReference(TextBlock.FontFamilyProperty, "Display");
         t.SetResourceReference(TextBlock.ForegroundProperty, "Ink");
         TextOptions.SetTextFormattingMode(t, TextFormattingMode.Ideal);
