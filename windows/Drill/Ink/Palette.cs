@@ -7,15 +7,9 @@ namespace Drill.Ink;
 public enum Theme { Light, Dark }
 
 /// <summary>
-/// drill's look, as in mac/Sources/InkKit/Ink.swift: paper, one ink, lots of
-/// air, lowercase sentences, hand-drawn strokes that "boil" gently.
-///
-///   dark  — "ink":  pure monochrome, white ink on black. The accent is just ink.
-///   light — "teto": off-white paper, charcoal ink, and Teto's crimson as the
-///           one accent — used only for progress (ring, heatmap, logo).
-///
-/// XAML reads these as DynamicResources by key ("Paper", "Ink", …); drawn
-/// controls read <see cref="Current"/> and redraw on <see cref="Changed"/>.
+/// drill's colours (as mac's Ink.swift). Dark is pure monochrome; light adds
+/// crimson as the one accent, used only for progress. XAML reads them as
+/// DynamicResources by key; drawn controls read <see cref="Current"/> and redraw on <see cref="Changed"/>.
 /// </summary>
 public sealed class Palette
 {
@@ -79,6 +73,9 @@ public sealed class Palette
     }
 
     public static Color Hex(uint rgb) => Color.FromRgb((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
+
+    public static Color Lerp(Color a, Color b, double t) => Color.FromArgb(
+        (byte)(a.A + (b.A - a.A) * t), (byte)(a.R + (b.R - a.R) * t), (byte)(a.G + (b.G - a.G) * t), (byte)(a.B + (b.B - a.B) * t));
 
     public static Color WithAlpha(Color c, double alpha) => Color.FromArgb((byte)Math.Round(alpha * 255), c.R, c.G, c.B);
 

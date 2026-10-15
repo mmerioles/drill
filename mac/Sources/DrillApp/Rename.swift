@@ -1,10 +1,8 @@
 import Foundation
 import DrillCore
 
-/// The app was called tetodoro until v0.9. On the first launch as drill,
-/// this carries over what the old name kept, so nothing is lost: the
-/// sessions database, and the settings, sync login and device id in the old
-/// app's defaults. The old names live only here.
+/// The app was tetodoro until v0.9. On first launch as drill, carries over
+/// the old database and defaults.
 enum Rename {
     private static let oldDomain = "com.mmerioles.tetodoro"
     private static let oldPrefix = "tetodoro."
@@ -12,7 +10,7 @@ enum Rename {
     private static let oldDatabase = "tetodoro.sqlite"
     private static let done = "drill.renamed"
 
-    /// Runs once, before anything opens the database or reads defaults.
+    /// Must run before anything opens the database or reads defaults.
     static func carryOver(_ defaults: UserDefaults = .standard) {
         guard !defaults.bool(forKey: done) else { return }
         moveDatabase()
@@ -25,8 +23,7 @@ enum Rename {
         defaults.set(true, forKey: done)
     }
 
-    /// Moves Application Support/Tetodoro/tetodoro.sqlite (and its WAL files)
-    /// to where drill looks, unless drill already has a database.
+    /// Unless drill already has a database.
     private static func moveDatabase() {
         let fm = FileManager.default
         let new = SQLiteSessionStore.defaultURL
@@ -43,8 +40,6 @@ enum Rename {
             if (try? fm.contentsOfDirectory(atPath: oldDir.path))?.isEmpty == true {
                 try? fm.removeItem(at: oldDir)
             }
-        } catch {
-            // Whatever didn't move stays in the old folder, untouched.
-        }
+        } catch {} // whatever didn't move stays put
     }
 }

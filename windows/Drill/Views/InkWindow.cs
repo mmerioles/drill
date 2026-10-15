@@ -226,7 +226,6 @@ public sealed class DialogHost : Grid
         },
     };
     private IInputElement? _returnFocus;
-    private Action? _onClosed;
 
     public DialogHost()
     {
@@ -241,12 +240,10 @@ public sealed class DialogHost : Grid
     }
 
     public bool IsOpen => Visibility == Visibility.Visible;
-    public FrameworkElement? Current => _card.Child as FrameworkElement;
 
-    public void Show(FrameworkElement content, Action? onClosed = null)
+    public void Show(FrameworkElement content)
     {
         _returnFocus = Keyboard.FocusedElement;
-        _onClosed = onClosed;
         _card.Child = content;
         Visibility = Visibility.Visible;
         var scale = new ScaleTransform(1.05, 1.05);
@@ -268,9 +265,6 @@ public sealed class DialogHost : Grid
             Visibility = Visibility.Collapsed;
             _card.Child = null;
             _returnFocus?.Focus();
-            var done = _onClosed;
-            _onClosed = null;
-            done?.Invoke();
         });
     }
 }

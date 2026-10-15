@@ -72,10 +72,6 @@ private struct HoverFade: ViewModifier {
     }
 }
 
-public extension ButtonStyle where Self == InkCapsuleStyle {
-    static var inkCapsule: InkCapsuleStyle { InkCapsuleStyle() }
-}
-
 public extension ButtonStyle where Self == InkLinkStyle {
     static var inkLink: InkLinkStyle { InkLinkStyle() }
     static func inkLink(selected: Bool, size: CGFloat = 14) -> InkLinkStyle {

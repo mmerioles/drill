@@ -141,7 +141,7 @@ public sealed class InkLink : Button
         set => SetValue(IsSelectedProperty, value);
     }
 
-    /// <summary>How much ink: 0.45 at rest, full under the pointer or when selected.</summary>
+    /// <summary>How much ink: <see cref="Rest"/> at rest, full under the pointer or when selected.</summary>
     public double Ink
     {
         get => (double)GetValue(InkProperty);
@@ -329,12 +329,9 @@ public sealed class Toggle : FrameworkElement
         var left = 4 + (thumb == 12 ? 0 : -(thumb - 12) / 2);
         var right = 36 - w + (thumb == 12 ? 0 : (thumb - 12) / 2);
         var x = left + (right - left) * pos;
-        var thumbColor = Lerp(p.Faint, p.Paper, pos);
+        var thumbColor = Palette.Lerp(p.Faint, p.Paper, pos);
         dc.DrawRoundedRectangle(Palette.Brush(thumbColor), null, new Rect(x, 10 - thumb / 2, w, thumb), thumb / 2, thumb / 2);
     }
-
-    private static Color Lerp(Color a, Color b, double t) => Color.FromArgb(
-        (byte)(a.A + (b.A - a.A) * t), (byte)(a.R + (b.R - a.R) * t), (byte)(a.G + (b.G - a.G) * t), (byte)(a.B + (b.B - a.B) * t));
 }
 
 /// <summary>"–  25 min  +": a number with 32px buttons; arrow keys and the wheel step it too.</summary>
@@ -659,9 +656,7 @@ public sealed class Segmented : FrameworkElement
             // Label colour follows the thumb as it passes over.
             var cover = Math.Clamp(1 - Math.Abs(slide - i), 0, 1);
             var rest = i == _hover ? p.Ink : p.Faint;
-            var color = Color.FromArgb(
-                (byte)(rest.A + (p.Paper.A - rest.A) * cover), (byte)(rest.R + (p.Paper.R - rest.R) * cover),
-                (byte)(rest.G + (p.Paper.G - rest.G) * cover), (byte)(rest.B + (p.Paper.B - rest.B) * cover));
+            var color = Palette.Lerp(rest, p.Paper, cover);
             var text = new FormattedText(Items[i], System.Globalization.CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
                 Typeface("Text", cover > 0.5 ? FontWeights.SemiBold : FontWeights.Normal), 13, Palette.Brush(color), dpi);
             dc.DrawText(text, new Point(2 + i * Segment + (Segment - text.Width) / 2, 2 + (Tall - text.Height) / 2));

@@ -21,7 +21,7 @@ const f = (n) => n.toFixed(2);
 const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 
 /** A soft curve through pts, as an SVG path. */
-export function curve(pts, closed) {
+function curve(pts, closed) {
   if (pts.length < 2) return "";
   let d;
   if (closed) {

@@ -68,7 +68,7 @@ public sealed class InspoPage : UserControl
     private void ShowAllVideos()
     {
         // 25 to a row, as on the mac, spread across the page.
-        var grid = new System.Windows.Controls.Primitives.UniformGrid { Columns = 25, Margin = new Thickness(0, 0, 0, 0) };
+        var grid = new System.Windows.Controls.Primitives.UniformGrid { Columns = 25 };
         foreach (var video in InspoVideos.All)
         {
             var square = new Rectangle { Width = 11, Height = 11, RadiusX = 2, RadiusY = 2, Margin = new Thickness(0, 0, 0, 4), Cursor = Cursors.Hand, SnapsToDevicePixels = true };

@@ -2,6 +2,8 @@ import { Engine, Phase, defaultConfig, isBreak } from "./engine.js";
 import { buildHeatmap, firstWeekday } from "./heatmap.js";
 import { BOIL_MS, drill, ring, square } from "./ink.js";
 import { VIDEOS, markWatched, today as inspoToday, watched, watchedBefore } from "./inspo.js";
+import { SAMPLE_TAGS, sampleYear } from "./sample.js";
+import { chime, wakeAudio } from "./sound.js";
 import { Store } from "./store.js";
 
 const $ = (id) => document.getElementById(id);
@@ -22,15 +24,15 @@ const save = (key, value) => {
 };
 
 const settings = { sound: true, ...load(KEY.settings, {}) };
-// Light or dark, like the mac. Dark unless picked; the demo on the site
-// starts in the visitor's own mode. Old "auto" choices become the default.
+// Dark unless picked; the site's demo starts in the visitor's own mode.
+// Old "auto" choices fall back the same way.
 if (!["light", "dark"].includes(settings.theme)) {
   settings.theme = demo && matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
 settings.config = { ...defaultConfig, ...settings.config };
 
 const store = new Store({ offline: demo });
-let saved = load(KEY.timer, null);
+const saved = load(KEY.timer, null);
 const engine = new Engine(settings.config, saved?.engine);
 /** The tag in effect for the running focus block, captured when it starts. */
 let blockTag = saved?.blockTag ?? null;
@@ -43,16 +45,18 @@ function persistTimer() {
 
 // MARK: Copy (DrillApp/Copy.swift)
 
+const PHASE_NAME = { focus: "focus", shortBreak: "break", longBreak: "long break" };
+
 function statusWord() {
   if (engine.phase === Phase.focus && engine.isIdle) return "";
   if (!engine.isIdle && !engine.isRunning) return "paused";
-  return { focus: "focus", shortBreak: "break", longBreak: "long break" }[engine.phase];
+  return PHASE_NAME[engine.phase];
 }
 
 /** What a screen reader says for the countdown: "focus, 12 minutes left". */
 function spoken(ms) {
   const total = Math.ceil(ms / 1000);
-  const name = { focus: "focus", shortBreak: "break", longBreak: "long break" }[engine.phase];
+  const name = PHASE_NAME[engine.phase];
   const m = Math.ceil(total / 60);
   const left = total >= 60 ? (m === 1 ? "1 minute left" : `${m} minutes left`)
     : total === 1 ? "1 second left" : `${total} seconds left`;
@@ -90,7 +94,7 @@ function toggle() {
     askForNotifications();
     if (engine.phase === Phase.focus) captureTag();
   }
-  wakeAudio();
+  if (settings.sound) wakeAudio();
   changed();
 }
 
@@ -257,7 +261,6 @@ function renderTags() {
   $("suggest").replaceChildren(...tags.filter((t) => t !== current).slice(0, 4).map((t) =>
     button(t, () => { $("tag").value = t; save(KEY.tag, t); renderTags(); })));
 
-  // The tabs are only rebuilt when the tags change.
   const filter = $("filter");
   if (String(tags) !== String(filterTags)) {
     filterTags = tags;
@@ -292,35 +295,6 @@ function button(label, action, pressed) {
   if (pressed !== undefined) b.setAttribute("aria-pressed", String(pressed));
   b.addEventListener("click", action);
   return b;
-}
-
-/** The demo's made-up year: a few classes, each with its own rhythm, the
- *  same on every visit. A class takes `[min, max]` blocks on the weekdays it
- *  meets (0 is sunday), in the months it runs (0 is january). */
-const SAMPLE = {
-  "15-213": { days: [1, 2, 3, 4], months: [0, 1, 2, 3, 4, 8, 9, 10, 11], blocks: [1, 4], skip: 0.25 },
-  "linear algebra": { days: [1, 3, 5], months: [0, 1, 2, 3, 4], blocks: [1, 3], skip: 0.2 },
-  "japanese": { days: [0, 1, 2, 3, 4, 5, 6], months: [...Array(12).keys()], blocks: [1, 2], skip: 0.3 },
-  "piano": { days: [0, 6], months: [5, 6, 7, 8, 9], blocks: [1, 3], skip: 0.3 },
-};
-const SAMPLE_TAGS = Object.keys(SAMPLE);
-let sample = null;
-function sampleYear() {
-  if (sample) return sample;
-  let seed = 7;
-  const next = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
-  sample = [];
-  for (let d = 1; d < 371; d++) {
-    const day = new Date();
-    day.setHours(10, 0, 0, 0);
-    day.setDate(day.getDate() - d);
-    for (const [tag, c] of Object.entries(SAMPLE)) {
-      if (!c.days.includes(day.getDay()) || !c.months.includes(day.getMonth()) || next() < c.skip) continue;
-      const blocks = c.blocks[0] + Math.floor(next() * (c.blocks[1] - c.blocks[0] + 1));
-      sample.push({ startedAt: day.toISOString(), focusSeconds: blocks * 25 * 60, tag });
-    }
-  }
-  return sample;
 }
 
 // Heatmap geometry, as in HeatmapView.swift: the grid stretches to the width.
@@ -360,12 +334,6 @@ function renderYear(fade = false) {
   svg.setAttribute("viewBox", `${-MARGIN} 0 ${width} ${height}`);
   svg.style.height = `${height}px`;
 
-  const ns = "http://www.w3.org/2000/svg";
-  const el = (tag, attrs) => {
-    const e = document.createElementNS(ns, tag);
-    for (const k in attrs) e.setAttribute(k, attrs[k]);
-    return e;
-  };
   const nodes = [];
   const today = new Date().setHours(0, 0, 0, 0);
   let lastMonth = -1;
@@ -376,7 +344,7 @@ function renderYear(fade = false) {
       // Label a month at its first full column, not the half-column at the left edge.
       if (month !== lastMonth) {
         if (lastMonth !== -1 || d.getDate() <= 7) {
-          const t = el("text", { x: w * pitch, y: 9, class: "month" });
+          const t = svgEl("text", { x: w * pitch, y: 9, class: "month" });
           t.textContent = monthFormat.format(d).toLowerCase();
           nodes.push(t);
         }
@@ -386,7 +354,7 @@ function renderYear(fade = false) {
     week.forEach((day, d) => {
       if (!day) return;
       const x = w * pitch, y = MONTH_ROW + d * pitch;
-      const cell = el("path", { d: square(x, y, size, (w * 7 + d) * 31 + 7), class: "cell" });
+      const cell = svgEl("path", { d: square(x, y, size, (w * 7 + d) * 31 + 7), class: "cell" });
       cell.style.fill = cellFill(day.level);
       // A gentle left-to-right wave when a tab changes the colours.
       cell.style.transitionDelay = `${Math.round(w / weeks * 180)}ms`;
@@ -400,14 +368,15 @@ function renderYear(fade = false) {
   renderHover();
 }
 
+function svgEl(tag, attrs) {
+  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+
 function outline(x, y, className) {
   const { size } = metrics;
-  const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-  for (const [k, v] of Object.entries({ x: x - 1.75, y: y - 1.75, width: size + 3.5, height: size + 3.5, rx: 3 })) {
-    r.setAttribute(k, v);
-  }
-  r.setAttribute("class", className);
-  return r;
+  return svgEl("rect", { x: x - 1.75, y: y - 1.75, width: size + 3.5, height: size + 3.5, rx: 3, class: className });
 }
 
 /** Moves the hover outline and swaps the caption, without redrawing cells. */
@@ -426,7 +395,7 @@ function renderHover() {
 function renderCaption() {
   const cap = $("caption");
   if (hovered) {
-    const d = el2("span", "date", dayFormat.format(new Date(hovered.date)).toLowerCase());
+    const d = htmlEl("span", "date", dayFormat.format(new Date(hovered.date)).toLowerCase());
     cap.replaceChildren(d, document.createTextNode(" — "),
       document.createTextNode(hovered.seconds > 0 ? amount(hovered.seconds) : "nothing logged."));
     cap.style.gap = "6px";
@@ -434,14 +403,14 @@ function renderCaption() {
   }
   cap.style.gap = "";
   const stat = (label, value) => {
-    const s = el2("span", "", label);
-    s.append(el2("b", "", value));
+    const s = htmlEl("span", "", label);
+    s.append(htmlEl("b", "", value));
     return s;
   };
-  const legend = el2("span", "legend", "less");
-  INK.forEach((ink, i) => {
+  const legend = htmlEl("span", "legend", "less");
+  INK.forEach((_, i) => {
     const sq = document.createElement("i");
-    if (i > 0) sq.style.background = `color-mix(in srgb, var(--accent) ${ink * 100}%, transparent)`;
+    if (i > 0) sq.style.background = cellFill(i);
     legend.append(sq);
   });
   legend.append("more");
@@ -455,7 +424,7 @@ function renderCaption() {
     `today ${amount(heat.today)}, this week ${amount(heat.thisWeek)}, streak ${streak}`);
 }
 
-function el2(tag, className, text) {
+function htmlEl(tag, className, text) {
   const e = document.createElement(tag);
   if (className) e.className = className;
   e.textContent = text;
@@ -572,44 +541,13 @@ store.addEventListener("sync", () => {
   wasConfirmed = confirmed;
 });
 
-// MARK: Theme, sound, notifications
+// MARK: Theme, notifications
 
 function applyTheme() {
   document.documentElement.dataset.theme = settings.theme;
   for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
     meta.content = settings.theme === "light" ? "#F2F0ED" : "#121211";
   }
-}
-
-let audio = null;
-/** Safari only lets sound start from a click: so the chime's audio is made,
- *  or woken, by the start button, ready for when the phase ends. */
-function wakeAudio() {
-  if (!settings.sound) return;
-  try {
-    audio ??= new (window.AudioContext || window.webkitAudioContext)();
-    if (audio.state === "suspended") audio.resume().catch(() => {});
-  } catch {}
-}
-
-function chime(focusDone) {
-  try {
-    audio ??= new (window.AudioContext || window.webkitAudioContext)();
-    if (audio.state === "suspended") audio.resume().catch(() => {});
-    const notes = focusDone ? [880, 1318.5] : [659.3];
-    notes.forEach((freq, i) => {
-      const t = audio.currentTime + i * 0.16;
-      const osc = audio.createOscillator(), gain = audio.createGain();
-      osc.type = "sine";
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.0001, t);
-      gain.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
-      osc.connect(gain).connect(audio.destination);
-      osc.start(t);
-      osc.stop(t + 1);
-    });
-  } catch {}
 }
 
 // Notifications need a secure context (https or localhost).
@@ -639,9 +577,8 @@ async function notify(title, body, next) {
   try { new Notification(title, options); } catch {}
 }
 
-/** The banner's start button carries the phase it offered: start it only if
- *  the timer is idle on that very phase. Never resume a paused phase, never
- *  start a different one. */
+/** The banner's start button names the phase it offered: start only if the
+ *  timer is idle on that phase, never resume or start another. */
 function startFromBanner(next) {
   if (engine.isIdle && engine.phase === next) toggle();
 }
@@ -847,9 +784,9 @@ store.addEventListener("sync", renderSync);
 // Another tab started, paused or finished the timer.
 addEventListener("storage", (e) => {
   if (e.key !== KEY.timer) return;
-  saved = load(KEY.timer, null);
-  if (saved) Object.assign(engine, saved.engine);
-  blockTag = saved?.blockTag ?? null;
+  const stored = load(KEY.timer, null);
+  if (stored) Object.assign(engine, stored.engine);
+  blockTag = stored?.blockTag ?? null;
   schedule();
   renderTimer();
 });
@@ -891,9 +828,7 @@ addEventListener("focus", () => renderYear());
 
 applyTheme();
 registerWorker();
-// A phase may have ended while the tab was closed. Closing the tab doesn't
-// log anything: the timer carries on in localStorage, and a block that ran
-// out meanwhile is logged here, at its end, on the next open.
+// A block that ran out while the tab was closed is logged here, at its end.
 const caughtUp = advance();
 changed();
 renderTags();

@@ -6,10 +6,8 @@ import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 /**
- * One block of focused time, the only record drill keeps. The same row
- * as FocusSession.swift and the web app's sessions (docs/SYNC.md): rows are
- * never hard-deleted, and two copies merge by newer [updatedAt] wins.
- * Times are epoch ms.
+ * One block of focused time, the row docs/SYNC.md syncs. Never hard-deleted;
+ * copies merge by newer [updatedAt]. Times are epoch ms.
  */
 data class FocusSession(
     val id: String,
@@ -27,8 +25,7 @@ data class FocusSession(
     val deletedAt: Long? = null,
 ) {
     companion object {
-        /** A row for a block from the engine. The id comes from the device and
-         *  start time, so logging the same block twice writes one row. */
+        /** The id derives from device and start time, so logging a block twice writes one row. */
         fun from(record: FocusRecord, tag: String?, deviceID: String, now: Long) = FocusSession(
             id = UUID.nameUUIDFromBytes("$deviceID:${record.startedAt}".toByteArray())
                 .toString().uppercase(),

@@ -1,7 +1,6 @@
 import Foundation
 
-/// A stable per-install identifier stamped on every session, so the server
-/// (and you) can tell which machine a study session came from.
+/// A stable per-install id stamped on every session.
 public enum DeviceIdentity {
     private static let key = "drill.deviceID"
 

@@ -2,24 +2,19 @@ import InkKit
 import SwiftUI
 import DrillCore
 
-/// One day, opened from its square in your year: the total, then each
-/// block with when it started, what it was, and how long — a tomato or a
-/// stopwatch says which timer it came from. Blocks can be fixed here: click
-/// one to edit it, × to remove it (with a moment to undo), or add one you
-/// didn't time.
+/// A day's popover from the heatmap: its blocks, which can be edited,
+/// removed (with undo) or added.
 struct DayDetail: View {
     let day: Date
-    /// For --render: the state to draw, since the others need clicks.
+    /// For --render, which can't click.
     var preview: Preview = .none
     enum Preview { case none, editingFirst, adding, removedFirst }
 
     @Environment(AppModel.self) private var model
-    /// Filled in by whoever opens the day, so the popover lays out once at
-    /// its real size rather than growing after it appears.
+    /// Passed in, so the popover lays out once at its real size.
     @State private var sessions: [FocusSession]
-    /// The block open for editing; `adding` for a new one.
     @State private var editing: Editing?
-    /// Removed just now, still undoable: each block's tombstone.
+    /// Undoable removals, by id, to their tombstones.
     @State private var removed: [UUID: FocusSession] = [:]
 
     init(day: Date, sessions: [FocusSession], preview: Preview = .none) {
@@ -151,7 +146,6 @@ struct DayDetail: View {
 
     private func remove(_ session: FocusSession) {
         removed[session.id] = model.delete(session)
-        // A few seconds to take it back, then the row goes.
         Task {
             try? await Task.sleep(for: .seconds(6))
             guard removed.removeValue(forKey: session.id) != nil else { return }
@@ -166,8 +160,7 @@ struct DayDetail: View {
     }
 }
 
-/// A block as a quiet line. Under the pointer it gets a wash, its length
-/// makes way for ×, and a click opens it for editing.
+/// On hover, the length makes way for ×; a click opens the editor.
 private struct SessionRow: View {
     let session: FocusSession
     let open: () -> Void
@@ -222,7 +215,6 @@ private struct SessionRow: View {
     }
 }
 
-/// Where a removed block was, for a few seconds: a way back.
 private struct RemovedRow: View {
     let undo: () -> Void
 
@@ -241,8 +233,7 @@ private struct RemovedRow: View {
     }
 }
 
-/// A block opened up: when it started, what it was, and how long. Ends
-/// can't run past now, and lengths stay between a minute and 12 hours.
+/// Ends can't run past now; lengths stay between a minute and 12 hours.
 private struct BlockEditor: View {
     let day: Date
     @State var start: Date
@@ -256,8 +247,7 @@ private struct BlockEditor: View {
          save: @escaping (Date, TimeInterval, String?) -> Void, cancel: @escaping () -> Void) {
         self.day = day
         _start = State(initialValue: start)
-        // Whole minutes: the stepper moves in fives, and seconds would make
-        // an edited block look off by a hair.
+        // Whole minutes, so an edited block doesn't look off by seconds.
         _length = State(initialValue: max(60, (length / 60).rounded() * 60))
         _tag = State(initialValue: tag)
         self.save = save
@@ -365,37 +355,12 @@ private struct BlockEditor: View {
     }
 }
 
-/// "+ add a block", with a small plus that sits on the text's baseline.
+/// A small plus on the text's baseline.
 private struct AddLabel: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: 6) {
             configuration.icon.font(.system(size: 10, weight: .semibold))
             configuration.title
         }
-    }
-}
-
-/// Today against the daily goal: a small ring that fills, then a check
-/// once it's met.
-struct GoalRing: View {
-    let progress: Double
-
-    var body: some View {
-        ZStack {
-            if progress >= 1 {
-                Glyph(.check, size: 14, boiling: false, lineWidth: 1.6, tint: Ink.accent)
-                    .transition(.scale(scale: 0.4).combined(with: .opacity))
-            } else {
-                Circle().stroke(Ink.ghost, lineWidth: 1.6)
-                Circle()
-                    .trim(from: 0, to: max(0.02, progress))
-                    .stroke(Ink.accent, style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .transition(.opacity)
-            }
-        }
-        .frame(width: 11, height: 11)
-        .animation(.spring(response: 0.42, dampingFraction: 0.6), value: progress >= 1)
-        .animation(Ink.ease, value: progress)
     }
 }

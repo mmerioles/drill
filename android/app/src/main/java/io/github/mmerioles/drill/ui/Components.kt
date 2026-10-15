@@ -92,25 +92,20 @@ fun Words(
     size: TextUnit = 15.sp,
     weight: FontWeight = FontWeight.Normal,
     color: Color = LocalPalette.current.ink,
-    align: TextAlign = TextAlign.Unspecified,
 ) {
-    BasicText(text, modifier, style = TextStyle(color = color, fontSize = size, fontWeight = weight, textAlign = align))
+    BasicText(text, modifier, style = TextStyle(color = color, fontSize = size, fontWeight = weight))
 }
 
-/** Fingers need about 48dp, however small the word: the touch area grows,
- *  the word stays put in the middle of it. */
+/** Minimum touch size, however small the word. */
 val TouchTarget = 48.dp
 
 /** The dot that says an update is waiting. */
 val UpdateYellow = Color(0xFFF2C21B)
 
-/** A faint word that does something; [on] marks the chosen one in a row.
- *  A [selectable] link is one of a set, like a tab, and says whether it's
- *  the chosen one; [description] is what TalkBack says instead of [text].
- *  A [primary] link is a text button: ink, a little heavier. A [compact]
- *  link is as wide as its word, so a row of them can be evenly spaced; the
- *  touch area still reaches 48dp, since Compose widens small targets.
- *  [badge] puts the yellow dot by the word. */
+/** A faint word that does something. [on] marks the chosen one; [selectable]
+ *  makes it a tab; [description] replaces [text] for TalkBack; [primary] is
+ *  ink and heavier; [compact] is only as wide as the word (Compose still
+ *  widens the touch area); [badge] adds the update dot. */
 @Composable
 fun Link(
     text: String,
@@ -187,8 +182,7 @@ fun Capsule(text: String, modifier: Modifier = Modifier, small: Boolean = false,
     }
 }
 
-/** The drill mark, boiling while [tick] moves. Read while drawing, so a
- *  boil step only redraws. */
+/** The drill mark; [tick] is read while drawing, so a boil step only redraws. */
 @Composable
 fun DrillMark(tick: () -> Long, modifier: Modifier = Modifier, size: Dp = 22.dp) {
     val accent = LocalPalette.current.accent
@@ -201,13 +195,11 @@ fun DrillMark(tick: () -> Long, modifier: Modifier = Modifier, size: Dp = 22.dp)
     }
 }
 
-/** A sheet's name at its top. */
 @Composable
 fun SheetTitle(text: String, modifier: Modifier = Modifier) {
     Words(text, modifier.semantics { heading() }, size = 20.sp, weight = FontWeight.Bold)
 }
 
-/** An open sheet; [close] slides it away first, then lets it go. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Stable
 class SheetHandle internal constructor(
@@ -230,8 +222,7 @@ fun rememberSheet(onDismiss: () -> Unit): SheetHandle {
     return remember(state, scope) { SheetHandle(state, scope) { latest() } }
 }
 
-/** A Material bottom sheet on drill's paper: swipe it down, tap the scrim
- *  or go back to close it. */
+/** A Material bottom sheet on drill's paper. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Sheet(handle: SheetHandle, content: @Composable ColumnScope.() -> Unit) {
@@ -292,8 +283,7 @@ fun SettingRow(label: String, content: @Composable RowScope.() -> Unit) {
     }
 }
 
-/** A Material 3 switch in ink: off is an outline with a small faint
- *  thumb, on is an ink track with a big paper thumb. The whole row toggles. */
+/** A switch in ink; the whole row toggles. */
 @Composable
 fun SwitchRow(label: String, on: Boolean, change: (Boolean) -> Unit) {
     val ink = LocalPalette.current
@@ -352,8 +342,7 @@ fun <T> Segmented(options: List<T>, selected: T, label: (T) -> String, choose: (
     }
 }
 
-/** A number with a faint − and + either side. [less] and [more] are what
- *  TalkBack calls the two, like "fewer focus minutes". */
+/** A number between − and +; [less] and [more] are their TalkBack names. */
 @Composable
 fun StepperRow(
     label: String, value: Int, range: IntRange, step: Int = 1, unit: String = "",
@@ -390,7 +379,6 @@ fun Field(
     val ink = LocalPalette.current
     val focus = LocalFocusManager.current
     var had by remember { mutableStateOf(false) }
-    // 1dp ghost at rest, 2dp ink while typing.
     val line by animateDpAsState(if (had) 2.dp else 1.dp, label = "underline")
     val lineColor by animateColorAsState(if (had) ink.ink else ink.ghost, label = "underline color")
     BasicTextField(
@@ -419,8 +407,7 @@ fun Field(
     )
 }
 
-/** Whether a text field has the keyboard, so space and enter type rather
- *  than start the timer. Only one field has focus at a time. */
+/** Whether a text field has focus, so space and enter type instead of toggling the timer. */
 object Typing {
     var active = false
 }

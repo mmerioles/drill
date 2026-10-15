@@ -1,9 +1,7 @@
 import InkKit
 import SwiftUI
 
-/// Sign in, or make an account: an email and a password, then a click on
-/// the link in the confirmation email, which the sheet notices by itself.
-/// The server is ours unless settings name a self-hosted one.
+/// Sign in or make an account, then wait for the email link to be clicked.
 struct AccountSheet: View {
     @Environment(Sync.self) private var sync
     @Environment(\.dismiss) private var dismiss

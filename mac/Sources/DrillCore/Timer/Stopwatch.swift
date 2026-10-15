@@ -1,8 +1,6 @@
 import Foundation
 
-/// A plain stopwatch for blocks of time that aren't pomodoros: it counts up
-/// until you stop it. Like `PomodoroEngine`, a value with time passed in, so
-/// it never drifts and survives sleep.
+/// Counts up until stopped. Like `PomodoroEngine`, time is passed in.
 public struct Stopwatch: Equatable, Sendable {
     public enum Status: Equatable, Sendable {
         case idle
@@ -13,7 +11,7 @@ public struct Stopwatch: Equatable, Sendable {
     public private(set) var status: Status = .idle
     /// Blocks shorter than this are not worth logging.
     public var minimumLoggable: TimeInterval = 60
-    /// The longest block it counts: sync keeps a session to a day.
+    /// Sync caps a session at a day.
     public static let longest: TimeInterval = 24 * 60 * 60
 
     private var blockStartedAt: Date?
@@ -29,15 +27,14 @@ public struct Stopwatch: Equatable, Sendable {
 
     public var isIdle: Bool { status == .idle }
 
-    /// Time counted so far, pauses left out.
     public func elapsed(at now: Date) -> TimeInterval {
         var total = accrued
         if case .running(let since) = status { total += max(0, now.timeIntervalSince(since)) }
         return min(Self.longest, total)
     }
 
-    /// Seconds from `now` until the shown count (whole seconds, rounded
-    /// down) next changes, landing just past the boundary. Nil unless running.
+    /// Seconds until the shown count (rounded down) next changes, landing
+    /// just past the boundary. Nil unless running.
     public func untilNextSecond(at now: Date) -> TimeInterval? {
         guard isRunning else { return nil }
         let e = elapsed(at: now)
@@ -68,9 +65,8 @@ public struct Stopwatch: Equatable, Sendable {
         isRunning ? pause(at: now) : start(at: now)
     }
 
-    /// Ends the block and returns it for logging when it's long enough: a
-    /// stopwatch block is done when you say so, so it counts as completed.
-    /// It has no plan, so planned time is zero.
+    /// Ends the block, returning it for logging if long enough. Always
+    /// completed, with zero planned time.
     public mutating func reset(at now: Date) -> FocusRecord? {
         defer {
             status = .idle

@@ -5,11 +5,9 @@ public struct SQLiteError: Error, CustomStringConvertible {
     public let description: String
 }
 
-/// SessionStore on the system SQLite. No dependencies; one file on disk.
 public final class SQLiteSessionStore: SessionStore {
     private var db: OpaquePointer?
 
-    /// Opens (creating if needed) the database at `url`.
     public convenience init(url: URL) throws {
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -29,7 +27,6 @@ public final class SQLiteSessionStore: SessionStore {
 
     deinit { sqlite3_close(db) }
 
-    /// ~/Library/Application Support/Drill/drill.sqlite
     public static var defaultURL: URL {
         URL.applicationSupportDirectory
             .appending(path: "Drill", directoryHint: .isDirectory)
@@ -125,7 +122,7 @@ public final class SQLiteSessionStore: SessionStore {
             updatedAt: r.date(8), deletedAt: r.isNull(9) ? nil : r.date(9))
     }
 
-    // MARK: Tiny SQLite layer
+    // MARK: SQLite helpers
 
     private enum Value {
         case text(String), real(Double), int(Int64), date(Date), null

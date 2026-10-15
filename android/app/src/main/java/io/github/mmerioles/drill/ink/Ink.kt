@@ -11,9 +11,8 @@ import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.sin
 
-// drill's ink look (mac/Sources/InkKit, web/static/ink.js): paper, one ink,
-// lots of air, lowercase words. Light is "teto", with her crimson for
-// progress only; dark is pure monochrome.
+// drill's ink look, as in mac/Sources/InkKit and web/static/ink.js. Light
+// uses crimson for progress only; dark is monochrome.
 
 @Immutable
 data class Palette(val paper: Color, val ink: Color, val accent: Color, val dark: Boolean) {
@@ -32,8 +31,7 @@ data class Palette(val paper: Color, val ink: Color, val accent: Color, val dark
 
 val LocalPalette = staticCompositionLocalOf { Palette.light }
 
-/** Hand-drawn strokes. Every stroke is jittered by a seeded wobble; stepping
- *  the seed every [BOIL_MS] gives the hand-drawn "boil". */
+/** Hand-drawn strokes, jittered by a seeded wobble; stepping the seed every [BOIL_MS] makes them "boil". */
 object Doodle {
     const val BOIL_MS = 400L
 

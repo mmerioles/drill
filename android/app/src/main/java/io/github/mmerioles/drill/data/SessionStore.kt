@@ -7,11 +7,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import io.github.mmerioles.drill.core.FocusSession
 
-/**
- * Sessions in SQLite, merged by docs/SYNC.md's one rule: for each id, the
- * row with the newer updatedAt wins. Rows written on this phone are marked
- * dirty until a push carries them to the server.
- */
+/** Sessions in SQLite. Newer updatedAt wins; local rows stay dirty until pushed. */
 class SessionStore(context: Context) :
     SQLiteOpenHelper(context, "drill.sqlite", null, 1) {
 
@@ -63,8 +59,7 @@ class SessionStore(context: Context) :
         return changed
     }
 
-    /** Live sessions started at or after [from] (epoch ms), oldest first:
-     *  just what the year shows, not every session ever. */
+    /** Live sessions started at or after [from] (epoch ms), oldest first. */
     @Synchronized
     fun since(from: Long): List<FocusSession> =
         query("SELECT * FROM sessions WHERE deletedAt IS NULL AND startedAt >= ? ORDER BY startedAt", arrayOf(from.toString()))
@@ -78,7 +73,6 @@ class SessionStore(context: Context) :
             arrayOf(limit.toString()),
         ).use { c -> buildList { while (c.moveToNext()) add(c.getString(0)) } }
 
-    /** Rows waiting to be pushed. */
     @Synchronized
     fun dirty(): List<FocusSession> = query("SELECT * FROM sessions WHERE dirty = 1", emptyArray())
 

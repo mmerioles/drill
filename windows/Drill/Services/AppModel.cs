@@ -19,9 +19,6 @@ public abstract class Observable : INotifyPropertyChanged
     protected void Raise([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
-    /// <summary>Everything changed: views re-read every binding.</summary>
-    protected void RaiseAll() => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(null));
-
     protected bool Set<T>(ref T field, T value, [CallerMemberName] string? name = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value)) return false;
@@ -32,10 +29,8 @@ public abstract class Observable : INotifyPropertyChanged
 }
 
 /// <summary>
-/// The app's single source of truth, as in mac/Sources/DrillApp/AppModel.swift:
-/// owns the engine, drives its clock, writes finished focus blocks to the
-/// store, and keeps the heatmap fresh. Views bind to it and call its
-/// intents; nothing else touches the store.
+/// The app's single source of truth (as mac's AppModel.swift): owns the engine,
+/// drives its clock, logs finished blocks and keeps the heatmap fresh.
 /// </summary>
 public sealed class AppModel : Observable
 {
@@ -92,11 +87,7 @@ public sealed class AppModel : Observable
         Reload();
     }
 
-    /// <summary>
-    /// Production wiring. DRILL_DB points at another database file,
-    /// DRILL_FAST=1 shrinks minutes to seconds, and DRILL_THEME (light|dark)
-    /// overrides the saved theme — all for trying things out.
-    /// </summary>
+    /// <summary>Production wiring. DRILL_DB, DRILL_FAST=1 and DRILL_THEME=light|dark are for trying things out.</summary>
     public static AppModel Live()
     {
         var path = Environment.GetEnvironmentVariable("DRILL_DB") is { Length: > 0 } db ? db : SqliteSessionStore.DefaultPath;

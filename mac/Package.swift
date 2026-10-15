@@ -1,11 +1,9 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
-// Three layers, each usable without the one above it:
-//   DrillCore — timer engine, storage, stats, sync contract. No UI.
-//   InkKit       — the hand-drawn ink design system. SwiftUI only.
-//   DrillApp  — the macOS app that wires the two together.
-// iOS (ios/, not built yet) will reuse Core + InkKit and add its own shell.
+// DrillCore: timer, storage, stats, sync. No UI.
+// InkKit: the hand-drawn design system. SwiftUI only.
+// DrillApp: the macOS app. iOS will reuse the first two.
 let package = Package(
     name: "Drill",
     platforms: [.macOS(.v15), .iOS(.v18)],
@@ -18,7 +16,7 @@ let package = Package(
         .target(name: "DrillCore", linkerSettings: [.linkedLibrary("sqlite3")]),
         .target(name: "InkKit"),
         .executableTarget(name: "DrillApp", dependencies: ["DrillCore", "InkKit"]),
-        // Renders Support/AppIcon.icns from the InkKit drill; see mac/scripts/make-icon.sh.
+        // Used by scripts/make-icon.sh.
         .executableTarget(name: "IconMaker", dependencies: ["InkKit"]),
         .testTarget(name: "DrillCoreTests", dependencies: ["DrillCore"]),
     ]

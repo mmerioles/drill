@@ -48,8 +48,7 @@ struct SettingsView: View {
         .tint(Ink.ink)
         .frame(width: 420)
         .fixedSize(horizontal: false, vertical: true)
-        // The system titles this window "Drill Settings"; the app speaks
-        // in lowercase, so the title goes and the paper runs to the top.
+        // Drop the system's "Drill Settings" title; the app speaks lowercase.
         .toolbar(removing: .title)
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
     }
@@ -64,7 +63,6 @@ struct SettingsView: View {
         }
     }
 
-    /// The goal in half hours, from off up to 12h.
     private var goalMinutes: Binding<Int> {
         Binding(get: { Int(model.dailyGoal / 60) }, set: { model.dailyGoal = TimeInterval($0 * 60) })
     }
@@ -78,9 +76,6 @@ struct SettingsView: View {
     }
 }
 
-/// The version you're on, and one button that does the next sensible thing.
-/// A mark beside it says how the last check went: a spinner while looking,
-/// a green check when current, a yellow dot when there's something newer.
 private struct UpdateRow: View {
     @Environment(Updater.self) private var updater
     @Environment(AppModel.self) private var model
@@ -141,7 +136,6 @@ private struct UpdateMark: View {
     }
 }
 
-/// Who you're syncing as, with a way in or out.
 private struct AccountRow: View {
     @Environment(Sync.self) private var sync
     @State private var signingIn = false
@@ -183,7 +177,6 @@ private struct AccountRow: View {
     }
 }
 
-/// Our server by default; self-hosters put their own address here.
 private struct ServerRow: View {
     @Environment(Sync.self) private var sync
     @State private var text = ""

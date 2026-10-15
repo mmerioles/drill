@@ -16,16 +16,14 @@ struct MenuBarLabel: View {
         }
     }
 
-    /// "paused" while paused, "break" through either break, and nothing
-    /// for a running focus block: the countdown says enough.
+    /// Nothing for running focus or stopwatch: the digits say enough.
     private var word: String {
         if !model.isRunning { return "paused" }
         if model.isStopwatch { return "" }
         return model.phase.isBreak ? "break" : ""
     }
 
-    /// The drill glyph rendered once as a template image, so it tints like a
-    /// system icon in light, dark, and tinted menu bars.
+    /// A template image, so it tints like a system icon.
     @MainActor static let drill: NSImage = {
         let renderer = ImageRenderer(content: Glyph(.drill, size: 18, boiling: false, lineWidth: 1.7))
         renderer.scale = 2
@@ -37,8 +35,6 @@ struct MenuBarLabel: View {
     }()
 }
 
-/// The panel under the menu bar item: enough to run a session without
-/// opening the window.
 struct MenuBarPanel: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
@@ -68,7 +64,7 @@ struct MenuBarPanel: View {
             }
 
             HStack(spacing: 16) {
-                Button(model.isRunning ? "pause" : (model.isActive ? "resume" : "start"), action: model.toggle)
+                Button(Copy.toggle(running: model.isRunning, active: model.isActive), action: model.toggle)
                     .buttonStyle(InkCapsuleStyle(size: 13, minWidth: 64))
                 if !model.isStopwatch {
                     Button("skip", action: model.skip).buttonStyle(.inkLink(selected: false, size: 13))

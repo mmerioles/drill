@@ -3,31 +3,30 @@ import DrillCore
 
 /// Every user-facing sentence in one place. Lowercase, short, kind.
 enum Copy {
-    /// The word under the ring's top edge. Nil when idle on focus — an idle
-    /// timer needs no caption.
+    /// Nil when idle on focus: an idle timer needs no caption.
     static func status(_ phase: Phase, running: Bool, active: Bool) -> String? {
         switch (phase, active, running) {
         case (.focus, false, _): nil
         case (_, true, false): "paused"
-        case (.focus, _, _): "focus"
-        case (.shortBreak, _, _): "break"
-        case (.longBreak, _, _): "long break"
+        default: phaseName(phase)
         }
     }
 
-    /// The banner when a phase runs out. `next` is the phase that follows,
-    /// and its length, for "take a break · 5 min".
+    static func toggle(running: Bool, active: Bool) -> String {
+        running ? "pause" : active ? "resume" : "start"
+    }
+
+    /// The banner when a phase runs out. `next` is the next phase's length.
     static func finished(_ phase: Phase, next: TimeInterval) -> (title: String, body: String) {
         let minutes = max(1, Int((next / 60).rounded()))
         return phase == .focus ? ("focus done", "take a break · \(minutes) min") : ("break over", "back to focus")
     }
 
-    /// The banner's one action, when the next phase won't start by itself.
     static func startNext(_ next: Phase) -> String {
         next.isBreak ? "start break" : "start focus"
     }
 
-    /// What VoiceOver says for the countdown: "12 minutes left".
+    /// VoiceOver: "12 minutes left".
     static func spokenLeft(_ seconds: TimeInterval) -> String {
         let total = Int(seconds.rounded(.up))
         if total >= 60 {
@@ -37,7 +36,7 @@ enum Copy {
         return total == 1 ? "1 second left" : "\(total) seconds left"
     }
 
-    /// What VoiceOver says for the stopwatch: "12 minutes".
+    /// VoiceOver: "12 minutes".
     static func spokenCounted(_ seconds: TimeInterval) -> String {
         let total = Int(seconds)
         if total >= 60 {
@@ -47,10 +46,8 @@ enum Copy {
         return total == 1 ? "1 second" : "\(total) seconds"
     }
 
-    /// The face's mode, as the mark under the digits shows it.
     static func modeName(stopwatch: Bool) -> String { stopwatch ? "stopwatch" : "pomodoro" }
 
-    /// The ring's spoken name: the phase, whether or not it's running.
     static func phaseName(_ phase: Phase) -> String {
         switch phase {
         case .focus: "focus"
@@ -79,12 +76,12 @@ enum Copy {
         }
     }
 
-    /// The daily goal as settings show it: "off", "30m", "2h", "1h 30m".
+    /// "off", "30m", "2h", "1h 30m".
     static func goal(_ seconds: TimeInterval) -> String {
         seconds <= 0 ? "off" : amount(seconds)
     }
 
-    /// A session's start, as a day's list shows it: "9:05 am".
+    /// "9:05 am".
     static let timeFormat: Date.FormatStyle = .dateTime.hour().minute()
 
     static func streak(_ days: Int) -> String {

@@ -7,13 +7,9 @@ using Drill.Core.Model;
 namespace Drill.Core.Sync;
 
 /// <summary>
-/// drill's hosted sync: Supabase Auth for accounts, and the two functions in
-/// supabase/migrations for sessions. Same contract as a self-hosted server
-/// (docs/SYNC.md), so Sync doesn't care which one it's talking to.
-///
-/// The publishable key is meant to ship inside apps. It can only sign people
-/// up and call the functions as whoever signed in; the database keeps each
-/// account to its own rows.
+/// drill's hosted sync: Supabase Auth for accounts, and the functions in
+/// supabase/migrations for sessions. The publishable key is meant to ship in
+/// apps; row-level security keeps each account to its own rows.
 /// </summary>
 public sealed class SupabaseApi(Uri project, string key, HttpClient? http = null) : ISyncBackend
 {

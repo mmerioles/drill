@@ -1,7 +1,6 @@
 import Foundation
 
-/// A semantic version like 1.4.2, as written in release tags ("v1.4.2") and
-/// in the app's CFBundleShortVersionString. Missing parts count as zero.
+/// A version like "1.4.2" or "v1.4.2". Missing parts count as zero.
 public struct Version: Comparable, Hashable, Sendable, CustomStringConvertible {
     public var major: Int
     public var minor: Int

@@ -169,12 +169,9 @@
   </main>
 
   <script>
-    // One page for every app. Android phones get the apk, windows PCs the
-    // installer for their chip (x64, or arm64 on snapdragon PCs), macs the
-    // dmg. The button points straight at the newest release's file. If the
-    // API is unreachable, it still links to the latest release page.
-    // iphones, ipads, linux and chromeos have no app yet: no button, just
-    // the web app below and a link to every release.
+    // The button links the newest release's file for this platform, or the
+    // latest release page if the API is unreachable. Platforms without an
+    // app (iphone, ipad, linux, chromeos) get the web app below instead.
     const PLATFORMS = {
       mac: { ext: ".dmg", reach: "the countdown lives in your menu bar." },
       android: { ext: ".apk", reach: "the countdown lives in your notifications." },
@@ -209,9 +206,8 @@
 
     render();
 
-    // Arm PCs say so only when asked (Chromium browsers). Others get x64,
-    // which windows on arm runs too, and the app moves itself to arm64 on
-    // its first update.
+    // Arm PCs say so only when asked (Chromium). Others get x64, which runs
+    // on arm too; the app moves itself to arm64 on its first update.
     if (name === "windows") {
       navigator.userAgentData?.getHighEntropyValues(["architecture", "bitness"])
         .then((v) => {

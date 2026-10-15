@@ -36,10 +36,8 @@ public sealed record FocusRecord(
 public sealed record Transition(Phase Finished, Phase Next, FocusRecord? Record, bool Natural);
 
 /// <summary>
-/// The pomodoro state machine, ported from mac/Sources/DrillCore. Time is passed
-/// in, so it never drifts, survives sleep, and is trivially testable. The
-/// engine owns no clock: the host calls <see cref="Tick"/> as often as it
-/// likes and gets back a <see cref="Transition"/> when a phase ends.
+/// The pomodoro state machine (ported from mac's DrillCore). It owns no clock:
+/// time is passed in, so it never drifts and survives sleep.
 /// </summary>
 public sealed class PomodoroEngine
 {

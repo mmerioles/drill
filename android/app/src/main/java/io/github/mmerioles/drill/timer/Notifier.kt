@@ -12,23 +12,21 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.Icon
 import android.os.Build
-import io.github.mmerioles.drill.R
+import io.github.mmerioles.drill.AppModel
 import io.github.mmerioles.drill.DrillApp
+import io.github.mmerioles.drill.R
 import io.github.mmerioles.drill.core.Copy
 import io.github.mmerioles.drill.core.EngineState
 import io.github.mmerioles.drill.core.Phase
 import io.github.mmerioles.drill.core.Status
 import io.github.mmerioles.drill.ui.MainActivity
-import io.github.mmerioles.drill.ui.clock
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * The phone side of the timer. While a phase runs, an exact alarm waits for
- * its end and a quiet notification counts down, with pause, skip and reset;
- * while paused it stays, still, to resume from. When the alarm fires, the
- * app catches up (AppModel.catchUp), which logs the block, says so, and
- * schedules the next phase if it auto-starts.
+ * The phone side of the timer: an exact alarm for the end of the running
+ * phase, a countdown notification with pause/skip/reset, and the "phase
+ * over" notification. The alarm calls AppModel.catchUp.
  */
 object Notifier {
     private const val TIMER = "timer"
@@ -55,13 +53,10 @@ object Notifier {
         ))
     }
 
-    /** What the countdown last showed, so coming back to the app doesn't put
-     *  a paused notification you swiped away back up. */
+    /** What the countdown last showed, so a swiped-away paused notification isn't reposted. */
     private var posted: Any? = null
 
-    /** Waits for the running phase to end and shows the countdown; shows a
-     *  paused phase without a clock; clears both when idle. [tag] is the
-     *  running focus block's, for "focus · maths". */
+    /** Sets the alarm and countdown for [state]; clears both when idle. [tag] gives "focus · maths". */
     fun schedule(context: Context, state: EngineState, remaining: Long, tag: String? = null) {
         val alarms = context.getSystemService(AlarmManager::class.java)
         val pending = PendingIntent.getBroadcast(
@@ -84,7 +79,6 @@ object Notifier {
 
         if (!allowed(context)) return
         val name = Copy.phaseName(state.phase) + (tag?.let { " · $it" } ?: "")
-        // Posted again only when something it shows changes.
         val shows = listOf(state.phase, status, name)
         if (shows == posted) return
         val builder = Notification.Builder(context, TIMER)
@@ -100,13 +94,12 @@ object Notifier {
                 .setUsesChronometer(true)
                 .setChronometerCountDown(true)
                 .setOngoing(true)
-                // The countdown would carry on below zero if the alarm runs
-                // late; it goes at zero instead, and the "done" takes over.
+                // Gone at zero, rather than counting below it if the alarm runs late.
                 .setTimeoutAfter(maxOf(1, remaining))
                 .addAction(action(context, "pause", TimerActionReceiver.TOGGLE))
         } else {
             builder
-                .setContentText("paused · ${clock(remaining)}")
+                .setContentText("paused · ${Copy.clock(remaining)}")
                 .setShowWhen(false)
                 .setOngoing(false)
                 .addAction(action(context, "resume", TimerActionReceiver.TOGGLE))
@@ -118,8 +111,7 @@ object Notifier {
         posted = shows
     }
 
-    /** Says a phase is over: "focus done · take a break · 5 min". When the
-     *  next phase [waits] on you, the one button starts it. */
+    /** "focus done · take a break · 5 min", with a start button when the next phase [waits]. */
     fun ended(context: Context, finished: Phase, next: Phase, nextSeconds: Int, waits: Boolean, sound: Boolean) {
         if (!allowed(context)) return
         val (title, body) = Copy.finished(finished, nextSeconds)
@@ -148,7 +140,6 @@ object Notifier {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
-    /** A button; [offered] is the phase a "start" button starts, and only that. */
     private fun action(context: Context, title: String, what: String, offered: Phase? = null): Notification.Action {
         val intent = Intent(context, TimerActionReceiver::class.java).setAction(what)
         offered?.let { intent.putExtra(TimerActionReceiver.OFFERED, it.name) }
@@ -160,9 +151,8 @@ object Notifier {
     }
 }
 
-/** Runs [work] on the model, then keeps the process alive until its writes
- *  and sync are done (or ten seconds pass), as a receiver must. */
-private fun BroadcastReceiver.withModel(context: Context, work: (io.github.mmerioles.drill.AppModel) -> Unit) {
+/** Runs [work], then keeps the process alive until its writes and sync finish (up to 9s). */
+private fun BroadcastReceiver.withModel(context: Context, work: (AppModel) -> Unit) {
     val result = goAsync()
     val model = DrillApp.model(context)
     work(model)
@@ -175,12 +165,10 @@ private fun BroadcastReceiver.withModel(context: Context, work: (io.github.mmeri
     }
 }
 
-/** The running phase's alarm went off. */
 class PhaseEndReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) = withModel(context) { it.catchUp() }
 }
 
-/** The notifications' buttons. */
 class TimerActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) = withModel(context) { model ->
         model.catchUp()
@@ -203,7 +191,7 @@ class TimerActionReceiver : BroadcastReceiver() {
     }
 }
 
-/** Alarms don't survive a restart; set the running phase's again. */
+/** Alarms don't survive a reboot or update; set it again. */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED &&

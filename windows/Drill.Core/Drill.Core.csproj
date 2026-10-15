@@ -1,6 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Timer engine, storage, stats and the sync contract. No UI, no Windows:
-       it builds and tests on any OS. A port of mac/Sources/DrillCore. -->
+  <!-- Timer, storage, stats and sync. No UI, no Windows. A port of mac/Sources/DrillCore. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Drill.Core</RootNamespace>

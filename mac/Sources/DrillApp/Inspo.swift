@@ -1,17 +1,14 @@
 import Foundation
 import Observation
 
-/// Shuzo Matsuoka's short cheer-up videos: the "〜あなたに" messages from
-/// his official YouTube channel, with the clams clip first. The list lives in
-/// shared/inspo.json; scripts/make-inspo.sh writes InspoVideos.swift from
-/// it. The shuffle is kept in step with web/static/inspo.js, so every device
-/// shows the same few videos on the same day.
+/// Shuzo Matsuoka's cheer-up videos. The list is shared/inspo.json (see
+/// scripts/make-inspo.sh). The shuffle matches web/static/inspo.js, so every
+/// device shows the same videos on the same day.
 enum Inspo {
     struct Video: Identifiable {
         var number: Int
         var youtube: String
-        /// In the daily rotation. The rest are sponsor and travel skits,
-        /// kept for the full list.
+        /// False for skits, which only show in the full list.
         var daily: Bool
         var title: String
         var japanese: String
@@ -22,17 +19,14 @@ enum Inspo {
 
     static let perDay = 5
 
-    /// A day as a number, like 20260928: the key for watched videos and
-    /// the seed for the daily shuffle.
+    /// Like 20260928: the watched key and the shuffle seed.
     static func day(_ date: Date = .now, calendar: Calendar = .current) -> Int {
         let d = calendar.dateComponents([.year, .month, .day], from: date)
         return d.year! * 10000 + d.month! * 100 + d.day!
     }
 
-    /// A fresh handful each day, seeded by the date, leaving out anything
-    /// watched before today. Cheer-up messages come first, the skits once
-    /// those run out, and the full rotation again once you've seen everything.
-    /// Videos watched today stay put, so the list doesn't shift under you.
+    /// A daily handful, skipping videos watched before today (so today's
+    /// list doesn't shift). Daily videos first, then skits, then start over.
     static func today(skipping seen: Set<String>, on day: Int = day()) -> [Video] {
         var seed = UInt32(day)
         let daily = shuffled(videos.filter(\.daily), &seed)
@@ -50,7 +44,7 @@ enum Inspo {
         return pool
     }
 
-    /// A tiny seeded generator, bit-for-bit the same as the one in inspo.js.
+    /// Bit-for-bit the same as inspo.js.
     private static func mulberry32(_ a: inout UInt32) -> UInt32 {
         a &+= 0x6D2B_79F5
         var t = a
@@ -60,12 +54,11 @@ enum Inspo {
     }
 }
 
-/// Which videos you've opened, and on which day. Local to this Mac.
+/// Which videos were opened, and on which day. Local only.
 @Observable @MainActor
 final class Watched {
     private static let key = "drill.inspo.seen"
     private let defaults: UserDefaults
-    /// YouTube id to the day it was first opened.
     private var days: [String: Int]
 
     init(defaults: UserDefaults = .standard) {

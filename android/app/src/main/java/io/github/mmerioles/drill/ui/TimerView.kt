@@ -41,30 +41,8 @@ import io.github.mmerioles.drill.core.Status
 import io.github.mmerioles.drill.ink.Doodle
 import io.github.mmerioles.drill.ink.LocalPalette
 
-// Copy, as in DrillApp/Copy.swift.
-
-fun clock(ms: Long): String {
-    val total = ((ms + 999) / 1000).toInt()
-    val h = total / 3600
-    val m = total % 3600 / 60
-    val s = total % 60
-    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%02d:%02d".format(m, s)
-}
-
-fun amount(seconds: Double): String {
-    val minutes = (seconds / 60).toInt()
-    val h = minutes / 60
-    val m = minutes % 60
-    return when {
-        h == 0 -> "${m}m"
-        m == 0 -> "${h}h"
-        else -> "${h}h ${m}m"
-    }
-}
-
-/** The ring, the clock, the tag and the controls. The clock is read through
- *  [now] only where it's drawn, so a second going by redraws the ring and
- *  the digits, not this whole view; [boil] steps the ring's wobble. */
+/** The ring, clock, tag and controls. [now] and [boil] are read only where
+ *  drawn, so a tick redraws the ring and digits, not the whole view. */
 @Composable
 fun TimerView(model: AppModel, now: () -> Long, boil: () -> Long, toggle: () -> Unit) {
     val ink = LocalPalette.current
@@ -74,7 +52,7 @@ fun TimerView(model: AppModel, now: () -> Long, boil: () -> Long, toggle: () -> 
         timer.status is Status.Paused -> "paused"
         else -> Copy.phaseName(timer.phase)
     }
-    // Once a minute, not a second: what TalkBack reads for the ring.
+    // Changes once a minute, so TalkBack isn't re-read every second.
     val left by remember(model) { derivedStateOf { Copy.spokenLeft(model.remaining(now())) } }
     val spoken = Copy.phaseName(timer.phase) + (if (timer.status is Status.Paused) ", paused" else "") + ", " + left
 
@@ -123,8 +101,7 @@ fun TimerView(model: AppModel, now: () -> Long, boil: () -> Long, toggle: () -> 
         }
 
         Spacer(Modifier.height(8.dp))
-        // The sides share what's left, so the capsule stays centred and
-        // "reset" never breaks at large font sizes.
+        // Equal-weight sides keep the capsule centred at any font size.
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             val idle = timer.status is Status.Idle
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
@@ -147,12 +124,11 @@ fun TimerView(model: AppModel, now: () -> Long, boil: () -> Long, toggle: () -> 
 
 private val RING = 270.dp
 
-/** The countdown, recomposed only when the shown second changes. At large
- *  font sizes it shrinks to fit the ring instead of spilling past it. */
+/** The countdown; shrinks to fit the ring at large font sizes. */
 @Composable
 private fun Digits(model: AppModel, now: () -> Long) {
     val ink = LocalPalette.current
-    val text by remember(model) { derivedStateOf { clock(model.remaining(now())) } }
+    val text by remember(model) { derivedStateOf { Copy.clock(model.remaining(now())) } }
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val style = remember(text.length, density, ink) {

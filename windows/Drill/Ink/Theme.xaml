@@ -11,10 +11,6 @@
 
     <ink:HalfHeight x:Key="HalfHeight" />
 
-    <ink:BezierEase x:Key="Decelerate" X1="0" Y1="0" X2="0" Y2="1" />
-    <ink:BezierEase x:Key="Accelerate" X1="1" Y1="0" X2="1" Y2="1" />
-    <ink:BezierEase x:Key="Glide" X1="0.1" Y1="0.9" X2="0.2" Y2="1" />
-
     <!-- Keyboard focus: the Windows 11 double stroke, ink outside, paper
          inside. Never shown for clicks. -->
     <Style x:Key="FocusRing">
@@ -222,11 +218,6 @@
         <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
     </Style>
 
-    <!-- Small quiet buttons on cards: "sign in", "check". -->
-    <Style TargetType="ink:Capsule" x:Key="SmallCapsule" BasedOn="{StaticResource {x:Type ink:Capsule}}">
-        <Setter Property="FontSize" Value="13" />
-        <Setter Property="Padding" Value="16,6" />
-    </Style>
     <!-- Buttons on cards: Windows 11's standard button, in ink. The capsule
          stays the one primary action on a screen. -->
     <Style TargetType="Button" x:Key="CardButton">

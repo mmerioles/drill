@@ -1,7 +1,5 @@
-// The theme before first paint, so dark doesn't flash in after light. A
-// plain script, not inline, so the server's CSP can stay strict. app.js
-// makes the same choice: the saved one, else the visitor's own mode in the
-// site's demo, else dark.
+// Sets the theme before first paint, so dark doesn't flash in after light.
+// Not inline, so the CSP can stay strict. Same choice as app.js.
 (() => {
   let light = false;
   try {

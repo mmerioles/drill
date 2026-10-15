@@ -225,10 +225,7 @@ public sealed class HeatGrid : FrameworkElement
     {
         Loaded += (_, _) => Palette.Changed += InvalidateVisual;
         Unloaded += (_, _) => Palette.Changed -= InvalidateVisual;
-        Background = Brushes.Transparent;
     }
-
-    private Brush Background { get; }
 
     public Heatmap Heatmap
     {
@@ -298,7 +295,7 @@ public sealed class HeatGrid : FrameworkElement
     protected override void OnRender(DrawingContext dc)
     {
         var p = Palette.Current;
-        dc.DrawRectangle(Background, null, new Rect(RenderSize)); // hit-testable everywhere
+        dc.DrawRectangle(Brushes.Transparent, null, new Rect(RenderSize)); // hit-testable everywhere
         var map = Heatmap;
         var scale = Scale;
         var width = ActualWidth;

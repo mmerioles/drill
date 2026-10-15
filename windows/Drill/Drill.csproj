@@ -1,7 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- drill for Windows: a WPF shell over Drill.Core, like DrillApp is a
-       SwiftUI shell over DrillCore. The Windows SDK target brings the WinRT
-       APIs for toasts and the system's animation setting. -->
+  <!-- The WPF app over Drill.Core. The Windows SDK target brings WinRT toasts and the animation setting. -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
@@ -26,8 +24,5 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Drill.Core\Drill.Core.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="Assets\drill.ico" />
   </ItemGroup>
 </Project>

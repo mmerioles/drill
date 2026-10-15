@@ -1,12 +1,6 @@
-# On every push to main: pick the next semantic version from commit messages
-# (scripts/next-version.sh), build the mac, android and windows apps with it,
-# and publish them all as GitHub release v<version>:
-#   drill_<version>.dmg         universal mac app
-#   drill_<version>.apk         android app, signed with the release key
-#   drill_<version>_x64.exe     windows installer, intel and amd PCs
-#   drill_<version>_arm64.exe   windows installer, arm PCs (snapdragon)
-# The android key lives in repo secrets (see android/README.md). Every release
-# has to be signed with the same key, or phones refuse the update.
+# Every push to main: version from commits (scripts/next-version.sh), build
+# mac dmg, android apk, windows x64/arm64 installers, publish release v<version>.
+# The android signing key is in repo secrets (see android/README.md).
 name: release
 
 on:
@@ -14,6 +8,7 @@ on:
     branches: [main]
     paths-ignore:
       - "README.md"
+      - "AGENTS.md"
       - "docs/**"
       - "web/**"
       - "supabase/**"

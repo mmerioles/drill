@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# Writes the inspo video list, shared/inspo.json, out for the apps that
-# don't read it directly (windows builds it straight in):
-#   mac/Sources/DrillApp/InspoVideos.swift, web/static/inspo-videos.js and
-#   android/.../core/InspoVideos.kt.
-# Edit the json, then run this. Order is numbering: add new videos at the end.
+# Generates the inspo list for mac, web and android from shared/inspo.json
+# (windows embeds the json). Run after editing the json.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

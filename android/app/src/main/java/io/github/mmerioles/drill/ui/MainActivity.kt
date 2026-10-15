@@ -81,14 +81,12 @@ import kotlinx.coroutines.delay
 class MainActivity : ComponentActivity() {
     private val model by lazy { DrillApp.model(this) }
 
-    /** Midnight, a new time zone, or the clock set by hand: the year's
-     *  "today", week and streak move with it. */
+    /** Midnight or a clock/zone change moves the year's "today". */
     private val clockChanged = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) = model.reload()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Edge to edge from the first frame, in drill's own light or dark.
         enableEdgeToEdge(bars(model.theme), bars(model.theme))
         super.onCreate(savedInstanceState)
         model.updater.start()
@@ -132,8 +130,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** Status and navigation bars see-through, with icons for drill's theme,
- *  not the phone's: dark icons on light paper even when the phone is dark. */
+/** Transparent system bars with icons for drill's theme, not the phone's. */
 fun bars(theme: Theme) = if (theme == Theme.Dark) SystemBarStyle.dark(AndroidColor.TRANSPARENT)
 else SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
 
@@ -156,10 +153,8 @@ fun Screen(model: AppModel) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var open by rememberSaveable { mutableStateOf(Open.None) }
 
-    // The clock: one beat each time the shown second changes, on the
-    // boundary, while running and on screen. Only the ring and the digits
-    // read it. When the phase runs out on screen, catch up at once rather
-    // than waiting on the alarm.
+    // Ticks on each second boundary while running and on screen; only the
+    // ring and digits read it. At zero, catch up rather than wait for the alarm.
     val clock = remember { mutableLongStateOf(System.currentTimeMillis()) }
     val running = model.timer.status as? Status.Running
     LaunchedEffect(running) {
@@ -178,7 +173,7 @@ fun Screen(model: AppModel) {
         }
     }
 
-    // The hand-drawn boil, its own slower beat, drawn but never recomposed.
+    // The hand-drawn boil: a slower beat, read only while drawing.
     val still = remember {
         Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
     }
@@ -198,8 +193,7 @@ fun Screen(model: AppModel) {
         }
     }
 
-    // Catch up on other devices every few minutes, while signed in and on
-    // screen. Coming back to the app syncs too (MainActivity.onResume).
+    // Sync every five minutes while signed in and on screen.
     val signedIn = model.sync.isSignedIn
     LaunchedEffect(signedIn) {
         if (!signedIn) return@LaunchedEffect
@@ -211,7 +205,6 @@ fun Screen(model: AppModel) {
         }
     }
 
-    // Once allowed, put up the countdown for the block that just started.
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         model.catchUp()
     }
@@ -227,7 +220,7 @@ fun Screen(model: AppModel) {
         Modifier
             .fillMaxSize()
             .background(ink.paper)
-            // A tap outside the tag field puts it down, cursor and all.
+            // A tap outside the tag field dismisses the keyboard.
             .pointerInput(Unit) { detectTapGestures { focus.clearFocus() } },
         contentAlignment = Alignment.TopCenter,
     ) {
@@ -255,9 +248,8 @@ fun Screen(model: AppModel) {
     }
 }
 
-/** The mark and name, then the links, evenly spaced. When they don't all
- *  fit, "update" leaves the header and a yellow dot on "settings" says
- *  there's one; when even that doesn't fit, they wrap. */
+/** The mark, then the links. When they don't fit, "update" becomes a badge on
+ *  "settings"; past that, they wrap. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Header(model: AppModel, boil: () -> Long, open: (Open) -> Unit) {
@@ -280,7 +272,7 @@ private fun Header(model: AppModel, boil: () -> Long, open: (Open) -> Unit) {
             Sync.State.Unconfirmed -> "confirm email"
             Sync.State.Idle -> if (sync.justSynced) "synced" else "sync"
         }
-        // A newer version, offered between blocks: installing restarts the app.
+        // Offered only between blocks: installing restarts the app.
         val updater = model.updater
         val release = updater.available
         val downloading = updater.state is Updater.State.Downloading

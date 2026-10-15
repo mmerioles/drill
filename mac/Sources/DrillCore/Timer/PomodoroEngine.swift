@@ -18,11 +18,9 @@ public struct Transition: Equatable, Sendable {
     public var natural: Bool
 }
 
-/// The pomodoro state machine. A plain value with time passed in, so it never
-/// drifts, survives sleep, and is trivially testable.
-///
-/// The engine owns no clock: the host calls `tick(at:)` as often as it likes
-/// and gets back a `Transition` when a phase ends.
+/// The pomodoro state machine. Owns no clock: time is passed in, so it never
+/// drifts and survives sleep. The host calls `tick(at:)` and gets a
+/// `Transition` when a phase ends.
 public struct PomodoroEngine: Equatable, Sendable {
     public enum Status: Equatable, Sendable {
         case idle
@@ -75,9 +73,8 @@ public struct PomodoroEngine: Equatable, Sendable {
         return (next, next.isBreak ? config.autoStartBreaks : config.autoStartFocus)
     }
 
-    /// Seconds from `now` until the shown countdown (whole seconds, rounded
-    /// up) next changes, landing just past the boundary. Nil unless running,
-    /// so a host can wake once a second instead of polling.
+    /// Seconds until the shown countdown (rounded up) next changes, landing
+    /// just past the boundary. Nil unless running.
     public func untilNextSecond(at now: Date) -> TimeInterval? {
         guard isRunning else { return nil }
         let left = remaining(at: now)
@@ -127,8 +124,8 @@ public struct PomodoroEngine: Equatable, Sendable {
         finish(endedAt: now, natural: false, now: now)
     }
 
-    /// Abandons the current phase and rewinds it to full. Focus time already
-    /// spent is still returned for logging — studying is studying.
+    /// Rewinds the current phase to full. Focus already spent is still
+    /// returned for logging.
     public mutating func reset(at now: Date) -> FocusRecord? {
         let record = phase == .focus ? focusRecord(endedAt: now, completed: false) : nil
         clearBlock()
@@ -170,16 +167,14 @@ public struct PomodoroEngine: Equatable, Sendable {
 
         if finished == .focus {
             record = focusRecord(endedAt: endedAt, completed: natural)
-            // A skipped focus block still counts as a round, so skipping
-            // keeps building towards the long break like any pomodoro timer.
+            // Skipped focus still counts toward the long break.
             focusCount += 1
         }
         phase = next
         clearBlock()
 
-        // Auto-started phases begin at `now`, not at the old deadline, so a
-        // Mac that slept through several phases wakes to one transition
-        // instead of a chain of phantom sessions.
+        // Auto-start at `now`, not the old deadline, so waking from sleep
+        // yields one transition instead of a chain of phantom sessions.
         if natural && autoStart { start(at: now) }
 
         return Transition(finished: finished, next: phase, record: record, natural: natural)

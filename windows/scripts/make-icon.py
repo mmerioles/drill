@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Writes windows/Drill/Assets/drill.ico from docs/icon.png: every size
-Windows asks for (16 to 256), each downscaled on its own from the full
-1024px art so small sizes stay crisp. Needs Pillow."""
+"""Writes windows/Drill/Assets/drill.ico from docs/icon.png, each size
+downscaled from the full art so small ones stay crisp. Needs Pillow:
+python3 windows/scripts/make-icon.py"""
 from pathlib import Path
 from PIL import Image
 

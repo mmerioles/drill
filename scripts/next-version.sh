@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
-# Prints the next semantic version, read from commit messages since the last
-# v* tag (conventional commits):
-#   "feat!: …" or "BREAKING CHANGE" → major
-#   "feat: …"                       → minor
-#   anything else                   → patch
-# Prints 0.1.0 when there are no tags yet, and nothing when HEAD is already tagged.
+# Next semver from conventional commits since the last v* tag:
+# "x!:"/BREAKING CHANGE → major, "feat:" → minor, else patch.
+# 0.1.0 with no tags; nothing if HEAD is already tagged.
 set -euo pipefail
 
 last="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)"

@@ -8,9 +8,8 @@ import java.time.temporal.TemporalAdjusters
 import java.time.temporal.WeekFields
 import java.util.Locale
 
-// A stretch of days in week columns, ported from web/static/heatmap.js.
-// Days are bucketed in the phone's own time zone, and weeks start on the
-// locale's first weekday, like the mac.
+// Days in week columns, a port of web/static/heatmap.js. Local time zone;
+// weeks start on the locale's first weekday.
 
 data class Day(val date: LocalDate, val seconds: Double, val level: Int)
 
@@ -31,7 +30,6 @@ data class Heatmap(
             else -> 4
         }
 
-        /** The locale's first weekday: sunday in the US, monday in most places. */
         fun firstWeekday(locale: Locale = Locale.getDefault()): DayOfWeek = WeekFields.of(locale).firstDayOfWeek
 
         /** The first day a grid of [weeks] columns shows, for loading just that much. */

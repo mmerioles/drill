@@ -1,7 +1,5 @@
 <Project>
-  <!-- Shared by every project here. The WPF app also builds on macOS and
-       Linux (EnableWindowsTargeting), so it can be compiled anywhere and
-       only needs Windows to run. -->
+  <!-- EnableWindowsTargeting lets the WPF app build on any OS; it only needs Windows to run. -->
   <PropertyGroup>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>

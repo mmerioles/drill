@@ -21,8 +21,6 @@ public sealed class HeatmapBuilder(DayOfWeek? firstDayOfWeek = null, TimeZoneInf
     private readonly DayOfWeek _first = firstDayOfWeek ?? CultureInfo.CurrentCulture.DateTimeFormat.FirstDayOfWeek;
     private readonly TimeZoneInfo _zone = zone ?? TimeZoneInfo.Local;
 
-    public int WeekCount => weeks;
-
     /// <summary>
     /// Intensity 0–4. Fixed thresholds rather than relative to your best day,
     /// so a cell means the same thing next year as it does today.

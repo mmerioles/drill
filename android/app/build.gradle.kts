@@ -1,10 +1,6 @@
-// The Android app. Versions come from the release workflow, the same way as
-// the mac app: VERSION is the semantic version from scripts/next-version.sh
-// and BUILD_NUMBER the run number, which only ever goes up.
-//
-// Release builds are signed with the key named by the ANDROID_KEYSTORE_*
-// variables. Every release has to use the same key, or phones refuse the
-// update. Without them (a local build), release falls back to the debug key.
+// VERSION and BUILD_NUMBER come from the release workflow. Release builds are
+// signed with the ANDROID_KEYSTORE_* key (always the same one, or phones refuse
+// the update), else the debug key.
 
 plugins {
     id("com.android.application")

@@ -8,11 +8,8 @@ using Drill.Ink;
 namespace Drill.Services;
 
 /// <summary>
-/// drill in the notification area: the drill curl while idle, and while a
-/// phase is live a small ring that fills with progress (faded while
-/// paused). Monochrome, matching the taskbar's own light or dark, never
-/// drill's crimson. It's redrawn only when a pixel would change: about
-/// every half minute over a 25 minute block.
+/// The notification-area icon: the drill curl while idle, a progress ring
+/// while live. Monochrome to match the taskbar, and redrawn only when a pixel would change.
 /// </summary>
 public sealed class TrayIcon : IDisposable
 {

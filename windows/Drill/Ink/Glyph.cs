@@ -43,7 +43,7 @@ public sealed class Glyph : InkElement
         set => SetValue(AccentProperty, value);
     }
 
-    protected override Size MeasureOverride(Size available) => new(Width.IsNaN() ? 22 : Width, Height.IsNaN() ? 22 : Height);
+    protected override Size MeasureOverride(Size available) => new(double.IsNaN(Width) ? 22 : Width, double.IsNaN(Height) ? 22 : Height);
 
     protected override void OnRender(DrawingContext dc)
     {
@@ -134,9 +134,4 @@ public sealed class Glyph : InkElement
         }
         return paths;
     }
-}
-
-internal static class DoubleExtensions
-{
-    public static bool IsNaN(this double d) => double.IsNaN(d);
 }

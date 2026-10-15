@@ -3,11 +3,9 @@ import DrillCore
 import InkKit
 import SwiftUI
 
-/// `Drill --render <folder>`: the main window's face in each mode and state,
-/// light and dark, drawn to PNGs at 2× without opening a window, on a
-/// made-up year in memory. For looking at changes; nothing here is kept.
-/// (The tag field is an AppKit control, which offscreen rendering draws as
-/// a placeholder box.)
+/// `Drill --render <folder>`: draws the main window, a day's popover and the
+/// marks to PNGs at 2×, light and dark, from a made-up year in memory.
+/// (Offscreen rendering draws the AppKit tag field as a placeholder box.)
 @MainActor
 enum Render {
     static func runIfAsked() {
@@ -28,45 +26,20 @@ enum Render {
                     .environment(Sync(store: model.store, deviceID: model.deviceID,
                                       defaults: UserDefaults(suiteName: "drill.render")!, onPulled: {}))
                     .frame(width: 780, height: 700)
-                    .environment(\.colorScheme, theme == .light ? .light : .dark)
-                let renderer = ImageRenderer(content: view)
-                renderer.scale = 2
-                let file = folder.appending(path: "\(name)-\(theme.rawValue).png")
-                // The palette resolves per appearance, and the renderer draws
-                // in whatever appearance is current, not NSApp's.
-                var image: NSImage?
-                NSAppearance(named: theme == .light ? .aqua : .darkAqua)!
-                    .performAsCurrentDrawingAppearance { image = renderer.nsImage }
-                if let image, let tiff = image.tiffRepresentation,
-                   let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
-                    try? png.write(to: file)
-                    print("rendered \(file.lastPathComponent)")
-                } else {
+                if !write(view, theme: theme, to: folder.appending(path: "\(name)-\(theme.rawValue).png")) {
                     failed += 1
-                    print("couldn't render \(file.lastPathComponent)")
                 }
             }
         }
-        // A day's popover, on its own: it opens in a window of its own,
-        // which offscreen rendering can't reach.
+        // The popover opens in its own window, which offscreen rendering can't reach.
         for (theme, preview) in [(Theme.light, DayDetail.Preview.none), (.dark, .none),
                                  (.light, .editingFirst), (.dark, .adding), (.light, .removedFirst)] {
             let model = demo(theme: theme)
             let view = DayDetail(day: Date(), sessions: model.sessions(on: Date()), preview: preview)
                 .environment(model)
-                .environment(\.colorScheme, theme == .light ? .light : .dark)
-            let renderer = ImageRenderer(content: view)
-            renderer.scale = 2
-            var image: NSImage?
-            NSAppearance(named: theme == .light ? .aqua : .darkAqua)!
-                .performAsCurrentDrawingAppearance { image = renderer.nsImage }
-            if let tiff = image?.tiffRepresentation,
-               let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
-                try? png.write(to: folder.appending(path: "day-\(preview)-\(theme.rawValue).png"))
-            }
+            write(view, theme: theme, to: folder.appending(path: "day-\(preview)-\(theme.rawValue).png"))
         }
 
-        // The marks, large, to judge their drawing.
         let marks = HStack(spacing: 40) {
             ForEach([Glyph.Kind.tomato, .stopwatch, .drill], id: \.self) { kind in
                 VStack(spacing: 24) {
@@ -77,13 +50,28 @@ enum Render {
         }
         .padding(40)
         .background(Color(white: 0.95))
-        let renderer = ImageRenderer(content: marks)
-        renderer.scale = 2
-        if let tiff = renderer.nsImage?.tiffRepresentation,
-           let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
-            try? png.write(to: folder.appending(path: "marks.png"))
-        }
+        write(marks, theme: .light, to: folder.appending(path: "marks.png"))
         exit(failed == 0 ? 0 : 1)
+    }
+
+    @discardableResult
+    private static func write(_ view: some View, theme: Theme, to file: URL) -> Bool {
+        let renderer = ImageRenderer(content: view.environment(\.colorScheme, theme == .light ? .light : .dark))
+        renderer.scale = 2
+        // The palette resolves per appearance, and the renderer draws in the
+        // current drawing appearance, not NSApp's.
+        var image: NSImage?
+        NSAppearance(named: theme == .light ? .aqua : .darkAqua)!
+            .performAsCurrentDrawingAppearance { image = renderer.nsImage }
+        guard let tiff = image?.tiffRepresentation,
+              let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]),
+              (try? png.write(to: file)) != nil
+        else {
+            print("couldn't render \(file.lastPathComponent)")
+            return false
+        }
+        print("rendered \(file.lastPathComponent)")
+        return true
     }
 
     private static let shots: [(String, TimerMode, (AppModel) -> Void)] = [
@@ -94,8 +82,7 @@ enum Render {
         ("goal-met", .pomodoro, { m in m.dailyGoal = 30 * 60 }),
     ]
 
-    /// A model on an in-memory store with a few months of sessions, and
-    /// throwaway settings so nothing touches your real ones.
+    /// An in-memory store with a few months of sessions, and throwaway defaults.
     private static func demo(theme: Theme) -> AppModel {
         let defaults = UserDefaults(suiteName: "drill.render")!
         defaults.removePersistentDomain(forName: "drill.render")

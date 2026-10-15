@@ -4,9 +4,7 @@ import io.github.mmerioles.drill.core.FocusSession
 import io.github.mmerioles.drill.core.WireDate
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
 import java.net.URI
-import java.net.URL
 import java.net.URLEncoder
 
 /** Who you're signed in as. Hosted tokens run out after an hour and come
@@ -34,15 +32,12 @@ sealed interface SignUp {
 }
 
 /** Where an account lives: drill's hosted sync ([SupabaseApi]) or a
- *  self-hosted server ([SyncApi]), like SyncBackend in SyncAPI.swift.
- *  Blocking; call off the main thread. Unreachable is an IOException. */
+ *  self-hosted server ([SyncApi]). Blocking; unreachable is an IOException. */
 interface SyncBackend {
     fun signIn(email: String, password: String): Account
     fun createAccount(email: String, password: String): SignUp
-    /** Whether the account made by [createAccount] has had its email link
-     *  clicked yet. */
+    /** Whether the account from [createAccount] has clicked its email link. */
     fun isConfirmed(userID: String): Boolean
-    /** Sends the confirmation email again. */
     fun resendLink(email: String)
     /** The account with a token good for a while yet: the same one unless
      *  it's about to run out, or [force] says the server turned it down. */
@@ -77,7 +72,6 @@ class SyncApi(private val server: String) : SyncBackend {
         return account
     }
 
-    /** Revokes the token. */
     override fun signOut(account: Account) {
         runCatching { call("v1/signout", token = account.token, body = JSONObject()) }
     }
@@ -100,32 +94,14 @@ class SyncApi(private val server: String) : SyncBackend {
     }
 
     private fun call(path: String, token: String? = null, body: JSONObject? = null): JSONObject {
-        val conn = URL("$server/$path").openConnection() as HttpURLConnection
-        try {
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 30_000
-            conn.useCaches = false
-            conn.setRequestProperty("Accept", "application/json")
-            token?.let { conn.setRequestProperty("Authorization", "Bearer $it") }
-            if (body != null) {
-                conn.requestMethod = "POST"
-                conn.doOutput = true
-                conn.setRequestProperty("Content-Type", "application/json")
-                conn.outputStream.use { it.write(body.toString().toByteArray()) }
-            }
-            val status = conn.responseCode
-            val text = (if (status >= 400) conn.errorStream else conn.inputStream)
-                ?.bufferedReader()?.use { it.readText() }.orEmpty()
-            val json = runCatching { JSONObject(text) }.getOrElse { JSONObject() }
-            when {
-                status == 401 && token != null -> throw SyncBackend.SignedOut()
-                status == 403 -> throw SyncBackend.Unconfirmed()
-                status >= 400 -> throw SyncBackend.Rejected(json.optString("error").ifEmpty { "something went wrong. try again." })
-            }
-            return json
-        } finally {
-            conn.disconnect()
+        val (status, text) = httpJson("$server/$path", token, body)
+        val json = runCatching { JSONObject(text) }.getOrElse { JSONObject() }
+        when {
+            status == 401 && token != null -> throw SyncBackend.SignedOut()
+            status == 403 -> throw SyncBackend.Unconfirmed()
+            status >= 400 -> throw SyncBackend.Rejected(json.optString("error").ifEmpty { "something went wrong. try again." })
         }
+        return json
     }
 
     companion object {

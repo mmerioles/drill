@@ -38,13 +38,10 @@ import io.github.mmerioles.drill.ink.LocalPalette
 private val Green = Color(0xFF3DA35D)
 private val Yellow = Color(0xFFE8B931)
 
-/** How something stands, in one small mark, like StatusMark.swift. */
 enum class Mark { None, Working, Pending, Done }
 
-/** A spinner while working, a yellow dot while it waits on you, a green
- *  check once it's done. Changes between them pop, with a little spring.
- *  [breathing] gives the yellow dot a slow breath, for when it's waiting on
- *  something that'll happen by itself. */
+/** A spinner, a yellow dot, or a green check. [breathing] pulses the dot,
+ *  for a wait that resolves by itself. */
 @Composable
 fun StatusMark(status: Mark, modifier: Modifier = Modifier, breathing: Boolean = false, size: Dp = 14.dp) {
     val ink = LocalPalette.current

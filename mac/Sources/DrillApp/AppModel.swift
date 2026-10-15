@@ -3,21 +3,17 @@ import Foundation
 import Observation
 import DrillCore
 
-/// light is the teto palette, dark is pure ink. See Ink.swift.
 enum Theme: String, CaseIterable, Identifiable {
     case light, dark
     var id: String { rawValue }
 }
 
-/// Pomodoro counts down through focus and breaks; stopwatch counts up a
-/// plain block of time until you stop it.
 enum TimerMode: String {
     case pomodoro, stopwatch
 }
 
-/// The app's single source of truth: owns the engine, drives its clock,
-/// writes finished focus blocks to the store, and keeps the heatmap fresh.
-/// Views read from it and call its intents; nothing else touches the store.
+/// The app's single source of truth: owns the timers and their clock, writes
+/// finished blocks to the store, and keeps the heatmap fresh.
 @Observable @MainActor
 final class AppModel {
     private(set) var engine: PomodoroEngine
@@ -63,8 +59,7 @@ final class AppModel {
         didSet { defaults.set(dailyGoal, forKey: Keys.goal) }
     }
 
-    /// Today's focus across every subject, whatever the tag filter shows:
-    /// what the daily goal counts.
+    /// Today's focus across all tags, ignoring the filter: what the goal counts.
     private(set) var todayTotal: TimeInterval = 0
 
     var theme: Theme {
@@ -76,11 +71,10 @@ final class AppModel {
 
     let store: SessionStore
     let deviceID: String
-    /// Called after a finished block is written, so sync can send it along.
+    /// Called after any write, so sync can send it along.
     var onLogged: (() -> Void)?
     private let defaults: UserDefaults
     private let notifier = Notifier()
-    /// Follows the system calendar and time zone, so "today" moves with them.
     private let builder = HeatmapBuilder(calendar: .autoupdatingCurrent)
     private var tickTask: Task<Void, Never>?
     private var blockTag: String?
@@ -103,8 +97,7 @@ final class AppModel {
         reload()
         notifier.onStart = { [weak self] offered in self?.startNext(offered) }
 
-        // A new day, time zone or clock, or a wake from sleep: "today", the
-        // week and the streak may have moved, and the countdown should catch up.
+        // A new day, time zone, clock change or wake: "today" may have moved.
         let center = NotificationCenter.default
         for name in [Notification.Name.NSCalendarDayChanged, .NSSystemTimeZoneDidChange, .NSSystemClockDidChange] {
             center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
@@ -122,9 +115,8 @@ final class AppModel {
         }
     }
 
-    /// Production wiring. `DRILL_DB` points at another database file,
-    /// `DRILL_FAST=1` shrinks minutes to seconds, and `DRILL_THEME`
-    /// (light|dark) overrides the saved theme — all for trying things out.
+    /// Env for trying things out: `DRILL_DB` (database file), `DRILL_FAST=1`
+    /// (minutes become seconds), `DRILL_THEME` (light|dark).
     static func live() -> AppModel {
         let env = ProcessInfo.processInfo.environment
         let url = env["DRILL_DB"].map { URL(filePath: $0) } ?? SQLiteSessionStore.defaultURL
@@ -145,18 +137,16 @@ final class AppModel {
     // MARK: Derived
 
     var isStopwatch: Bool { mode == .stopwatch }
-    /// The time the face shows: left on the pomodoro, counted on the stopwatch.
+    /// Time left on the pomodoro, or counted on the stopwatch.
     var shown: TimeInterval { isStopwatch ? stopwatch.elapsed(at: now) : engine.remaining(at: now) }
-    /// The ring: the phase's progress, or the stopwatch's sweep round each hour.
+    /// The stopwatch's ring sweeps once an hour.
     var progress: Double {
         isStopwatch ? stopwatch.elapsed(at: now).truncatingRemainder(dividingBy: 3600) / 3600 : engine.progress(at: now)
     }
-    /// The digits, as the face and the menu bar show them.
     var clock: String { Copy.clock(shown, countingUp: isStopwatch) }
     /// The whole second shown, for animating only when it changes.
     var shownSecond: Int { Int(isStopwatch ? (shown + 1e-6).rounded(.down) : shown.rounded(.up)) }
-    /// The quiet word above the digits. The stopwatch only ever says "paused":
-    /// the mark under its digits already says what it is.
+    /// The word above the digits. The stopwatch only ever says "paused".
     var status: String? {
         isStopwatch ? (isActive && !isRunning ? "paused" : nil)
             : Copy.status(engine.phase, running: isRunning, active: isActive)
@@ -186,7 +176,6 @@ final class AppModel {
         syncTicking()
     }
 
-    /// Pomodoro only: a stopwatch has no phases to skip.
     func skip() {
         guard !isStopwatch else { return }
         now = Date()
@@ -214,23 +203,21 @@ final class AppModel {
         now = date
     }
 
-    /// Pomodoro ⇄ stopwatch, between blocks only, so switching never
-    /// drops time you're in the middle of.
+    /// Only between blocks, so switching never drops time.
     func switchMode() {
         guard !isActive else { return }
         mode = isStopwatch ? .pomodoro : .stopwatch
         now = Date()
     }
 
-    /// The banner's "start break" / "start focus": starts the phase it
-    /// offered, only if that phase is still waiting. Never resumes a paused
-    /// phase or starts a different one.
+    /// The banner's start button: starts the offered phase only if it's
+    /// still waiting idle.
     private func startNext(_ offered: Phase) {
         if !isStopwatch && engine.isIdle && engine.phase == offered { toggle() }
     }
 
-    /// Themes are appearances: the Ink palette resolves per appearance, so
-    /// pinning NSApp's appearance re-themes every window at once.
+    /// The Ink palette resolves per appearance, so pinning NSApp's
+    /// appearance re-themes every window.
     func applyTheme() {
         NSApp?.appearance = switch theme {
         case .light: NSAppearance(named: .aqua)
@@ -240,9 +227,8 @@ final class AppModel {
 
     // MARK: Clock
 
-    /// Wakes once per shown second, just past the boundary, so everything
-    /// watching `now` redraws once a second; nothing wakes while not running.
-    /// Restarted on every start, pause and phase change to stay aligned.
+    /// Wakes just past each shown-second boundary while running, and not at
+    /// all otherwise. Restarted on every start, pause and phase change.
     private func syncTicking() {
         tickTask?.cancel()
         tickTask = nil
@@ -263,15 +249,13 @@ final class AppModel {
     private func tick() {
         now = Date()
         guard !isStopwatch else { return }
-        // Only touch the observed engine when the phase is really over:
-        // a no-op mutation would still redraw everything that reads it.
+        // A no-op mutation of the observed engine would still redraw everything.
         guard case .running(let endsAt) = engine.status, now >= endsAt,
               let transition = engine.tick(at: now) else { return }
         handle(transition)
         syncTicking()
     }
 
-    /// The clock jumped (wake, time zone, clock change) or a day began.
     private func timeMoved() {
         reload()
         now = Date()
@@ -283,13 +267,11 @@ final class AppModel {
         if t.next == .focus && engine.isRunning { captureTag() }
         guard t.natural else { return }
 
-        // The banner itself was scheduled for this moment; an auto-started
-        // phase gets its own.
+        // This banner was already scheduled; an auto-started phase needs its own.
         if engine.isRunning { scheduleBanner() }
         if soundOn { NSSound(named: t.finished == .focus ? "Glass" : "Tink")?.play() }
     }
 
-    /// Schedules the banner for the running phase's end.
     private func scheduleBanner() {
         guard case .running(let endsAt) = engine.status else { return }
         let next = engine.upcoming
@@ -301,21 +283,24 @@ final class AppModel {
     // MARK: Data
 
     private func captureTag() {
-        let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        blockTag = trimmed.isEmpty ? nil : trimmed
+        blockTag = Self.cleanTag(tag)
     }
 
     private func log(_ r: FocusRecord) {
-        let session = FocusSession(
+        save(FocusSession(
             startedAt: r.startedAt, endedAt: r.endedAt, focusSeconds: r.focusSeconds,
             plannedSeconds: r.plannedSeconds, completed: r.completed, tag: blockTag,
-            deviceID: deviceID, updatedAt: Date())
+            deviceID: deviceID, updatedAt: Date()),
+             failure: "couldn't save that session.")
+    }
+
+    private func save(_ session: FocusSession, failure: String) {
         do {
             try store.save(session)
             lastError = nil
             onLogged?()
         } catch {
-            lastError = "couldn't save that session."
+            lastError = failure
         }
         reload()
     }
@@ -331,26 +316,18 @@ final class AppModel {
 
     // MARK: Editing history
 
-    /// Writes a changed session: newer than every copy of it, even one from
-    /// a device whose clock runs ahead, and at least a whole second newer
-    /// (servers keep whole seconds), so the change wins the sync merge.
+    /// Saves a change at least a whole second newer than the old copy (servers
+    /// keep whole seconds; another device's clock may run ahead), so it wins
+    /// the sync merge.
     @discardableResult
     private func rewrite(_ session: FocusSession) -> FocusSession {
         var s = session
         s.updatedAt = max(Date(), session.updatedAt.addingTimeInterval(1))
-        do {
-            try store.save(s)
-            lastError = nil
-            onLogged?()
-        } catch {
-            lastError = "couldn't save that change."
-        }
-        reload()
+        save(s, failure: "couldn't save that change.")
         return s
     }
 
-    /// Removes a block, everywhere: a tombstone that syncs like any write.
-    /// Returns the tombstone, which is what `restore` takes back.
+    /// Returns the tombstone, which `restore` takes back.
     @discardableResult
     func delete(_ session: FocusSession) -> FocusSession {
         var s = session
@@ -358,14 +335,12 @@ final class AppModel {
         return rewrite(s)
     }
 
-    /// Takes back a delete, from its tombstone, so the restore is newer.
     func restore(_ tombstone: FocusSession) {
         var s = tombstone
         s.deletedAt = nil
         rewrite(s)
     }
 
-    /// Saves an edited block: its start, length and subject.
     func update(_ session: FocusSession, start: Date, length: TimeInterval, tag: String?) {
         var s = session
         s.startedAt = start
@@ -375,14 +350,14 @@ final class AppModel {
         rewrite(s)
     }
 
-    /// Adds a block you didn't time. It has no plan, like a stopwatch block.
+    /// A block you didn't time. No plan, like a stopwatch block.
     func add(start: Date, length: TimeInterval, tag: String?) {
         rewrite(FocusSession(startedAt: start, endedAt: start + length, focusSeconds: length,
                              plannedSeconds: 0, completed: true, tag: Self.cleanTag(tag),
                              deviceID: deviceID, updatedAt: Date()))
     }
 
-    /// The subject a block starts with: the open filter's, else what you're studying.
+    /// The tag a new block starts with.
     var suggestedTag: String { tagFilter ?? tag }
 
     private static func cleanTag(_ tag: String?) -> String? {
@@ -390,8 +365,7 @@ final class AppModel {
         return t.isEmpty ? nil : t
     }
 
-    /// One day's sessions, oldest first, as the grid shows them (so the tag
-    /// filter applies).
+    /// One day's sessions, oldest first, with the tag filter applied.
     func sessions(on day: Date) -> [FocusSession] {
         let start = builder.calendar.startOfDay(for: day)
         guard let end = builder.calendar.date(byAdding: .day, value: 1, to: start) else { return [] }

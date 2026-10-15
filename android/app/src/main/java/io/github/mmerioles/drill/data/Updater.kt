@@ -22,13 +22,7 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
-/**
- * Keeps the app current from GitHub releases, like Updater.swift on the mac:
- * finds the newest release, downloads its apk, and hands it to Android's
- * installer, which asks once to confirm and then replaces this app in place.
- * Sessions and settings stay. The first time, Android also asks to let
- * drill install apps.
- */
+/** Updates the app from GitHub releases: downloads the newest apk and hands it to Android's installer. */
 class Updater(private val context: Context, private val scope: CoroutineScope) {
     data class Release(val version: String, val apk: String)
 
@@ -44,19 +38,17 @@ class Updater(private val context: Context, private val scope: CoroutineScope) {
     var state by mutableStateOf<State>(State.Idle)
         private set
 
-    /** A newer release, if one is known. */
     val available get() = (state as? State.Available)?.release
         ?: (state as? State.Failed)?.let { lastFound }
     private var lastFound: Release? = null
 
     private var started = false
-    /** Sent to Android's install switch; carry on when back, if allowed. */
+    /** Sent to Android's "install unknown apps" switch; [resume] carries on. */
     private var awaitingPermission = false
 
     private var lastChecked = 0L
 
-    /** Checks now, then every hour while the process lives. Coming back to
-     *  the app and opening settings check too, via [checkIfStale]. */
+    /** Checks now, then hourly. */
     fun start() {
         if (started) return
         started = true
@@ -68,17 +60,14 @@ class Updater(private val context: Context, private val scope: CoroutineScope) {
         }
     }
 
-    /** A quiet check, unless one ran within [ageMs]. Settings asks with a
-     *  short age, so it opens on a fresh answer. */
+    /** A quiet check, unless one ran within [ageMs]. */
     fun checkIfStale(ageMs: Long = 60_000L) {
-        if (state is State.Available) return // already found one
+        if (state is State.Available) return
         if (System.currentTimeMillis() - lastChecked < ageMs) return
         scope.launch { check() }
     }
 
-    /** A check you asked for ([manual]) spins a moment even when GitHub
-     *  answers at once, so the answer reads as an answer. Background checks
-     *  fail quietly; only one you asked for says it couldn't check. */
+    /** A [manual] check spins for at least 900ms and reports failure; background checks fail quietly. */
     suspend fun check(manual: Boolean = false) {
         if (state is State.Checking || state is State.Downloading) return
         state = State.Checking
@@ -105,12 +94,9 @@ class Updater(private val context: Context, private val scope: CoroutineScope) {
         state = State.Failed(message)
     }
 
-    /** Downloads the newer apk and opens the installer. */
     fun install() {
         val release = available ?: return
         if (!context.packageManager.canRequestPackageInstalls()) {
-            // Android's switch for letting this app install updates. Coming
-            // back with it on carries on (resume); with it off, nothing happens.
             awaitingPermission = true
             context.startActivity(
                 Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
@@ -125,7 +111,6 @@ class Updater(private val context: Context, private val scope: CoroutineScope) {
         }
     }
 
-    /** Back on screen: finish an update that was waiting on the install switch. */
     fun resume() {
         if (!awaitingPermission) return
         awaitingPermission = false
@@ -190,7 +175,7 @@ class Updater(private val context: Context, private val scope: CoroutineScope) {
     companion object {
         private const val LATEST = "https://api.github.com/repos/mmerioles/drill/releases/latest"
 
-        /** Semantic versions, compared part by part. */
+        /** Compares x.y.z versions. */
         fun isNewer(version: String, than: String): Boolean {
             val a = parts(version) ?: return false
             val b = parts(than) ?: return true
@@ -203,8 +188,7 @@ class Updater(private val context: Context, private val scope: CoroutineScope) {
     }
 }
 
-/** Hears back from the installer: shows its confirm screen when it needs
- *  one, and says so when an install fails. */
+/** The installer's callback: shows its confirm screen, or reports a failure. */
 class InstallReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {

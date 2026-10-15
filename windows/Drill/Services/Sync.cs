@@ -11,24 +11,16 @@ namespace Drill.Services;
 public enum SyncState { SignedOut, Idle, Syncing, Offline, Unconfirmed }
 
 /// <summary>
-/// Your account and the sync loop (docs/SYNC.md, "Client loop"), as in
-/// mac/Sources/DrillApp/Sync.swift: push what changed here, then pull what
-/// changed elsewhere. Runs at launch, after each logged block, every few
-/// minutes, when you come back to the app, and when you press sync.
-///
-/// The account (and its tokens) is kept in prefs encrypted with DPAPI, so
-/// only this Windows user on this PC can read it.
+/// The account and the sync loop (docs/SYNC.md, as mac's Sync.swift): push
+/// local changes, then pull remote ones. The account is kept in prefs,
+/// DPAPI-encrypted to this Windows user.
 /// </summary>
 public sealed class Sync : Observable
 {
     /// <summary>A sentence fit to show.</summary>
     public sealed class Problem(string message) : Exception(message);
 
-    /// <summary>
-    /// An account made here whose email link hasn't been clicked yet. Lives
-    /// in memory only, password and all, just long enough to sign in by
-    /// itself once the link is clicked.
-    /// </summary>
+    /// <summary>An account awaiting its email link; in memory only, kept to sign in once it's clicked.</summary>
     public sealed record Waiting(string Email, string Password, string? UserID, bool Confirmed = false);
 
     private static readonly TimeSpan Every = TimeSpan.FromMinutes(5);

@@ -3,10 +3,6 @@ using Microsoft.Data.Sqlite;
 
 namespace Drill.Core.Store;
 
-/// <summary>
-/// Where sessions live. The app talks only to this, so storage can be swapped
-/// without touching UI code.
-/// </summary>
 public interface ISessionStore
 {
     /// <summary>
@@ -25,10 +21,7 @@ public interface ISessionStore
     IReadOnlyList<FocusSession> Changes(DateTimeOffset since);
 }
 
-/// <summary>
-/// ISessionStore on SQLite: one file on disk, the same schema as the mac
-/// app's (dates are Unix seconds), so the two could swap databases.
-/// </summary>
+/// <summary>SQLite, with the mac app's schema (dates are Unix seconds).</summary>
 public sealed class SqliteSessionStore : ISessionStore, IDisposable
 {
     private readonly SqliteConnection _db;

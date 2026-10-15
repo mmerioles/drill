@@ -5,27 +5,18 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLEncoder
 
 /**
- * drill's hosted sync, like SupabaseAPI.swift: Supabase Auth for accounts,
- * and the two functions in supabase/migrations for sessions. Same contract
- * as a self-hosted server (docs/SYNC.md), so [Sync] doesn't care which one
- * it's talking to.
- *
- * The publishable key is meant to ship inside apps. It can only sign people
- * up and call the functions as whoever signed in; the database keeps each
- * account to its own rows.
+ * drill's hosted sync: Supabase Auth for accounts, and the push/pull functions
+ * in supabase/migrations for sessions. The publishable key is meant to ship in
+ * apps; row-level security keeps each account to its own rows.
  */
 class SupabaseApi(private val project: String, private val key: String) : SyncBackend {
     override fun signIn(email: String, password: String): Account =
         tokens("auth/v1/token?grant_type=password", JSONObject().put("email", email).put("password", password))
 
-    /** Supabase answers a taken email the same as a new one, so nobody can
-     *  probe who has an account, except that the user it sends back has no
-     *  identities. */
+    /** Supabase answers a taken email like a new one, except the user has no identities. */
     override fun createAccount(email: String, password: String): SignUp {
         val reply = call("auth/v1/signup?redirect_to=$REDIRECT", body = JSONObject().put("email", email).put("password", password))
         if (reply.has("access_token")) return SignUp.SignedIn(account(reply)) // confirmation is off
@@ -101,41 +92,22 @@ class SupabaseApi(private val project: String, private val key: String) : SyncBa
 
     /** The reply's text on success; on failure, the exception that fits. */
     private fun request(path: String, token: String? = null, body: JSONObject): String {
-        val conn = URL("$project/$path").openConnection() as HttpURLConnection
-        try {
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 30_000
-            conn.useCaches = false
-            conn.requestMethod = "POST"
-            conn.doOutput = true
-            conn.setRequestProperty("Accept", "application/json")
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.setRequestProperty("apikey", key)
-            token?.let { conn.setRequestProperty("Authorization", "Bearer $it") }
-            conn.outputStream.use { it.write(body.toString().toByteArray()) }
-
-            val status = conn.responseCode
-            val text = (if (status >= 400) conn.errorStream else conn.inputStream)
-                ?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (status in 200..299) return text
-            val json = runCatching { JSONObject(text) }.getOrElse { JSONObject() }
-
-            val code = listOf("error_code", "error", "code").firstNotNullOfOrNull { k ->
-                json.opt(k)?.takeIf { it is String }?.toString()
+        val (status, text) = httpJson("$project/$path", token, body, headers = mapOf("apikey" to key))
+        if (status in 200..299) return text
+        val json = runCatching { JSONObject(text) }.getOrElse { JSONObject() }
+        val code = listOf("error_code", "error", "code").firstNotNullOfOrNull { k ->
+            json.opt(k)?.takeIf { it is String }?.toString()
+        }
+        when {
+            code == "email_not_confirmed" || (status == 403 && code == "42501") -> throw SyncBackend.Unconfirmed()
+            (status == 401 && token != null) || (status == 403 && code == "28000") -> throw SyncBackend.SignedOut()
+            code != null -> {
+                SENTENCES[code]?.let { throw SyncBackend.Rejected(it) }
+                if (status >= 500) throw IOException("server error $status")
+                throw SyncBackend.Rejected("something went wrong. try again.")
             }
-            when {
-                code == "email_not_confirmed" || (status == 403 && code == "42501") -> throw SyncBackend.Unconfirmed()
-                (status == 401 && token != null) || (status == 403 && code == "28000") -> throw SyncBackend.SignedOut()
-                code != null -> {
-                    SENTENCES[code]?.let { throw SyncBackend.Rejected(it) }
-                    if (status >= 500) throw IOException("server error $status")
-                    throw SyncBackend.Rejected("something went wrong. try again.")
-                }
-                status == 429 -> throw SyncBackend.Rejected(TOO_MANY)
-                else -> throw IOException("server error $status")
-            }
-        } finally {
-            conn.disconnect()
+            status == 429 -> throw SyncBackend.Rejected(TOO_MANY)
+            else -> throw IOException("server error $status")
         }
     }
 

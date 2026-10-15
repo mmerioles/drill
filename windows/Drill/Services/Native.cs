@@ -57,12 +57,6 @@ public static partial class Native
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool ShowWindow(nint hwnd, int cmd);
-
-    public const int SW_RESTORE = 9;
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool AllowSetForegroundWindow(uint processId);
 
     /// <summary>Any process may take the foreground next: for handing it to the drill already running.</summary>
@@ -125,43 +119,28 @@ public static partial class Native
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetMonitorInfo(nint monitor, ref MONITORINFO info);
 
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool GetCursorPos(out POINT point);
-
     [LibraryImport("shcore.dll")]
     private static partial int GetDpiForMonitor(nint monitor, int type, out uint dpiX, out uint dpiY);
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct POINT { public int X, Y; }
-
-    /// <summary>The monitor and work area (in pixels) around a rect, and its scale.</summary>
-    public static (RECT Monitor, RECT Work, double Scale) MonitorAround(RECT rect)
-    {
-        var monitor = MonitorFromRect(ref rect, 2 /* MONITOR_DEFAULTTONEAREST */);
-        var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
-        GetMonitorInfo(monitor, ref info);
-        var scale = GetDpiForMonitor(monitor, 0, out var dpi, out _) == 0 ? dpi / 96.0 : 1;
-        return (info.rcMonitor, info.rcWork, scale);
-    }
 
     [LibraryImport("user32.dll")]
     private static partial nint MonitorFromWindow(nint hwnd, uint flags);
 
-    /// <summary>The monitor and work area (in pixels) a window is on (or nearest), and its scale.</summary>
-    public static (RECT Monitor, RECT Work, double Scale) MonitorOf(nint hwnd)
+    private const uint MONITOR_DEFAULTTONEAREST = 2;
+
+    /// <summary>The monitor and work area (in pixels) nearest a rect, and its scale.</summary>
+    public static (RECT Monitor, RECT Work, double Scale) MonitorAround(RECT rect) =>
+        Describe(MonitorFromRect(ref rect, MONITOR_DEFAULTTONEAREST));
+
+    /// <summary>The monitor and work area (in pixels) nearest a window, and its scale.</summary>
+    public static (RECT Monitor, RECT Work, double Scale) MonitorOf(nint hwnd) =>
+        Describe(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST));
+
+    private static (RECT Monitor, RECT Work, double Scale) Describe(nint monitor)
     {
-        var monitor = MonitorFromWindow(hwnd, 2 /* MONITOR_DEFAULTTONEAREST */);
         var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
         GetMonitorInfo(monitor, ref info);
         var scale = GetDpiForMonitor(monitor, 0, out var dpi, out _) == 0 ? dpi / 96.0 : 1;
         return (info.rcMonitor, info.rcWork, scale);
-    }
-
-    public static RECT CursorRect()
-    {
-        GetCursorPos(out var p);
-        return new RECT { Left = p.X, Top = p.Y, Right = p.X + 1, Bottom = p.Y + 1 };
     }
 
     // Notification area
@@ -199,7 +178,7 @@ public static partial class Native
     public const uint NIF_MESSAGE = 1, NIF_ICON = 2, NIF_TIP = 4, NIF_SHOWTIP = 0x80;
     public const uint NOTIFYICON_VERSION_4 = 4;
     public const int NIN_SELECT = 0x400, NIN_KEYSELECT = 0x401;
-    public const int WM_CONTEXTMENU = 0x7B, WM_LBUTTONUP = 0x202, WM_RBUTTONUP = 0x205;
+    public const int WM_CONTEXTMENU = 0x7B;
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "Shell_NotifyIconW")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -231,9 +210,6 @@ public static partial class Native
     }
 
     [LibraryImport("gdi32.dll")]
-    public static partial nint CreateBitmap(int width, int height, uint planes, uint bitsPerPixel, nint bits);
-
-    [LibraryImport("gdi32.dll")]
     public static partial nint CreateBitmap(int width, int height, uint planes, uint bitsPerPixel, [In] byte[] bits);
 
     [LibraryImport("gdi32.dll")]
@@ -248,7 +224,7 @@ public static partial class Native
 
     public const int SM_CXSMICON = 49;
 
-    /// <summary>An HICON from premultiplied BGRA pixels, top row first.</summary>
+    /// <summary>An HICON from straight-alpha BGRA pixels, top row first.</summary>
     public static nint IconFromPixels(byte[] bgra, int size)
     {
         var mask = new byte[(size + 15) / 16 * 2 * size]; // all zeros: alpha decides

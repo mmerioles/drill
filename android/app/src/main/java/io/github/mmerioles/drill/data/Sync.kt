@@ -13,13 +13,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * Your account and the sync loop (docs/SYNC.md, "Client loop"), like
- * Sync.swift: push what changed here, then pull what changed elsewhere.
- * Runs at launch, after each logged block, every five minutes while the
- * app is on screen and signed in, on coming back to it, and when you press
- * sync.
- */
+/** The account and the sync loop (docs/SYNC.md): push what changed here, then pull what changed elsewhere. */
 class Sync(
     private val store: SessionStore,
     private val deviceID: String,
@@ -33,7 +27,7 @@ class Sync(
         private set
     var state by mutableStateOf(if (account == null) State.SignedOut else State.Idle)
         private set
-    /** True for a moment after a sync lands, for a quiet "synced". */
+    /** True for a moment after a sync lands. */
     var justSynced by mutableStateOf(false)
         private set
     /** A self-hosted server from settings, or null for ours. */
@@ -45,12 +39,10 @@ class Sync(
 
     val isSignedIn get() = account != null
 
-    /** The self-hosted server from settings, or ours on Supabase. */
     val backend: SyncBackend get() = customServer?.let(::SyncApi) ?: SupabaseApi.hosted
 
-    /** Points sync at a self-hosted server, or back at ours when empty. Only
-     *  while signed out: a token only works where it was made. Returns a
-     *  sentence to show when it can't. */
+    /** Points sync at a self-hosted server, or ours when blank. Signed out
+     *  only, since a token only works where it was made. Returns an error to show. */
     fun setServer(text: String): String? {
         if (isSignedIn) return "sign out to change servers."
         if (text.isBlank()) {
@@ -64,18 +56,14 @@ class Sync(
         return null
     }
 
-    /** An account made here whose email link hasn't been clicked yet, as
-     *  the sheet and settings show it. [confirmed] turns true for a moment
-     *  once the link is clicked, for the check mark. */
+    /** An account waiting on its email link; [confirmed] flips true briefly once clicked. */
     data class Waiting(val email: String, val confirmed: Boolean = false)
 
     var waiting by mutableStateOf<Waiting?>(null)
         private set
 
-    /** What signing in by itself needs. Memory only, password and all, just
-     *  long enough to sign in once the link is clicked. A null [userID]
-     *  means signing in found the email unconfirmed: then the only way to
-     *  tell is to try signing in again, less often. */
+    /** Kept in memory only, to sign in once the link is clicked. A null
+     *  [userID] means the only way to tell is to retry signing in. */
     private class Pending(val email: String, val password: String, val userID: String?)
 
     private var watching: Job? = null
@@ -92,7 +80,6 @@ class Sync(
         }
     }
 
-    /** Makes the account, then signs in, or waits for the email link. */
     suspend fun createAccount(email: String, password: String): String? = problem {
         stopWaiting()
         val to = email.trim()
@@ -107,14 +94,13 @@ class Sync(
         attempt { backend.resendLink(email) }
     }
 
-    /** Gives up waiting, for a wrong email or a change of mind. */
     fun stopWaiting() {
         watching?.cancel()
         watching = null
         waiting = null
     }
 
-    /** Checks every few seconds whether the link was clicked, then signs in. */
+    /** Polls until the link is clicked, then signs in. */
     private fun watch(pending: Pending) {
         watching?.cancel()
         waiting = Waiting(pending.email)
@@ -122,7 +108,6 @@ class Sync(
         val began = System.currentTimeMillis()
         watching = scope.launch {
             while (isActive) {
-                // Quick at first, while they're likely at their inbox.
                 val quick = System.currentTimeMillis() - began < 30 * 60_000L
                 delay(if (pending.userID == null) 10_000L else if (quick) 3_000L else 30_000L)
                 try {
@@ -163,8 +148,7 @@ class Sync(
 
     private class Problem(message: String) : Exception(message)
 
-    /** Runs a call off the main thread, turning failures into [Problem]s.
-     *  [SyncBackend.Unconfirmed] passes through for the caller. */
+    /** Runs [call] on IO, turning failures into [Problem]s; [SyncBackend.Unconfirmed] passes through. */
     private suspend fun <T> attempt(call: () -> T): T = try {
         withContext(Dispatchers.IO) { call() }
     } catch (e: CancellationException) {
@@ -199,7 +183,6 @@ class Sync(
         state = State.SignedOut
     }
 
-    /** Starts a sync unless one is already running. */
     fun syncNow() {
         val account = account ?: return
         if (running?.isActive == true) return
@@ -208,13 +191,10 @@ class Sync(
         running = scope.launch { run(backend, account) }
     }
 
-    /** Back on screen: sync, unless one started moments ago. */
     fun cameBack() {
         if (System.currentTimeMillis() - lastStarted >= 20_000L) syncNow()
     }
 
-    /** Waits for a running sync to finish, for a receiver that has to say
-     *  when it's done. */
     suspend fun settle() {
         running?.join()
     }
@@ -250,13 +230,11 @@ class Sync(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // Anything else: a bad page, a date that won't parse, the disk.
-            // Like the mac, call it offline and try again next time.
+            // A bad page, an unparseable date, the disk: call it offline and retry next time.
             if (account?.email == start.email) state = State.Offline
         }
     }
 
-    /** A token good for a while, saved for next time. */
     private suspend fun fresh(api: SyncBackend, start: Account, force: Boolean): String {
         val current = account ?: start
         val fresh = api.refreshed(current, force)
@@ -264,8 +242,7 @@ class Sync(
         return fresh.token
     }
 
-    /** Push what changed here, then pull what changed elsewhere. True when
-     *  something came down. */
+    /** Returns true when the pull brought anything down. */
     private fun exchange(api: SyncBackend, token: String): Boolean {
         store.dirty().chunked(200).forEach { batch ->
             api.push(batch, deviceID, token)

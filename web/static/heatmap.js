@@ -2,7 +2,7 @@
 // Days are bucketed in the browser's own time zone.
 
 /** Intensity 0–4. Fixed thresholds, so a cell means the same thing next year. */
-export function level(seconds) {
+function level(seconds) {
   if (seconds < 60) return 0;
   if (seconds < 30 * 60) return 1;
   if (seconds < 90 * 60) return 2;

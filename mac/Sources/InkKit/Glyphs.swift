@@ -1,10 +1,9 @@
 import SwiftUI
 
-/// Small hand-drawn marks. The Teto nods live here: her drill twintail for
-/// focus, a baguette for breaks — never a face, never a colour. A tomato and
-/// a stopwatch name the timer's two modes.
+/// Small hand-drawn marks: Teto's drill twintail (the logo), a check, and a
+/// tomato and stopwatch for the timer's two modes.
 public struct Glyph: View {
-    public enum Kind: Hashable, Sendable { case drill, baguette, check, tomato, stopwatch }
+    public enum Kind: Hashable, Sendable { case drill, check, tomato, stopwatch }
 
     let kind: Kind
     var size: CGFloat
@@ -34,10 +33,6 @@ public struct Glyph: View {
                 switch kind {
                 case .drill:
                     ctx.stroke(Self.drill(s, seed: tick &+ 5, amp: amp), with: .color(tint), style: style)
-                case .baguette:
-                    for path in Self.baguette(s, seed: tick &+ 9, amp: amp) {
-                        ctx.stroke(path, with: .color(tint), style: style)
-                    }
                 case .check:
                     let pts = Doodle.jitter(
                         [CGPoint(x: 0.18 * s, y: 0.52 * s), CGPoint(x: 0.42 * s, y: 0.76 * s),
@@ -63,7 +58,7 @@ public struct Glyph: View {
 
     /// A tapering corkscrew: a spring seen slightly from above, wide at the
     /// root and narrowing to a point — reads as a drill curl at any size.
-    static func drill(_ s: CGFloat, seed: UInt64, amp: Double) -> Path {
+    private static func drill(_ s: CGFloat, seed: UInt64, amp: Double) -> Path {
         let turns = 3.4
         // Sparse samples (~10 a turn) with wobble that shrinks toward the
         // tip: dense, evenly jittered points bead up where the coil is tight.
@@ -80,41 +75,11 @@ public struct Glyph: View {
         return Doodle.path(pts, closed: false)
     }
 
-    /// A loaf tilted on the diagonal with three scores across its back.
-    static func baguette(_ s: CGFloat, seed: UInt64, amp: Double) -> [Path] {
-        let c = CGPoint(x: s / 2, y: s / 2)
-        let angle = -Double.pi / 4
-        func rotate(_ x: Double, _ y: Double) -> CGPoint {
-            CGPoint(x: c.x + x * cos(angle) - y * sin(angle), y: c.y + x * sin(angle) + y * cos(angle))
-        }
-        let half = Double(s) * 0.44, thick = Double(s) * 0.13
-        // Stadium outline: two straight sides and rounded ends.
-        var outline: [CGPoint] = []
-        for i in 0..<12 {
-            let a = -Double.pi / 2 + Double(i) / 11 * .pi
-            outline.append(rotate(half - thick + cos(a) * thick, sin(a) * thick))
-        }
-        for i in 0..<12 {
-            let a = Double.pi / 2 + Double(i) / 11 * .pi
-            outline.append(rotate(-half + thick + cos(a) * thick, sin(a) * thick))
-        }
-        var paths = [Doodle.path(Doodle.jitter(outline, seed: seed, amp: amp * 0.5), closed: true)]
-        var w = Wobble(seed: seed &+ 1)
-        for x in [-0.45, 0.0, 0.45] {
-            let dx = x * half
-            var p = Path()
-            p.move(to: rotate(dx - thick * 0.35 + w.next() * amp, -thick * 0.45))
-            p.addLine(to: rotate(dx + thick * 0.35 + w.next() * amp, thick * 0.45))
-            paths.append(p)
-        }
-        return paths
-    }
-
     /// The pomodoro: a round fruit under a star-shaped calyx. The drawing
     /// is IconPark's "tomato" (Apache 2.0, © ByteDance; see
     /// THIRD_PARTY_NOTICES.md), on its 48-unit grid, with drill's wobble on
     /// every point so it boils like the rest of the ink.
-    static func tomato(_ s: CGFloat, seed: UInt64, amp: Double) -> [Path] {
+    private static func tomato(_ s: CGFloat, seed: UInt64, amp: Double) -> [Path] {
         let k = s / 48
         var w = Wobble(seed: seed)
         // A little less wobble than the hand-drawn marks: it's already a drawing.
@@ -144,7 +109,7 @@ public struct Glyph: View {
     }
 
     /// A round face with a crown button on top and one hand: the stopwatch.
-    static func stopwatch(_ s: CGFloat, seed: UInt64, amp: Double) -> [Path] {
+    private static func stopwatch(_ s: CGFloat, seed: UInt64, amp: Double) -> [Path] {
         let c = CGPoint(x: s * 0.5, y: s * 0.58)
         let r = Double(s) * 0.36
         let face = (0..<18).map { i -> CGPoint in

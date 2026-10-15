@@ -12,14 +12,9 @@ namespace Drill.Services;
 public enum UpdateState { Idle, Checking, UpToDate, Available, Installing, Failed }
 
 /// <summary>
-/// Keeps the app current from GitHub releases, like mac/Sources/DrillApp/
-/// Updater.swift: finds the newest release, downloads the installer for this
-/// PC (arm64 on ARM, even if this build is x64), runs it silently, and quits;
-/// the installer opens the new drill when it's done. Your sessions live in
-/// %LOCALAPPDATA%\Drill and are untouched.
-///
-/// It checks at launch, every hour, when you come back to the app after a
-/// while, and when you open settings.
+/// Updates from GitHub releases (as mac's Updater.swift): downloads this PC's
+/// installer, runs it silently and quits; setup reopens drill. Checks at
+/// launch, hourly, on returning to the app, and in settings.
 /// </summary>
 public sealed class Updater : Observable
 {
@@ -101,9 +96,8 @@ public sealed class Updater : Observable
     }
 
     /// <summary>
-    /// `quietly` keeps a failed background check from showing an error. A
-    /// check you asked for spins a moment even when GitHub answers at once,
-    /// so the answer reads as an answer.
+    /// `quietly` hides failures. A check you asked for spins a moment even
+    /// when GitHub answers at once, so the answer reads as an answer.
     /// </summary>
     public async Task Check(bool quietly = false)
     {
@@ -167,10 +161,7 @@ public sealed class Updater : Observable
 
     private static string Downloads => Path.Combine(Path.GetTempPath(), "drill-update");
 
-    /// <summary>
-    /// Throws away installers from earlier updates (or half-finished
-    /// downloads), off the UI thread. One still running stays, locked, till next time.
-    /// </summary>
+    /// <summary>Deletes old installers and partial downloads, off the UI thread; a locked one stays till next time.</summary>
     public static void SweepDownloads() => Task.Run(() =>
     {
         try

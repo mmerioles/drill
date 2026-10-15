@@ -12,10 +12,8 @@ public static class Paths
 }
 
 /// <summary>
-/// Small settings that outlive the app, like the mac's UserDefaults: one JSON
-/// object in prefs.json, keyed with the mac's names ("drill.theme"). Writes
-/// go to a temp file first and replace the old one, so a crash mid-write
-/// never leaves half a file.
+/// Small settings, like the mac's UserDefaults: one JSON object in prefs.json,
+/// keyed with the mac's names. Written via a temp file so a crash never leaves half a file.
 /// </summary>
 public sealed class Prefs
 {
@@ -41,11 +39,6 @@ public sealed class Prefs
             if (!_values.TryGetPropertyValue(key, out var node) || node is null) return default;
             try { return node.Deserialize<T>(); } catch (Exception e) when (e is JsonException or InvalidOperationException or FormatException) { return default; }
         }
-    }
-
-    public bool Has(string key)
-    {
-        lock (_gate) return _values.ContainsKey(key);
     }
 
     public void Set<T>(string key, T value)

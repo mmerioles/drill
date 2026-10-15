@@ -1,4 +1,3 @@
-using System.IO;
 using System.Media;
 using System.Security;
 using Windows.Data.Xml.Dom;
@@ -7,10 +6,8 @@ using Windows.UI.Notifications;
 namespace Drill.Services;
 
 /// <summary>
-/// "focus done" toasts, as Windows notifications from drill (the Start menu
-/// shortcut setup made carries drill's AppUserModelID, which is what lets an
-/// unpackaged app post them). Silent: drill plays its own chime, so it
-/// doesn't sound twice. Quietly does nothing where toasts aren't available.
+/// Toasts. An unpackaged app can post them only via a Start menu shortcut
+/// carrying its AppUserModelID, which setup makes. Silent: drill plays its own chime.
 /// </summary>
 public sealed class Notifier
 {
@@ -58,11 +55,7 @@ public sealed class Notifier
     private static string Escape(string s) => SecurityElement.Escape(s) ?? "";
 }
 
-/// <summary>
-/// drill's two sounds, made at launch rather than borrowed from Windows, so
-/// they're the same on every PC: a glassy two-note chime when focus ends, a
-/// single soft tink when a break does.
-/// </summary>
+/// <summary>drill's two sounds, synthesized so they're the same on every PC.</summary>
 public static class Chime
 {
     private static readonly Lazy<byte[]> Glass = new(() => Wave([(1318.5, 0, 1.0), (1975.5, 0.11, 0.75)], 1.6));

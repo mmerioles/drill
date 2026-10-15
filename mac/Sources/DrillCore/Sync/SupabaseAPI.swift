@@ -1,12 +1,8 @@
 import Foundation
 
-/// drill's hosted sync: Supabase Auth for accounts, and the two functions in
-/// supabase/migrations for sessions. Same contract as a self-hosted server
-/// (docs/SYNC.md), so `Sync` doesn't care which one it's talking to.
-///
-/// The publishable key is meant to ship inside apps. It can only sign people
-/// up and call the functions as whoever signed in; the database keeps each
-/// account to its own rows.
+/// Hosted sync: Supabase Auth for accounts, and the RPCs in
+/// supabase/migrations for sessions. The publishable key is meant to ship in
+/// apps; row-level security keeps each account to its own rows.
 public struct SupabaseAPI: SyncBackend {
     public var project: URL
     public var key: String
@@ -22,8 +18,8 @@ public struct SupabaseAPI: SyncBackend {
         project: URL(string: "https://fgqtpetuzseozttapzem.supabase.co")!,
         key: "sb_publishable_WeTl_T2-z_i1ycA7KSgCyQ_9a64WoAg")
 
-    /// Where the link in the confirmation email lands. Supabase only goes
-    /// there when it's on the same site as the project's Site URL.
+    /// Where the confirmation link lands. Must share a site with the
+    /// project's Site URL, or Supabase ignores it.
     public static let confirmedPage = "https://mmerioles.github.io/drill/confirmed/"
 
     /// Tokens this close to running out are swapped before a sync.
@@ -35,9 +31,8 @@ public struct SupabaseAPI: SyncBackend {
         try await tokens("auth/v1/token?grant_type=password", ["email": email, "password": password])
     }
 
-    /// Supabase answers a taken email the same as a new one, so nobody can
-    /// probe who has an account, except that the user it sends back has no
-    /// identities.
+    /// Supabase answers a taken email like a new one (against probing),
+    /// except the returned user has no identities.
     public func createAccount(email: String, password: String) async throws -> SignUp {
         struct Reply: Decodable {
             struct Identity: Decodable {}
@@ -91,14 +86,14 @@ public struct SupabaseAPI: SyncBackend {
 
     public func push(_ sessions: [FocusSession], deviceID: String, token: String) async throws {
         struct Push: Encodable { var sessions: [FocusSession] }
-        let body = try Self.encoder.encode(Push(sessions: sessions))
+        let body = try JSONEncoder.iso8601.encode(Push(sessions: sessions))
         _ = try await call("rest/v1/rpc/push_sessions", token: token, body: body)
     }
 
     public func pull(after cursor: String, token: String) async throws -> SyncPage {
         let body = try JSONEncoder().encode(["after": Int64(cursor) ?? 0])
         let data = try await call("rest/v1/rpc/pull_sessions", token: token, body: body)
-        do { return try Self.decoder.decode(SyncPage.self, from: data) } catch { throw SyncError.unreachable }
+        do { return try JSONDecoder.iso8601.decode(SyncPage.self, from: data) } catch { throw SyncError.unreachable }
     }
 
     // MARK: Plumbing
@@ -120,18 +115,6 @@ public struct SupabaseAPI: SyncBackend {
                        confirmed: t.user.email_confirmed_at != nil, refreshToken: t.refresh_token,
                        expiresAt: Date().addingTimeInterval(t.expires_in))
     }
-
-    private static let encoder: JSONEncoder = {
-        let e = JSONEncoder()
-        e.dateEncodingStrategy = .iso8601
-        return e
-    }()
-
-    private static let decoder: JSONDecoder = {
-        let d = JSONDecoder()
-        d.dateDecodingStrategy = .iso8601
-        return d
-    }()
 
     /// Auth errors come as `{ code: 400, error_code, msg }` (older ones as
     /// `{ error, error_description }`), database errors as `{ code: "42501",

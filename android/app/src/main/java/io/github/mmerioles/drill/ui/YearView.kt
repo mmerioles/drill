@@ -43,6 +43,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.mmerioles.drill.AppModel
+import io.github.mmerioles.drill.core.Copy
 import io.github.mmerioles.drill.core.Day
 import io.github.mmerioles.drill.core.Heatmap
 import io.github.mmerioles.drill.ink.Doodle
@@ -53,13 +54,10 @@ import java.time.format.TextStyle as DateStyle
 import java.util.Locale
 import kotlin.math.floor
 
-// The year, as in HeatmapView.swift and the web app: the grid stretches to
-// the width, a phone shows half a year, and a tapped day shows its time.
+// The year heatmap: fills the width, half a year on a phone; tap a day for its time.
 
 private const val GAP = 0.24f
-/** Room at the grid's edges for today's outline: it sits 1.75dp out from
- *  its cell with a 1.5dp stroke, so the outline, not the cells, meets the
- *  content edges. */
+/** Room at the edges for today's outline, which sits outside its cell. */
 private val OUTLINE_PAD = 1.75.dp
 private val OUTLINE = 1.5.dp
 private val MARGIN = OUTLINE_PAD + OUTLINE / 2
@@ -77,7 +75,6 @@ fun YearView(model: AppModel) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Words("your year", Modifier.semantics { heading() }, size = 18.sp, weight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
-            // Compact, so the last one ends on the grid's right edge.
             Row(Modifier.horizontalScroll(rememberScrollState()).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 Link("all", size = 13.sp, on = filter == null, selectable = true, compact = true) { filter = null }
                 tags.forEach { t -> Link(t, size = 13.sp, on = filter == t, selectable = true, compact = true) { filter = t } }
@@ -87,18 +84,16 @@ fun YearView(model: AppModel) {
 
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val weeks = if (maxWidth < 520.dp) 26 else Heatmap.MAX_WEEKS
-            // The model's day, not the clock's: it moves on at midnight even
-            // when nothing else changes.
+            // The model's day, so the grid moves on at midnight.
             val today = model.today
             val all = model.sessions
             val heat = remember(all, filter, weeks, today) {
                 Heatmap.build(all.filter { filter == null || it.tag == filter }, weeks, today)
             }
-            val summary = "your year. today ${amount(heat.today)}, this week ${amount(heat.thisWeek)}, " +
-                "streak ${streak(heat.streak)}"
+            val summary = "your year. today ${Copy.amount(heat.today)}, this week ${Copy.amount(heat.thisWeek)}, " +
+                "streak ${Copy.days(heat.streak)}"
             val measurer = rememberTextMeasurer()
             val monthStyle = TextStyle(color = ink.faint, fontSize = 10.sp)
-            // Room for the month names, more when the words are large.
             val monthRow = with(LocalDensity.current) { maxOf(16.dp, monthStyle.fontSize.toDp() * 1.5f) }
             val pitchDp = (maxWidth - MARGIN * 2) / (weeks - GAP)
             val height = monthRow + pitchDp * 7 - pitchDp * GAP + MARGIN
@@ -127,7 +122,7 @@ fun YearView(model: AppModel) {
                 heat.weeks.forEachIndexed { w, week ->
                     week.firstOrNull { it != null }?.let { first ->
                         val month = first.date.monthValue
-                        // Label a month at its first full column, not the half-column at the left edge.
+                        // Skip a month that's only partly shown at the left edge.
                         if (month != lastMonth) {
                             if (lastMonth != -1 || first.date.dayOfMonth <= 7) {
                                 val label = first.date.month.getDisplayName(DateStyle.SHORT, Locale.getDefault()).lowercase()
@@ -164,8 +159,6 @@ fun YearView(model: AppModel) {
     }
 }
 
-private fun streak(days: Int) = if (days == 1) "1 day" else "$days days"
-
 /** "wed, oct 7" in english, and the locale's own order elsewhere. */
 private fun dayFormat(): DateTimeFormatter {
     val locale = Locale.getDefault()
@@ -179,11 +172,10 @@ private fun Caption(heat: Heatmap, picked: Day?, modifier: Modifier) {
     if (picked != null) {
         Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Words(dayFormat().format(picked.date).lowercase(), size = 13.sp, weight = FontWeight.Medium)
-            Words("— " + if (picked.seconds > 0) amount(picked.seconds) else "nothing logged.", size = 13.sp, color = ink.faint)
+            Words("— " + if (picked.seconds > 0) Copy.amount(picked.seconds) else "nothing logged.", size = 13.sp, color = ink.faint)
         }
         return
     }
-    // At large font sizes the legend gets a line of its own.
     val large = LocalDensity.current.fontScale > 1.3f
     @Composable
     fun Legend() {
@@ -205,9 +197,9 @@ private fun Caption(heat: Heatmap, picked: Day?, modifier: Modifier) {
             horizontalArrangement = Arrangement.spacedBy(22.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Stat("today", amount(heat.today))
-            Stat("this week", amount(heat.thisWeek))
-            Stat("streak", streak(heat.streak))
+            Stat("today", Copy.amount(heat.today))
+            Stat("this week", Copy.amount(heat.thisWeek))
+            Stat("streak", Copy.days(heat.streak))
             if (!large) {
                 Spacer(Modifier.weight(1f))
                 Legend()

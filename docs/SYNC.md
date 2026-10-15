@@ -1,14 +1,12 @@
 # sync contract
 
-The server is `web/server.py` (see the README to run it). Its clients are the
-web app in `web/static` (`store.js`), the mac app (`SyncAPI` in
-`mac/Sources/DrillCore`, driven by `Sync.swift` in the app), the android app
-(`SyncApi.kt` and `Sync.kt` in `android/.../data`), and the windows app
+Server: `web/server.py`. Clients: web (`web/static/store.js`), mac
+(`SyncAPI` in `mac/Sources/DrillCore`, driven by `DrillApp/Sync.swift`),
+android (`SyncApi.kt`, `Sync.kt` in `android/.../data`), windows
 (`windows/Drill.Core/Sync`, driven by `windows/Drill/Services/Sync.cs`).
 
-The home server's job is small: keep the union of every device's sessions and
-hand back what each device hasn't seen yet. Devices do all merging themselves
-with a single rule.
+The server keeps the union of every device's sessions and hands back what
+each device hasn't seen. Devices merge with one rule.
 
 ## Merge rule
 
@@ -20,10 +18,8 @@ pulled row is the whole merge.
 
 ## Accounts
 
-Syncing needs an account: an email and a password, nothing else. Signing in
-returns a token, which every other call sends as
-`Authorization: Bearer <token>`. Each account only ever sees its own
-sessions.
+Email and password. Sign-in returns a token; every other call sends
+`Authorization: Bearer <token>`. Each account sees only its own sessions.
 
 ```
 POST /v1/accounts   { "email": "…", "password": "…" }
@@ -43,11 +39,10 @@ are stored as salted PBKDF2-SHA256. Errors come back as
 token: sign in again), `409` email taken, `429` too many tries from one
 address.
 
-Signing up sends a confirmation email. The server POSTs
-`{ "to", "subject", "text" }` as JSON to `DRILL_MAIL_URL`, e.g. a
-Cloudflare Worker that sends it, with `Authorization: Bearer
-$DRILL_MAIL_KEY`. Without a mail URL it prints the message to its log.
-Links use `DRILL_PUBLIC_URL`. Accounts can sync before confirming unless
+Sign-up sends a confirmation email: the server POSTs JSON
+`{ "to", "subject", "text" }` to `DRILL_MAIL_URL` (e.g. a Cloudflare Worker)
+with `Authorization: Bearer $DRILL_MAIL_KEY`, or logs it if unset. Links use
+`DRILL_PUBLIC_URL`. Accounts can sync before confirming unless
 `DRILL_REQUIRE_CONFIRMED=1`, in which case sync calls answer
 `403 { "error": "confirm your email first" }`.
 
@@ -69,9 +64,9 @@ GET  /healthz
 A bad row fails the whole push with `400 { "error": "…" }`. Pulls come in
 pages of 500; start with `cursor=0` and repeat while `more` is true.
 
-`cursor` is a server-assigned sequence number, not a device timestamp, so a
-device with a wrong clock can't make other devices skip rows. The server
-stamps each row with a sequence number as it arrives.
+`cursor` is a server-assigned sequence number stamped on each row as it
+arrives, not a device timestamp, so a wrong device clock can't make others
+skip rows.
 
 ## FocusSession JSON
 
@@ -96,9 +91,9 @@ client buckets sessions into days in its own time zone.
 
 ## Hosted sync (Supabase)
 
-With no server in settings, the apps sync through drill's Supabase project
-(`SupabaseAPI.swift`, `SupabaseApi.kt`, `SupabaseApi.cs`). Same rows, same merge rule, same
-cursor; only the calls differ. The schema is
+With no server in settings, apps use drill's Supabase project
+(`SupabaseAPI.swift`, `SupabaseApi.kt`, `SupabaseApi.cs`). Same rows, merge
+rule and cursor; only the calls differ. Schema:
 `supabase/migrations/20261006061038_sessions.sql`.
 
 - **Accounts** are Supabase Auth users (email and password). Signing up
@@ -116,14 +111,12 @@ cursor; only the calls differ. The schema is
 - **Pull** is `POST /rest/v1/rpc/pull_sessions { after: <cursor> }` →
   `{ sessions, cursor, more }`, as above.
 
-Clients send the project's publishable key as `apikey`. It's public by
-design; the table only lets each user read their own rows, and only
-`push_sessions` writes.
+Clients send the publishable key as `apikey` (public by design: users read
+only their own rows, and only `push_sessions` writes).
 
 ## Client loop
 
-`web/static/store.js`, `mac/Sources/DrillApp/Sync.swift`, the android
-app's `Sync.kt` and the windows app's `Sync.cs` all do this:
+Every client (`store.js`, `Sync.swift`, `Sync.kt`, `Sync.cs`):
 
 1. `store.changes(since: lastPushedAt)` → push in batches → on success, save
    `lastPushedAt` (taken before reading the changes).
@@ -132,8 +125,8 @@ app's `Sync.kt` and the windows app's `Sync.cs` all do this:
 3. Run at launch, after each logged session, every few minutes, and when the
    sync button is pressed.
 
-On sign-in, a client forgets its push mark and cursor, so everything already
-on the device joins the account and the whole account comes down.
+On sign-in a client resets its push mark and cursor, so local sessions join
+the account and the whole account comes down.
 
-Servers from before accounts kept one shared history. On first start the
-server renames that table to `sessions_before_accounts` and leaves it alone.
+Pre-accounts servers kept one shared history; on first start the server
+renames that table to `sessions_before_accounts` and leaves it.

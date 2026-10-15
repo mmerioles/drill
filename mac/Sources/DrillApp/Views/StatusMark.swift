@@ -1,14 +1,11 @@
 import SwiftUI
 
-/// How something stands, in one small mark: a spinner while working, a
-/// yellow dot while it waits on you, a green check once it's done. Changes
-/// between them pop, with a little spring.
+/// A spinner, a yellow dot, or a green check.
 struct StatusMark: View {
     enum Status: Equatable { case none, working, pending, done }
 
     let status: Status
-    /// A slow breath on the yellow dot, for when it's waiting on something
-    /// that'll happen by itself.
+    /// Pulses the yellow dot.
     var breathing = false
 
     var body: some View {
@@ -46,7 +43,6 @@ private struct Dot: View {
     }
 }
 
-/// An open ring turning at an even pace.
 private struct Spinner: View {
     @State private var turned = false
 

@@ -1,4 +1,3 @@
-using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
@@ -16,10 +15,8 @@ using Drill.Views;
 namespace Drill;
 
 /// <summary>
-/// `Drill.exe --render &lt;dir&gt;`: every screen, in both themes, drawn to PNGs at
-/// 2x without opening a window — the app's real XAML and drawing code on a
-/// made-up year of study. CI runs it so the Windows app can be looked at
-/// from anywhere.
+/// `Drill.exe --render &lt;dir&gt;`: every screen in both themes as 2x PNGs, from
+/// the real XAML on a made-up year, without opening a window. CI runs it.
 /// </summary>
 internal static class Render
 {

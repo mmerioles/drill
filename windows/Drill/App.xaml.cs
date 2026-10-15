@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using System.Windows.Shell;
 using Drill.Core;
 using Drill.Core.Inspo;
@@ -28,19 +27,16 @@ public interface Shell
 }
 
 /// <summary>
-/// drill for Windows: one process, one main window, a tray icon that keeps
-/// the timer within reach after the window closes, the taskbar's progress
-/// bar, and toasts when a phase ends.
+/// drill for Windows: one process, one main window, a tray icon, the taskbar's
+/// progress bar, and toasts when a phase ends.
 /// </summary>
 public partial class App : Application, Shell
 {
-    public const string MutexName = "drill-mmerioles-app";
+    // The mutex and quit event names are shared with installer/drill.iss.
+    private const string MutexName = "drill-mmerioles-app";
     private const string ShowEvent = "drill-mmerioles-show";
     private const string StartEvent = "drill-mmerioles-start";
-    /// <summary>Setup signals this to ask a running drill to quit (see windows/installer/drill.iss).</summary>
     private const string QuitEvent = "drill-mmerioles-quit";
-
-    public static ImageSource? IconImage { get; private set; }
 
     public AppModel Model { get; private set; } = null!;
     public Sync Sync { get; private set; } = null!;
@@ -63,7 +59,6 @@ public partial class App : Application, Shell
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        IconImage = LoadIcon();
 
         var args = e.Args;
         if (args.Length >= 2 && args[0] == "--render")
@@ -370,18 +365,5 @@ public partial class App : Application, Shell
         _mutex?.Dispose();
         _mutex = null;
         base.OnExit(e);
-    }
-
-    private static ImageSource? LoadIcon()
-    {
-        try
-        {
-            var decoder = BitmapDecoder.Create(new Uri("pack://application:,,,/Assets/drill.ico"), BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
-            return decoder.Frames.OrderByDescending(f => f.PixelWidth).FirstOrDefault(f => f.PixelWidth <= 64) ?? decoder.Frames[0];
-        }
-        catch (Exception)
-        {
-            return null;
-        }
     }
 }

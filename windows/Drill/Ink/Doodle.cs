@@ -4,10 +4,8 @@ using System.Windows.Threading;
 
 namespace Drill.Ink;
 
-// Doodle machinery, as in mac/Sources/InkKit/Doodle.swift. Every stroke is
-// jittered by a seeded wobble, and the seed steps every 0.4s — the classic
-// hand-drawn "boil". Amplitude stays around a point so it reads as pen
-// texture in motion, not noise.
+// Hand-drawn strokes, as mac's Doodle.swift: every stroke is jittered by a
+// seeded wobble, and the seed steps every 0.4s (the "boil").
 
 public struct Wobble(ulong seed)
 {
@@ -106,10 +104,8 @@ public static class Doodle
 }
 
 /// <summary>
-/// The one clock every boiling stroke shares: a seed that steps every 0.4s,
-/// as discrete frames — nothing tweens and nothing draws per frame. It only
-/// runs while something is boiling, and holds still when Windows' animation
-/// effects are off.
+/// The shared boil clock: runs only while something is boiling, and holds
+/// still when Windows' animation effects are off.
 /// </summary>
 public static class Boil
 {

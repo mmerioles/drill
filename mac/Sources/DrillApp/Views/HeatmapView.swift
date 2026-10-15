@@ -2,9 +2,8 @@ import InkKit
 import SwiftUI
 import DrillCore
 
-/// A year of study, a week per column. Cells are inked squares whose density
-/// is the day's focus time; each wobbles by its own fixed seed, so the grid
-/// looks hand-ruled but holds perfectly still.
+/// A year, a week per column. Each cell wobbles by a fixed seed, so the grid
+/// looks hand-ruled but holds still.
 struct HeatmapSection: View {
     @Environment(AppModel.self) private var model
     @State private var hovered: HeatmapDay?
@@ -54,8 +53,7 @@ struct HeatmapSection: View {
         }
     }
 
-    /// "today 1h 15m / 2h ◔": the goal shows only while every subject is
-    /// shown, since it counts them all.
+    /// "today 1h 15m / 2h ◔". The goal shows only unfiltered, since it counts every tag.
     private var today: some View {
         HStack(spacing: 5) {
             Text("today")
@@ -86,7 +84,7 @@ struct HeatmapSection: View {
     }
 }
 
-/// A day opened from the grid, and where its square is, for the popover's arrow.
+/// `anchor` places the popover's arrow.
 struct OpenDay: Identifiable, Equatable {
     let day: Date
     let anchor: CGRect
@@ -119,7 +117,6 @@ private enum Cell {
     static let empty = Ink.ink.opacity(0.055)
 }
 
-/// Cell geometry for a grid of `columns` weeks stretched across `width`.
 private struct GridMetrics {
     let pitch: CGFloat
     var size: CGFloat { pitch * (1 - Cell.gapRatio) }
@@ -164,7 +161,6 @@ private struct HeatGrid: View {
             case .ended: hovered = nil
             }
         }
-        // A click opens that day; clicking the open day again closes it.
         .onTapGesture { p in
             guard let (w, d) = cell(at: p, m), let day = heatmap.weeks[w][d] else { return }
             if opened?.day == day.date { opened = nil; return }
@@ -244,5 +240,29 @@ private struct Legend: View {
         }
         .font(Ink.text(11))
         .accessibilityHidden(true)
+    }
+}
+
+/// Today against the daily goal: a ring that fills, then a check.
+struct GoalRing: View {
+    let progress: Double
+
+    var body: some View {
+        ZStack {
+            if progress >= 1 {
+                Glyph(.check, size: 14, boiling: false, lineWidth: 1.6, tint: Ink.accent)
+                    .transition(.scale(scale: 0.4).combined(with: .opacity))
+            } else {
+                Circle().stroke(Ink.ghost, lineWidth: 1.6)
+                Circle()
+                    .trim(from: 0, to: max(0.02, progress))
+                    .stroke(Ink.accent, style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .transition(.opacity)
+            }
+        }
+        .frame(width: 11, height: 11)
+        .animation(.spring(response: 0.42, dampingFraction: 0.6), value: progress >= 1)
+        .animation(Ink.ease, value: progress)
     }
 }

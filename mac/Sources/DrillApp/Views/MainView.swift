@@ -6,8 +6,7 @@ struct MainView: View {
     @Environment(Updater.self) private var updater
     @Environment(Sync.self) private var sync
     @State private var signingIn = false
-    /// The page itself holds focus by default, so the tag field doesn't grab
-    /// it on open, and space can start and pause the timer.
+    /// The page holds focus so the tag field doesn't grab it and space toggles the timer.
     @FocusState private var pageFocused: Bool
     @Environment(\.openWindow) private var openWindow
 

@@ -55,7 +55,7 @@ public partial class MainPage : UserControl
         {
             var swatch = new Rectangle { Width = 9, Height = 9, RadiusX = 1.5, RadiusY = 1.5, Margin = new Thickness(2, 0, 2, 0) };
             if (level == 0) swatch.SetResourceReference(Shape.FillProperty, "Empty");
-            else swatch.Fill = new SolidAccent(HeatGrid.Levels[level]).Brush;
+            else swatch.Fill = AccentBrush(HeatGrid.Levels[level]);
             Swatches.Children.Add(swatch);
         }
 
@@ -239,8 +239,12 @@ public partial class MainPage : UserControl
     private void Recolor()
     {
         for (var level = 1; level < 5; level++)
-            ((Rectangle)Swatches.Children[level]).Fill = new SolidAccent(HeatGrid.Levels[level]).Brush;
+            ((Rectangle)Swatches.Children[level]).Fill = AccentBrush(HeatGrid.Levels[level]);
     }
+
+    /// <summary>The accent at a heatmap level, for the legend.</summary>
+    private static System.Windows.Media.Brush AccentBrush(double alpha) =>
+        Palette.Brush(Palette.WithAlpha(Palette.Current.Accent, alpha));
 
     private void OnToggle(object sender, RoutedEventArgs e) => Model.Toggle();
     private void OnSkip(object sender, RoutedEventArgs e) => Model.Skip();
@@ -254,10 +258,4 @@ public partial class MainPage : UserControl
         if (_shell.Sync.IsSignedIn) _shell.Sync.SyncNow();
         else _shell.ShowAccount(this);
     }
-}
-
-/// <summary>The accent at a heatmap level, for the legend.</summary>
-internal readonly record struct SolidAccent(double Alpha)
-{
-    public System.Windows.Media.Brush Brush => Palette.Brush(Palette.WithAlpha(Palette.Current.Accent, Alpha));
 }

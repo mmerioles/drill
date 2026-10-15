@@ -3,14 +3,9 @@ import Foundation
 import Observation
 import DrillCore
 
-/// Keeps the app current from GitHub releases, with no dependencies: finds
-/// the newest release, downloads its dmg, swaps the app bundle in place and
-/// relaunches. Your sessions live in Application Support and are untouched.
-///
-/// It checks at launch, every hour, when you come back to the app after a
-/// while, and when you open settings. When the app can't replace
-/// itself (a folder you can't write to, or run straight from the dmg), update
-/// opens the release page instead.
+/// Self-update from GitHub releases: downloads the dmg, swaps the bundle in
+/// place and relaunches. Checks at launch, hourly, on return to the app, and
+/// in settings. If the app can't replace itself, opens the release page.
 @Observable @MainActor
 final class Updater {
     enum State: Equatable {
@@ -33,7 +28,6 @@ final class Updater {
 
     private static let latest = URL(string: "https://api.github.com/repos/mmerioles/drill/releases/latest")!
     private static let every: Duration = .seconds(3600)
-    /// Coming back to the app checks again once the last check is this old.
     private static let stale: TimeInterval = 15 * 60
 
     private let bundle: URL
@@ -68,17 +62,15 @@ final class Updater {
         }
     }
 
-    /// A quiet check, unless one ran within `age` seconds. Settings asks
-    /// with a short age, so it opens on a fresh answer.
+    /// A quiet check, unless one ran within `age` seconds.
     func checkIfStale(_ age: TimeInterval = 60) {
         if case .available = state { return } // already found one
         guard lastChecked.map({ -$0.timeIntervalSinceNow > age }) ?? true else { return }
         Task { await check(quietly: true) }
     }
 
-    /// `quietly` keeps a failed background check from showing an error. A
-    /// check you asked for spins a moment even when GitHub answers at once,
-    /// so the answer reads as an answer.
+    /// `quietly` hides failures. A requested check spins at least a moment,
+    /// so the answer reads as one.
     func check(quietly: Bool = false) async {
         guard isEnabled, let current, state != .checking, state != .installing else { return }
         state = .checking
@@ -132,14 +124,12 @@ final class Updater {
         return Release(version: version, dmg: dmg.browser_download_url, page: payload.html_url)
     }
 
-    /// The folder holding the app must be writable, which also rules out
-    /// running from the dmg or from a translocated copy.
+    /// Also rules out running from the dmg or a translocated copy.
     private var canReplaceSelf: Bool {
         FileManager.default.isWritableFile(atPath: bundle.deletingLastPathComponent().path)
     }
 
-    /// Downloads and mounts the dmg, and copies the new app next to this one
-    /// so the swap is a rename on the same volume.
+    /// Copies the new app next to this one, so the swap is a same-volume rename.
     private func stage(_ release: Release) async throws -> URL {
         let fm = FileManager.default
         let work = fm.temporaryDirectory.appending(path: "drill-update-\(UUID().uuidString)")
@@ -183,13 +173,11 @@ final class Updater {
         return staged
     }
 
-    /// Where the new app waits, next to this one, before the swap.
     private var stagedURL: URL {
         bundle.deletingLastPathComponent().appending(path: ".Drill-update.app")
     }
 
-    /// Moves this app aside, puts the new one in its place, then throws the
-    /// old one away. If the second move fails the old app goes back.
+    /// If the second move fails, the old app goes back.
     private func swap(in staged: URL) throws {
         let fm = FileManager.default
         let old = bundle.deletingLastPathComponent().appending(path: ".Drill-old.app")
@@ -205,7 +193,6 @@ final class Updater {
         try? fm.removeItem(at: old)
     }
 
-    /// Opens the new app once this process has gone, then quits.
     private func relaunch() {
         let wait = Process()
         wait.executableURL = URL(filePath: "/bin/sh")

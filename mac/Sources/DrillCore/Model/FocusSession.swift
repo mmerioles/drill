@@ -1,10 +1,8 @@
 import Foundation
 
-/// One block of focused time — the only record Drill keeps.
-///
-/// Rows are never hard-deleted and never edited without bumping `updatedAt`,
-/// so any two devices can merge their copies by last-writer-wins on `id`.
-/// See docs/SYNC.md.
+/// One block of focused time, the only record Drill keeps. Rows are never
+/// hard-deleted and every edit bumps `updatedAt`, so devices merge by
+/// last-writer-wins on `id` (docs/SYNC.md).
 public struct FocusSession: Identifiable, Codable, Equatable, Sendable {
     public var id: UUID
     public var startedAt: Date

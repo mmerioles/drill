@@ -1,8 +1,7 @@
-// Shuzo Matsuoka's short cheer-up videos: the "〜あなたに" messages from his
-// official YouTube channel, with the clams clip first. The list lives in
-// shared/inspo.json (see scripts/make-inspo.sh). The shuffle is kept in step
-// with mac/Sources/DrillApp/Inspo.swift, so every device shows the same few
-// videos on the same day. `daily` marks the rotation; the rest are skits.
+// Shuzo Matsuoka's cheer-up videos, listed in shared/inspo.json (see
+// scripts/make-inspo.sh). The shuffle matches Inspo.swift and Inspo.kt, so
+// every device shows the same few on the same day. `daily` marks the
+// rotation; the rest are skits.
 
 import { ROWS } from "./inspo-videos.js";
 
@@ -14,7 +13,7 @@ const PER_DAY = 5;
 const WATCHED = "drill.inspo.seen";
 
 /** A day as a number, like 20260928: the key for watched videos and the seed. */
-export const day = (date = new Date()) =>
+const day = (date = new Date()) =>
   date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
 
 /** A tiny seeded generator, bit-for-bit the same as the Swift one. */
@@ -38,12 +37,9 @@ function shuffled(videos, next) {
   return pool;
 }
 
-/**
- * A fresh handful each day, seeded by the date, leaving out anything watched
- * before today. Cheer-up messages come first, the skits once those run out, and
- * the full rotation again once you've seen everything. Videos watched today
- * stay put, so the list doesn't shift under you.
- */
+/** A handful per day, seeded by the date, minus anything watched before
+ *  today: cheer-ups first, then skits, then the full rotation again. Videos
+ *  watched today stay put so the list doesn't shift. */
 export function today(seen, on = day()) {
   const next = mulberry32(on);
   const daily = shuffled(VIDEOS.filter((v) => v.daily), next);

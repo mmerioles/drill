@@ -2,9 +2,8 @@ import InkKit
 import SwiftUI
 import DrillCore
 
-/// The ring, the numbers, what you're studying, and the three controls.
-/// Between blocks, clicking the face switches pomodoro ⇄ stopwatch; the mark
-/// under the digits says which one it is.
+/// The ring, digits, tag field and controls. Between blocks, clicking the
+/// face switches pomodoro ⇄ stopwatch.
 struct TimerView: View {
     @Environment(AppModel.self) private var model
     @FocusState private var tagFocused: Bool
@@ -53,7 +52,7 @@ struct TimerView: View {
                     .buttonStyle(.inkLink)
                     .opacity(model.isActive ? 1 : 0)
                     .disabled(!model.isActive)
-                Button(model.isRunning ? "pause" : (model.isActive ? "resume" : "start"), action: model.toggle)
+                Button(Copy.toggle(running: model.isRunning, active: model.isActive), action: model.toggle)
                     .buttonStyle(InkCapsuleStyle(minWidth: 128))
                     .keyboardShortcut(.defaultAction)
                 Button("skip", action: model.skip)
@@ -107,9 +106,8 @@ struct TimerView: View {
     }
 }
 
-/// A small tomato or stopwatch under the digits, in plain ink: which timer
-/// this is. It's also the switch, for the keyboard and VoiceOver; the whole
-/// face switches too, for the pointer.
+/// Which timer this is, under the digits. Also the mode switch for the
+/// keyboard and VoiceOver.
 private struct ModeMark: View {
     @Environment(AppModel.self) private var model
 
@@ -129,7 +127,7 @@ private struct ModeMark: View {
     }
 }
 
-/// Where you are in the long-break cycle: small inked dots, filled as you go.
+/// Progress through the long-break cycle.
 private struct CycleDots: View {
     let filled: Int
     let of: Int
@@ -149,8 +147,7 @@ private struct CycleDots: View {
     }
 }
 
-/// The timer as VoiceOver says it: "focus", "12 minutes left", or
-/// "stopwatch", "12 minutes"; "paused, …" while paused.
+/// VoiceOver: "focus, 12 minutes left" or "stopwatch, 12 minutes"; "paused, …" while paused.
 struct SpokenTimer: ViewModifier {
     @Environment(AppModel.self) private var model
 

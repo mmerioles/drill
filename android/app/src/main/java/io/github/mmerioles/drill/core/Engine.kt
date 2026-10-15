@@ -1,10 +1,8 @@
 package io.github.mmerioles.drill.core
 
-// The pomodoro state machine, ported from web/static/engine.js (itself from
-// DrillCore/PomodoroEngine.swift). Time is passed in as epoch ms, so the
-// engine never drifts and survives the app being killed: whoever is awake,
-// the screen or the phase-end alarm, calls tick(now) and gets back a
-// transition when a phase ended.
+// The pomodoro state machine, a port of web/static/engine.js. Time is passed
+// in as epoch ms, so whoever is awake (the screen or the phase-end alarm)
+// calls tick(now) and the engine survives the process being killed.
 
 enum class Phase {
     Focus, ShortBreak, LongBreak;
@@ -41,10 +39,16 @@ data class EngineState(
     val status: Status = Status.Idle,
     val focusCount: Int = 0,
     val blockStartedAt: Long? = null,
-    /** Focus ms banked before the current run, i.e. before the last pause. */
+    /** Focus ms banked before the last pause. */
     val accrued: Long = 0,
     val runStartedAt: Long? = null,
-)
+) {
+    fun remaining(config: TimerConfig, now: Long): Long = when (status) {
+        Status.Idle -> config.duration(phase) * 1000L
+        is Status.Paused -> status.remaining
+        is Status.Running -> maxOf(0, status.endsAt - now)
+    }
+}
 
 /** A focus block worth logging. */
 data class FocusRecord(
@@ -67,25 +71,9 @@ class Engine(var config: TimerConfig = TimerConfig(), var state: EngineState = E
     val phase get() = state.phase
     val isRunning get() = state.status is Status.Running
     val isIdle get() = state.status is Status.Idle
-    val isPaused get() = state.status is Status.Paused
-    val duration: Long get() = config.duration(phase) * 1000L
-    val cyclePosition get() = state.focusCount % config.longBreakEvery
+    private val duration: Long get() = config.duration(phase) * 1000L
 
-    /** When the running phase ends, or null. */
-    val endsAt get() = (state.status as? Status.Running)?.endsAt
-
-    fun remaining(now: Long): Long = when (val s = state.status) {
-        Status.Idle -> duration
-        is Status.Paused -> s.remaining
-        is Status.Running -> maxOf(0, s.endsAt - now)
-    }
-
-    fun progress(now: Long): Float {
-        if (duration <= 0) return 0f
-        return (1f - remaining(now).toFloat() / duration).coerceIn(0f, 1f)
-    }
-
-    // Controls
+    fun remaining(now: Long): Long = state.remaining(config, now)
 
     fun start(now: Long) {
         when (val s = state.status) {
@@ -126,8 +114,6 @@ class Engine(var config: TimerConfig = TimerConfig(), var state: EngineState = E
         return record
     }
 
-    // Internals
-
     private fun run(ms: Long, now: Long) {
         state = state.copy(runStartedAt = now, status = Status.Running(now + ms))
     }
@@ -154,8 +140,7 @@ class Engine(var config: TimerConfig = TimerConfig(), var state: EngineState = E
 
         if (finished == Phase.Focus) {
             record = record(endedAt, natural)
-            // A skipped focus block still counts as a round, so skipping keeps
-            // building towards the long break like any pomodoro timer.
+            // A skipped focus block still counts towards the long break.
             val count = state.focusCount + 1
             val longDue = count % config.longBreakEvery == 0
             state = state.copy(focusCount = count, phase = if (longDue) Phase.LongBreak else Phase.ShortBreak)

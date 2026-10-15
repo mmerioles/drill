@@ -1,8 +1,5 @@
-# Checks the windows app before it reaches main: tests the core, builds the
-# x64 app and its installer, and renders every screen (light and dark) with
-# `Drill.exe --render`. The installer and the screenshots are kept as
-# artifacts for two weeks, so a change can be tried and looked at without a
-# windows PC at hand. Releases from main are built by release.yml.
+# Off-main check for windows: test, build the x64 installer, render every
+# screen (`Drill.exe --render`); both kept as artifacts. Releases: release.yml.
 name: windows
 
 on:

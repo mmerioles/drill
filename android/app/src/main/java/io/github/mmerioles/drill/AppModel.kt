@@ -52,27 +52,19 @@ enum class Theme { Light, Dark }
 
 /**
  * Everything the screen shows, and the one place the timer changes. The
- * screen, the notification's buttons and the phase-end alarm all come
- * through here, on the main thread, and every change is saved at once, so
- * the app can be killed at any time.
- *
- * Android has no quit: swiping drill away, or Android ending the process
- * mid-focus, leaves the saved engine state and the phase-end alarm behind.
- * The alarm logs the block when it ends, and the next launch catches up on
- * whatever ended meanwhile, so studied time is never lost (the mac and
- * windows log it on quit instead). A reset still logs the
- * focus so far, if it's a minute or more.
+ * screen, the notification buttons and the phase-end alarm all come through
+ * here on the main thread, and every change is saved at once: Android can
+ * kill the process mid-focus, and the alarm or the next launch catches up.
  */
 class AppModel(private val app: Application) {
     private val prefs: SharedPreferences = app.getSharedPreferences("drill", Context.MODE_PRIVATE)
-    /** Work that outlives a screen. Whatever it throws is logged rather than
-     *  taking the app down. */
+    /** Work that outlives a screen; failures are logged, not fatal. */
     val scope = CoroutineScope(
         SupervisorJob() + Dispatchers.Main.immediate +
             CoroutineExceptionHandler { _, e -> Log.e(TAG, "background work failed", e) },
     )
     private val store = SessionStore(app)
-    /** The database, one call at a time and in order, off the main thread. */
+    /** The database, one call at a time, off the main thread. */
     private val disk = Dispatchers.IO.limitedParallelism(1)
     /** Writes still on their way to disk, for [settle]. */
     private val writes = mutableListOf<Job>()
@@ -90,11 +82,9 @@ class AppModel(private val app: Application) {
         private set
 
     private val engine = Engine(config, loadEngine())
-    /** The engine's state, observable. */
     var timer by mutableStateOf(engine.state)
         private set
 
-    /** What the tag field says. */
     var tag by mutableStateOf(prefs.getString("tag", "")!!)
         private set
     /** The tag in effect for the running focus block, captured when it starts. */
@@ -106,11 +96,9 @@ class AppModel(private val app: Application) {
     /** Distinct tags, most recently used first. */
     var recentTags by mutableStateOf(emptyList<String>())
         private set
-    /** The day the year ends on, moved on by [reload] at midnight, a time
-     *  zone change, or coming back to the app. */
+    /** The year's last day, moved on by [reload]. */
     var today by mutableStateOf(LocalDate.now())
         private set
-    /** Something that went wrong where you'd want to know, like the mac's. */
     var lastError by mutableStateOf<String?>(null)
         private set
 
@@ -122,16 +110,10 @@ class AppModel(private val app: Application) {
         reload()
     }
 
-    // Reading the timer
-
     // These read the observable [timer] and [config], so whatever draws them
     // updates when either changes.
 
-    fun remaining(now: Long): Long = when (val s = timer.status) {
-        Status.Idle -> config.duration(timer.phase) * 1000L
-        is Status.Paused -> s.remaining
-        is Status.Running -> maxOf(0, s.endsAt - now)
-    }
+    fun remaining(now: Long): Long = timer.remaining(config, now)
 
     fun progress(now: Long): Float {
         val duration = config.duration(timer.phase) * 1000L
@@ -143,8 +125,6 @@ class AppModel(private val app: Application) {
     /** A block is under way, running or paused: no updating now. */
     val isActive get() = timer.status !is Status.Idle
 
-    // Intents
-
     fun toggle() {
         val now = System.currentTimeMillis()
         val starting = engine.isIdle
@@ -154,9 +134,7 @@ class AppModel(private val app: Application) {
         changed()
     }
 
-    /** The notification's "start break" / "start focus": starts the phase it
-     *  offered, only if that phase is still waiting. Never resumes a paused
-     *  phase or starts a different one. */
+    /** The notification's "start break"/"start focus": only if that phase is still waiting. */
     fun startNext(offered: Phase) {
         if (engine.isIdle && engine.phase == offered) toggle()
     }
@@ -199,8 +177,7 @@ class AppModel(private val app: Application) {
         pinNightMode()
     }
 
-    /** Tells Android 12+ the app's own light or dark, so the launch screen
-     *  (values-night) matches the app rather than the phone. */
+    /** On Android 12+, makes the launch screen (values-night) match the app's theme, not the phone's. */
     fun pinNightMode() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
         val mode = if (theme == Theme.Dark) UiModeManager.MODE_NIGHT_YES else UiModeManager.MODE_NIGHT_NO
@@ -232,14 +209,11 @@ class AppModel(private val app: Application) {
         }
     }
 
-    /** Waits for writes and a running sync, for a receiver that has to say
-     *  when it's done before Android lets the process go. */
+    /** Waits for pending writes and sync, for a receiver keeping the process alive. */
     suspend fun settle() {
         writes.toList().forEach { it.join() }
         sync.settle()
     }
-
-    // Internals
 
     private fun captureTag() {
         blockTag = tag.trim().lowercase().ifEmpty { null }
@@ -249,15 +223,13 @@ class AppModel(private val app: Application) {
         t.record?.let { log(it) }
         if (t.next == Phase.Focus && engine.isRunning) captureTag()
         if (t.natural) {
-            // Waiting on you when the next phase doesn't start by itself.
             Notifier.ended(app, t.finished, t.next, config.duration(t.next), waits = engine.isIdle, sound = soundOn)
         }
     }
 
     private fun log(record: FocusRecord) {
         val session = FocusSession.from(record, blockTag, deviceID, System.currentTimeMillis())
-        // Written at once, off the main thread; after an alarm, the receiver
-        // waits for it (settle), since the process may not live long.
+        // After an alarm, the receiver waits for this (settle): the process may not live long.
         val job = scope.launch {
             val saved = withContext(disk) { runCatching { store.save(listOf(session), local = true) } }
             saved.exceptionOrNull()?.let { Log.e(TAG, "couldn't save a session", it) }
@@ -272,7 +244,6 @@ class AppModel(private val app: Application) {
     private fun changed() {
         timer = engine.state
         saveEngine()
-        // "focus · maths" while a tagged focus runs, else just the phase.
         val tagged = blockTag?.takeIf { engine.phase == Phase.Focus }
         Notifier.schedule(app, engine.state, engine.remaining(System.currentTimeMillis()), tagged)
     }

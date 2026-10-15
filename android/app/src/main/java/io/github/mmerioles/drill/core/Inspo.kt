@@ -2,11 +2,9 @@ package io.github.mmerioles.drill.core
 
 import java.time.LocalDate
 
-// Shuzo Matsuoka's short cheer-up videos: the "〜あなたに" messages from his
-// official YouTube channel, with the clams clip first. The list lives in
-// shared/inspo.json (see scripts/make-inspo.sh, which writes InspoVideos.kt).
-// The shuffle is kept in step with web/static/inspo.js and Inspo.swift, so
-// every device shows the same few videos on the same day.
+// Shuzo Matsuoka's cheer-up videos, from shared/inspo.json. The shuffle
+// matches web/static/inspo.js and Inspo.swift, so every device shows the
+// same videos on the same day.
 
 object Inspo {
     data class Video(
@@ -27,11 +25,7 @@ object Inspo {
     /** A day as a number, like 20260928: the key for watched videos and the seed. */
     fun day(date: LocalDate = LocalDate.now()) = date.year * 10000 + date.monthValue * 100 + date.dayOfMonth
 
-    /**
-     * A fresh handful each day, seeded by the date, leaving out anything
-     * watched before today. Cheer-up messages come first, the skits once those
-     * run out, and the full rotation again once you've seen everything.
-     */
+    /** Today's unwatched handful: daily videos first, then skits, then all again. */
     fun today(seen: Set<String>, on: Int = day()): List<Video> {
         val next = mulberry32(on)
         val daily = shuffled(videos.filter { it.daily }, next)

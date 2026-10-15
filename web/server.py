@@ -15,15 +15,12 @@ session sync.
     GET  /healthz
 
 Environment:
-    DRILL_DATA        directory for drill.sqlite (default: data/ next to this file)
-    PORT                 listen port (default 8080)
-    DRILL_PUBLIC_URL  where people reach this server, for links in email,
-                         e.g. https://drill.example.com
-    DRILL_MAIL_URL    where to send email: the server POSTs
-                         { "to", "subject", "text" } there as JSON, e.g. to a
-                         Cloudflare Worker that sends it. Unset: links are
-                         printed to the log instead.
-    DRILL_MAIL_KEY    sent as "Authorization: Bearer <key>" to the mail URL
+    DRILL_DATA               directory for drill.sqlite (default: data/ next to this file)
+    PORT                     listen port (default 8080)
+    DRILL_PUBLIC_URL         where people reach this server, for links in email
+    DRILL_MAIL_URL           gets { "to", "subject", "text" } POSTed as JSON to send
+                             email; unset, links are printed to the log
+    DRILL_MAIL_KEY           sent as "Authorization: Bearer <key>" to the mail URL
     DRILL_REQUIRE_CONFIRMED  "1" to block sync until the email is confirmed
 """
 
@@ -498,8 +495,8 @@ class Handler(BaseHTTPRequestHandler):
     # Routes
 
     def sign_up(self, body: dict):
-        if not self.attempts.allow(self.client_address[0]):
-            return self.send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "too many tries. wait a bit."})
+        if self.throttled():
+            return
         email, password = clean_email(body.get("email")), clean_password(body.get("password"))
         created = self.store.create_user(email, password)
         if created is None:
@@ -509,8 +506,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_account(HTTPStatus.CREATED, user)
 
     def sign_in(self, body: dict):
-        if not self.attempts.allow(self.client_address[0]):
-            return self.send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "too many tries. wait a bit."})
+        if self.throttled():
+            return
         email = body.get("email").strip().lower() if isinstance(body.get("email"), str) else ""
         password = body.get("password") if isinstance(body.get("password"), str) else ""
         user = self.store.check_password(email, password)
@@ -526,8 +523,8 @@ class Handler(BaseHTTPRequestHandler):
     def resend(self, body: dict):
         if (user := self.signed_in()) is None:
             return
-        if not self.attempts.allow(self.client_address[0]):
-            return self.send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "too many tries. wait a bit."})
+        if self.throttled():
+            return
         if (confirm := self.store.confirm_token(user)) is not None:
             self.send_confirmation(self.store.user(user)[0], confirm)
         self.send_json(HTTPStatus.OK, {})
@@ -542,6 +539,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json(HTTPStatus.OK, {"accepted": self.store.push(user, rows)})
 
     # Helpers
+
+    def throttled(self) -> bool:
+        if self.attempts.allow(self.client_address[0]):
+            return False
+        self.send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "too many tries. wait a bit."})
+        return True
 
     def send_confirmation(self, email: str, confirm: str):
         self.mailer.send(email, "confirm your drill account",

@@ -1,13 +1,8 @@
 import SwiftUI
 
-// Drill's look, lifted from bord's "ink" prototype: paper, one ink, lots
-// of air, lowercase sentences, hand-drawn strokes that "boil" gently.
-//
-// Two themes, chosen by appearance:
-//   dark  — "ink":  pure monochrome, white ink on black. The accent is just ink.
-//   light — "teto": Kasane Teto's SV palette. Off-white paper, charcoal and
-//           greys from her outfit, and her crimson hair as the one accent —
-//           used only for progress (the ring, the heatmap, the logo).
+// Paper, one ink, hand-drawn strokes that "boil". Two themes by appearance:
+// dark is pure monochrome; light is Teto's palette, with her crimson as the
+// one accent, used only for progress (ring, heatmap, logo).
 
 public enum Ink {
     public static let paper = Color(light: 0xF2F0ED, dark: 0x121211)

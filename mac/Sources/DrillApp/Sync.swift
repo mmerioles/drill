@@ -2,13 +2,12 @@ import AppKit
 import Observation
 import DrillCore
 
-/// Your account and the sync loop (docs/SYNC.md, "Client loop"): push what
-/// changed here, then pull what changed elsewhere. Runs at launch, after each
-/// logged block, every few minutes, and when you press sync.
+/// The account and the sync loop (docs/SYNC.md, "Client loop"): push, then
+/// pull. Runs at launch, after each write, every few minutes, on return to
+/// the app, and on demand.
 ///
-/// The token is kept in UserDefaults, not the Keychain: the app is ad-hoc
-/// signed, so every update would make macOS ask for your password to let
-/// the new build read its own Keychain item.
+/// The token lives in UserDefaults, not the Keychain: the app is ad-hoc
+/// signed, so each update would prompt for a password to read the Keychain.
 @Observable @MainActor
 final class Sync {
     enum State: Equatable {
@@ -17,7 +16,7 @@ final class Sync {
 
     private(set) var state: State
     private(set) var account: Account?
-    /// True for a moment after a sync lands, for a quiet "synced".
+    /// True for a moment after a sync lands.
     private(set) var justSynced = false
     /// A self-hosted server from settings, or nil for ours.
     private(set) var customServer: String?
@@ -47,14 +46,12 @@ final class Sync {
 
     var isSignedIn: Bool { account != nil }
 
-    /// The self-hosted server from settings, or ours on Supabase.
     var backend: any SyncBackend {
         customServer.flatMap(URL.init(string:)).map { SyncAPI(server: $0) } ?? SupabaseAPI.hosted
     }
 
-    /// Points sync at a self-hosted server, or back at ours with an empty
-    /// string. Only while signed out: a token only works where it was made.
-    /// Throws a sentence fit to show.
+    /// Empty text means ours. Only while signed out: a token only works
+    /// where it was made.
     func setServer(_ text: String) throws {
         guard !isSignedIn else { throw Problem("sign out to change servers.") }
         if text.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -67,8 +64,6 @@ final class Sync {
         defaults.set(customServer, forKey: Keys.server)
     }
 
-    /// Syncs at launch, every few minutes, and whenever you come back to
-    /// the app, since it keeps running in the menu bar.
     func start() {
         guard !started else { return }
         started = true
@@ -80,8 +75,7 @@ final class Sync {
         }
     }
 
-    /// The every-few-minutes loop runs only while signed in: signed out,
-    /// there's nothing to sync and no reason to wake.
+    /// The periodic loop runs only while signed in.
     private func startLoop() {
         guard started, loop == nil, isSignedIn else { return }
         loop = Task { [weak self] in
@@ -93,29 +87,26 @@ final class Sync {
     }
 
     private func cameBack() {
-        // Not on every click back in: skip when a sync just started.
         if lastStarted.map({ $0.timeIntervalSinceNow < -20 }) ?? true { syncNow() }
     }
 
     // MARK: Account
 
-    /// An account made here whose email link hasn't been clicked yet. Lives
-    /// in memory only, password and all, just long enough to sign in by
-    /// itself once the link is clicked.
+    /// An account whose email link hasn't been clicked yet. Held in memory
+    /// only, password and all, to sign in by itself once it is.
     struct Waiting: Equatable {
         let email: String
         fileprivate let password: String
-        /// Nil when signing in found the email unconfirmed: then the only
-        /// way to tell is to try signing in again, less often.
+        /// Nil when sign-in found the email unconfirmed: then we retry sign-in.
         fileprivate let userID: String?
-        /// True for a moment once the link is clicked, for the check mark.
+        /// True for a moment once the link is clicked.
         var confirmed = false
     }
 
     private(set) var waiting: Waiting?
     private var watching: Task<Void, Never>?
 
-    // Each throws a sentence fit to show.
+    // These throw `Problem`, a sentence fit to show.
 
     func signIn(email: String, password: String) async throws {
         stopWaiting()
@@ -126,7 +117,6 @@ final class Sync {
         }
     }
 
-    /// Makes the account, then signs in, or waits for the email link.
     func createAccount(email: String, password: String) async throws {
         stopWaiting()
         switch try await attempt({ try await backend.createAccount(email: email, password: password) }) {
@@ -140,14 +130,12 @@ final class Sync {
         try await attempt { try await backend.resendLink(email: waiting.email) }
     }
 
-    /// Gives up waiting, for a wrong email or a change of mind.
     func stopWaiting() {
         watching?.cancel()
         watching = nil
         waiting = nil
     }
 
-    /// Checks every few seconds whether the link was clicked, then signs in.
     private func watch(_ start: Waiting) {
         watching?.cancel()
         waiting = start
@@ -155,7 +143,6 @@ final class Sync {
         let began = Date()
         watching = Task { [weak self] in
             while !Task.isCancelled {
-                // Quick at first, while they're likely at their inbox.
                 let quick = began.timeIntervalSinceNow > -30 * 60
                 try? await Task.sleep(for: .seconds(start.userID == nil ? 10 : quick ? 3 : 30))
                 guard !Task.isCancelled else { return }
@@ -183,10 +170,9 @@ final class Sync {
         watching = nil
     }
 
-    /// Everything already on this Mac joins the account.
+    /// Uploads everything on this Mac and pulls from the start.
     private func begin(_ account: Account) {
         save(account)
-        // Upload everything, and catch up from the start.
         defaults.removeObject(forKey: Keys.pushedAt)
         defaults.removeObject(forKey: Keys.cursor)
         state = .idle
@@ -216,13 +202,11 @@ final class Sync {
         state = .signedOut
     }
 
-    /// Signing in to an account whose email isn't confirmed yet.
     private struct Unconfirmed: Error {}
     struct Problem: Error { let message: String; init(_ m: String) { message = m } }
 
     // MARK: Syncing
 
-    /// Starts a sync unless one is already running.
     func syncNow() {
         guard running == nil, let account else { return }
         lastStarted = Date()
@@ -237,8 +221,7 @@ final class Sync {
         state = .syncing
         var token = start.token
         do {
-            // Hosted tokens last an hour: swap one that's nearly out, and
-            // once more if the server turns it down anyway.
+            // Refresh a nearly-expired token, and once more if it's rejected anyway.
             token = try await fresh(api, start, force: false)
             do {
                 try await exchange(api, token: token)
@@ -260,7 +243,6 @@ final class Sync {
         }
     }
 
-    /// A token good for a while, saved for next time.
     private func fresh(_ api: any SyncBackend, _ start: Account, force: Bool) async throws -> String {
         let current = account ?? start
         let fresh = try await api.refreshed(current, force: force)
@@ -268,7 +250,6 @@ final class Sync {
         return fresh.token
     }
 
-    /// Push what changed here, then pull what changed elsewhere.
     private func exchange(_ api: any SyncBackend, token: String) async throws {
         let mark = Date()
         let since = defaults.object(forKey: Keys.pushedAt) as? Date ?? .distantPast

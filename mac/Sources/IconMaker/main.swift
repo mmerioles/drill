@@ -2,8 +2,7 @@ import AppKit
 import InkKit
 import SwiftUI
 
-// Renders the 1024px app icon: Teto's drill in white ink on a black
-// squircle, drawn with the same InkKit glyph the app uses in its header.
+// Renders the 1024px app icon: the header's drill glyph, white on black.
 //   swift run IconMaker <out.png>
 
 struct AppIcon: View {
@@ -13,8 +12,7 @@ struct AppIcon: View {
             RoundedRectangle(cornerRadius: 185, style: .continuous)
                 .fill(Color.black)
                 .frame(width: 824, height: 824)
-            // The header logo exactly, scaled up: same glyph, same wobble,
-            // same stroke-to-size ratio (1.8 / 22).
+            // Same stroke-to-size ratio as the header logo (1.8 / 22).
             Glyph(.drill, size: Self.size, boiling: false, lineWidth: Self.size * 1.8 / 22, tint: .white)
         }
         .frame(width: 1024, height: 1024)

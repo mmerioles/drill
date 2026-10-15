@@ -1,9 +1,8 @@
 import SwiftUI
 
-// MARK: Doodle machinery
-// Every stroke is jittered by a seeded wobble, and the seed steps every
-// 0.4s — the classic hand-drawn "boil". Amplitude stays around a point so it
-// reads as pen texture in motion, not noise.
+// Every stroke is jittered by a seeded wobble whose seed steps every 0.4s:
+// the hand-drawn "boil". Amplitude stays around a point so it reads as pen
+// texture, not noise.
 
 public struct Wobble {
     public var seed: UInt64
