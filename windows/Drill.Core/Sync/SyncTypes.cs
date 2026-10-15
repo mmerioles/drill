@@ -6,20 +6,23 @@ namespace Drill.Core.Sync;
 /// <summary>
 /// Who you're signed in as. The token stands in for the password on every
 /// call after sign-in; it runs out after an hour, and the refresh token gets
-/// the next one. The email is the synthetic one Supabase keys the user by.
+/// the next one. The email is the one signed in with, and the one shown.
 /// </summary>
 public sealed record Account(string Email, string Token, string? RefreshToken = null, DateTimeOffset? ExpiresAt = null, string? Id = null)
 {
-    /// <summary>The name shown in the app: the email without its domain.</summary>
+    /// <summary>
+    /// Kept by a version that made each account a username, with a stand-in
+    /// email; the next token refresh brings the real one.
+    /// </summary>
     [JsonIgnore]
-    public string Username => SupabaseApi.UsernameOf(Email);
+    public bool IsLegacy => Email.EndsWith("@users.mmerioles.github.io", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// The Supabase user id, which names this account's store. Accounts saved
     /// before it was kept have it in their token's `sub`.
     /// </summary>
     [JsonIgnore]
-    public string UserID => Id is { Length: > 0 } id ? id : SubjectOf(Token) ?? Username;
+    public string UserID => Id is { Length: > 0 } id ? id : SubjectOf(Token) ?? Email;
 
     private static string? SubjectOf(string token)
     {
@@ -56,7 +59,7 @@ public sealed class SyncException(SyncFailure failure, string? sentence = null)
     : Exception(sentence ?? failure.ToString())
 {
     public SyncFailure Failure { get; } = failure;
-    /// <summary>For <see cref="SyncFailure.Rejected"/>: like "wrong username or password".</summary>
+    /// <summary>For <see cref="SyncFailure.Rejected"/>: like "wrong email or password".</summary>
     public string? Sentence { get; } = sentence;
 
     public static SyncException Rejected(string sentence) => new(SyncFailure.Rejected, sentence);

@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Drill.Core.Model;
 
 namespace Drill.Core.Sync;
@@ -18,27 +19,18 @@ public sealed class SupabaseApi(Uri project, string key, HttpClient? http = null
     public static readonly SupabaseApi Hosted = new(
         new Uri("https://fgqtpetuzseozttapzem.supabase.co"), "sb_publishable_WeTl_T2-z_i1ycA7KSgCyQ_9a64WoAg");
 
-    /// <summary>
-    /// Supabase wants an email per user. Accounts are a username, so each
-    /// gets one here and never sees it: a domain of ours that takes no mail.
-    /// </summary>
-    public const string Domain = "users.mmerioles.github.io";
-
     /// <summary>Tokens this close to running out are swapped before a sync.</summary>
     private static readonly TimeSpan Margin = TimeSpan.FromMinutes(5);
 
-    // Usernames
+    // Emails
 
-    public static string EmailFor(string username) => username + "@" + Domain;
+    private static readonly Regex EmailShape = new(@"^[^\s@]+@[^\s@]+\.[^\s@]+$");
 
-    public static string UsernameOf(string email) => email.Split('@')[0];
+    /// <summary>Something@something.something, at most 254 characters. Not verified.</summary>
+    public static bool IsEmail(string email) => email.Length <= 254 && EmailShape.IsMatch(email);
 
-    /// <summary>3–20 of a-z, 0-9 and _, as the database checks.</summary>
-    public static bool IsUsername(string name) =>
-        name.Length is >= 3 and <= 20 && name.All(c => c is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '_');
-
-    /// <summary>What a username field keeps as you type: lowercase, no spaces.</summary>
-    public static string TidyUsername(string text) =>
+    /// <summary>What an email field keeps as you type: lowercase, no spaces.</summary>
+    public static string TidyEmail(string text) =>
         string.Concat(text.Where(c => !char.IsWhiteSpace(c))).ToLowerInvariant();
 
     // Passwords
@@ -52,24 +44,17 @@ public sealed class SupabaseApi(Uri project, string key, HttpClient? http = null
 
     // Accounts
 
-    public Task<Account> SignIn(string username, string password, CancellationToken ct = default) =>
+    public Task<Account> SignIn(string email, string password, CancellationToken ct = default) =>
         Tokens("auth/v1/token?grant_type=password",
-               new JsonObject { ["email"] = EmailFor(username), ["password"] = password }, ct);
+               new JsonObject { ["email"] = TidyEmail(email), ["password"] = password }, ct);
 
-    /// <summary>
-    /// The username rides along as metadata; a trigger makes the profile from
-    /// it. Confirmation is off, so the reply carries tokens: signed in at once.
-    /// </summary>
-    public Task<Account> CreateAccount(string username, string password, CancellationToken ct = default) =>
-        Tokens("auth/v1/signup", new JsonObject
-        {
-            ["email"] = EmailFor(username), ["password"] = password,
-            ["data"] = new JsonObject { ["username"] = username },
-        }, ct);
+    /// <summary>Confirmation is off, so the reply carries tokens: signed in at once.</summary>
+    public Task<Account> CreateAccount(string email, string password, CancellationToken ct = default) =>
+        Tokens("auth/v1/signup", new JsonObject { ["email"] = TidyEmail(email), ["password"] = password }, ct);
 
-    /// <summary>The live check while typing a name. False for one failing the rule too.</summary>
-    public async Task<bool> UsernameAvailable(string name, CancellationToken ct = default) =>
-        (await Call("rest/v1/rpc/username_available", null, new JsonObject { ["name"] = name }, ct)).Trim() == "true";
+    /// <summary>The live check while typing an email on the create form.</summary>
+    public async Task<bool> EmailAvailable(string email, CancellationToken ct = default) =>
+        (await Call("rest/v1/rpc/email_available", null, new JsonObject { ["email"] = TidyEmail(email) }, ct)).Trim() == "true";
 
     public async Task<Account> Refreshed(Account account, bool force, CancellationToken ct = default)
     {
@@ -77,7 +62,9 @@ public sealed class SupabaseApi(Uri project, string key, HttpClient? http = null
         if (!force && account.ExpiresAt is { } expires && expires - DateTimeOffset.UtcNow > Margin) return account;
         try
         {
-            return await Tokens("auth/v1/token?grant_type=refresh_token", new JsonObject { ["refresh_token"] = refresh }, ct);
+            // The email comes from the server each time, so an account kept by an older version picks up its real one.
+            var fresh = await Tokens("auth/v1/token?grant_type=refresh_token", new JsonObject { ["refresh_token"] = refresh }, ct);
+            return fresh with { Email = fresh.Email is { Length: > 0 } ? fresh.Email : account.Email, Id = fresh.Id ?? account.Id };
         }
         catch (SyncException e) when (e.Failure == SyncFailure.Rejected)
         {
@@ -186,7 +173,7 @@ public sealed class SupabaseApi(Uri project, string key, HttpClient? http = null
 
             var code = ErrorCode(text);
             if ((status == 401 && token is not null) || (status == 403 && code == "28000")) throw new SyncException(SyncFailure.SignedOut);
-            // The profile trigger refusing a sign-up: a name taken in a race, or one that fails the rule.
+            // Auth's database refusing a sign-up: the email taken in a race.
             if (text.Contains("Database error")) throw SyncException.Rejected(Taken);
             if (code is not null)
             {
@@ -199,19 +186,19 @@ public sealed class SupabaseApi(Uri project, string key, HttpClient? http = null
         }
     }
 
-    private const string Taken = "that username is taken";
+    private const string Taken = "an account with this email already exists";
     private const string TooMany = "too many tries. give it a minute.";
 
     /// <summary>Supabase's error codes, in the apps' words.</summary>
     private static readonly Dictionary<string, string> Sentences = new()
     {
-        ["invalid_credentials"] = "wrong username or password",
-        ["invalid_grant"] = "wrong username or password",
+        ["invalid_credentials"] = "wrong email or password",
+        ["invalid_grant"] = "wrong email or password",
         ["user_already_exists"] = Taken,
         ["email_exists"] = Taken,
         ["weak_password"] = "use at least 6 characters",
-        ["email_address_invalid"] = "that username doesn't look right",
-        ["validation_failed"] = "that username doesn't look right",
+        ["email_address_invalid"] = "that email doesn't look right",
+        ["validation_failed"] = "that email doesn't look right",
         ["signup_disabled"] = "sign-ups are closed for now",
         ["over_request_rate_limit"] = TooMany,
         ["22023"] = "couldn't sync. try updating the app.",

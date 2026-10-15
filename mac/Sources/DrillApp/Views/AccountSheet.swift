@@ -15,7 +15,7 @@ struct AccountSheet: View {
     }
 }
 
-/// Sign in or make an account: a username and a password. In the settings
+/// Sign in or make an account: an email and a password. In the settings
 /// sheet and on the welcome screen; opens on sign in.
 struct AccountForm: View {
     /// For --render, which can't type: a filled-in create form.
@@ -24,7 +24,7 @@ struct AccountForm: View {
     @Environment(Sync.self) private var sync
 
     @State private var creating: Bool
-    @State private var username: String
+    @State private var email: String
     @State private var password: String
     @State private var confirm: String
     @State private var check: Check
@@ -38,8 +38,8 @@ struct AccountForm: View {
     private let titled: Bool
     private let cancel: (() -> Void)?
     private let done: () -> Void
-    private enum Field { case username, password, confirm }
-    /// What the live check last said about the name in the field.
+    private enum Field { case email, password, confirm }
+    /// What the live check last said about the email in the field.
     private enum Check: Equatable { case none, checking, available, taken }
 
     init(preview: Preview = .none, titled: Bool, cancel: (() -> Void)?, done: @escaping () -> Void) {
@@ -49,7 +49,7 @@ struct AccountForm: View {
         self.done = done
         let filled = preview != .none
         _creating = State(initialValue: filled)
-        _username = State(initialValue: filled ? "teto" : "")
+        _email = State(initialValue: filled ? "teto@example.com" : "")
         _password = State(initialValue: filled ? "kasane-0401" : "")
         _confirm = State(initialValue: filled ? "kasane-0401" : "")
         _check = State(initialValue: preview == .available ? .available : preview == .taken ? .taken : .none)
@@ -64,10 +64,10 @@ struct AccountForm: View {
             }
 
             fields {
-                row(mark: usernameMark, meaning: usernameProblem) {
-                    TextField("username", text: $username)
-                        .focused($focused, equals: .username)
-                        .textContentType(.username)
+                row(mark: emailMark, meaning: emailProblem) {
+                    TextField("email", text: $email)
+                        .focused($focused, equals: .email)
+                        .textContentType(creating ? .emailAddress : .username)
                         .autocorrectionDisabled()
                 }
                 Divider().overlay(Ink.ghost)
@@ -116,40 +116,40 @@ struct AccountForm: View {
             }
         }
         .textFieldStyle(.plain)
-        .onAppear { focused = .username }
-        .onChange(of: username) { _, text in
-            let clean = Username.clean(text)
-            if clean != text { username = clean } else { recheck() }
+        .onAppear { focused = .email }
+        .onChange(of: email) { _, text in
+            let clean = Email.clean(text)
+            if clean != text { email = clean } else { recheck() }
         }
         .onChange(of: creating) { _, _ in recheck() }
-        .onChange(of: [username, password, confirm]) { _, _ in problem = nil }
+        .onChange(of: [email, password, confirm]) { _, _ in problem = nil }
     }
 
     // MARK: The live check
 
-    /// 300 ms after the last keystroke, asks whether the name is free.
+    /// 300 ms after the last keystroke, asks whether the email is free.
     /// Typing again drops the question in flight.
     private func recheck() {
         checking?.cancel()
-        guard creating, preview == .none, Username.isValid(username) else {
+        guard creating, preview == .none, Email.isValid(email) else {
             check = .none
             return
         }
         check = .checking
-        let name = username
+        let asked = email
         checking = Task {
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
-            let free = try? await sync.usernameAvailable(name)
-            guard !Task.isCancelled, username == name else { return }
+            let free = try? await sync.emailAvailable(asked)
+            guard !Task.isCancelled, email == asked else { return }
             check = free.map { $0 ? .available : .taken } ?? .none
         }
     }
 
-    private var usernameMark: StatusMark.Status {
+    private var emailMark: StatusMark.Status {
         guard creating else { return .none }
         return switch check {
-        case .none: !username.isEmpty && !Username.isValid(username) ? .failed : .none
+        case .none: !email.isEmpty && !Email.isValid(email) ? .failed : .none
         case .checking: .working
         case .available: .done
         case .taken: .failed
@@ -157,10 +157,10 @@ struct AccountForm: View {
     }
 
     /// What the red cross means, for hover and VoiceOver; the cross alone says it on screen.
-    private var usernameProblem: String? {
-        guard creating, !username.isEmpty else { return nil }
-        if !Username.isValid(username) { return Username.hint }
-        return check == .taken ? "taken" : nil
+    private var emailProblem: String? {
+        guard creating, !email.isEmpty else { return nil }
+        if !Email.isValid(email) { return Email.hint }
+        return check == .taken ? "already has an account" : nil
     }
 
     private var passwordMark: StatusMark.Status {
@@ -175,17 +175,17 @@ struct AccountForm: View {
 
     private var ready: Bool {
         if creating {
-            return usernameMark == .done && passwordMark == .done && confirmMark == .done
+            return emailMark == .done && passwordMark == .done && confirmMark == .done
         }
-        return !username.isEmpty && !password.isEmpty
+        return !email.isEmpty && !password.isEmpty
     }
 
     private func submit() {
         run {
             if creating {
-                try await sync.createAccount(username: username, password: password, staySignedIn: staySignedIn)
+                try await sync.createAccount(email: email, password: password, staySignedIn: staySignedIn)
             } else {
-                try await sync.signIn(username: username, password: password, staySignedIn: staySignedIn)
+                try await sync.signIn(email: email, password: password, staySignedIn: staySignedIn)
             }
             done()
         }

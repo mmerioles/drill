@@ -80,6 +80,7 @@ public sealed class Sync : Observable
         _loop.IsEnabled = IsSignedIn && AutoSync;
         PropertyChanged += (_, e) => { if (e.PropertyName == nameof(IsSignedIn)) _loop.IsEnabled = IsSignedIn && AutoSync; };
         if (AutoSync) SyncNow();
+        else if (Account is { IsLegacy: true } legacy) _ = Relabel(legacy);
         Application.Current.Activated += (_, _) => CameBack();
     }
 
@@ -113,15 +114,15 @@ public sealed class Sync : Observable
     public bool IsEphemeral => Account is not null && _prefs.Get<bool?>(Keys.Ephemeral) == true;
 
     /// <summary>An existing account: its own store (empty unless kept from before), caught up from the start.</summary>
-    public async Task SignIn(string username, string password, bool stay = true) =>
-        await Begin(await Attempt(() => Api.SignIn(username, password)), stay);
+    public async Task SignIn(string email, string password, bool stay = true) =>
+        await Begin(await Attempt(() => Api.SignIn(email, password)), stay);
 
     /// <summary>Makes the account and signs in, starting empty; confirmation is off, so there's nothing to wait for.</summary>
-    public async Task CreateAccount(string username, string password, bool stay = true) =>
-        await Begin(await Attempt(() => Api.CreateAccount(username, password)), stay);
+    public async Task CreateAccount(string email, string password, bool stay = true) =>
+        await Begin(await Attempt(() => Api.CreateAccount(email, password)), stay);
 
-    /// <summary>The live check while typing a name on the create form.</summary>
-    public Task<bool> UsernameAvailable(string name, CancellationToken ct) => Api.UsernameAvailable(name, ct);
+    /// <summary>The live check while typing an email on the create form.</summary>
+    public Task<bool> EmailAvailable(string email, CancellationToken ct) => Api.EmailAvailable(email, ct);
 
     /// <summary>Switches the model to the account's own store: nothing from another account, or from before, comes along.</summary>
     private async Task Begin(Account account, bool stay)
@@ -228,8 +229,9 @@ public sealed class Sync : Observable
         try
         {
             // Tokens last an hour: swap one that's nearly out, and once more
-            // if the server turns it down anyway.
-            var token = await Fresh(start, force: false);
+            // if the server turns it down anyway. An account kept by an older
+            // version swaps at once, for its real email.
+            var token = await Fresh(start, force: (Account ?? start).IsLegacy);
             try
             {
                 await Exchange(token, store, id);
@@ -244,7 +246,7 @@ public sealed class Sync : Observable
         }
         catch (SyncException e) when (e.Failure == SyncFailure.SignedOut)
         {
-            if (Account?.Email != start.Email) return;
+            if (Account?.UserID != start.UserID) return;
             // The server ended the session: back to the welcome. The account's
             // store stays for signing in again, unless it wasn't to be kept.
             var ephemeral = IsEphemeral;
@@ -254,7 +256,7 @@ public sealed class Sync : Observable
         }
         catch (Exception)
         {
-            if (Account?.Email == start.Email) State = SyncState.Offline;
+            if (Account?.UserID == start.UserID) State = SyncState.Offline;
         }
         finally
         {
@@ -269,8 +271,15 @@ public sealed class Sync : Observable
     {
         var current = Account ?? start;
         var fresh = await Api.Refreshed(current, force);
-        if (fresh != current && Account?.Email == start.Email) Save(fresh);
+        if (fresh != current && Account?.UserID == start.UserID) Save(fresh);
         return fresh.Token;
+    }
+
+    /// <summary>With auto sync off, a launch with an account kept by an older version still refreshes once, for its real email.</summary>
+    private async Task Relabel(Account legacy)
+    {
+        try { await Fresh(legacy, force: true); }
+        catch (Exception) { } // offline, or the token's gone: the next sync deals with it
     }
 
     /// <summary>Push what changed here, then pull what changed elsewhere.</summary>

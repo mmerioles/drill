@@ -42,6 +42,10 @@ function userIDOf(account) {
   } catch { return null; }
 }
 
+/** Stored by the version with usernames: no email, or a made-up one. Its
+ *  next token refresh brings the real email. */
+const legacy = (account) => !!account && (!account.email || account.email.endsWith("@users.mmerioles.github.io"));
+
 /** Once: an account signed in before stores were split takes the device's
  *  sessions, push state and all, so nothing uploads again. */
 function splitStores() {
@@ -117,7 +121,7 @@ export class Store extends EventTarget {
     });
   }
 
-  /** { username, userID, token, refreshToken, expiresAt, ephemeral? } once
+  /** { email, userID, token, refreshToken, expiresAt, ephemeral? } once
    *  signed in, else null. This tab's ephemeral account comes first. */
   get account() {
     for (const area of areas()) {
@@ -153,9 +157,9 @@ export class Store extends EventTarget {
 
   /** Signs in, or creates the account when `create` is set. Without `stay`,
    *  the account and its sessions last as long as the tab. Throws an Error
-   *  whose message is fit to show, like "wrong username or password". */
-  async signIn(username, password, create = false, stay = true) {
-    const account = await (create ? cloud.signUp(username, password) : cloud.signIn(username, password));
+   *  whose message is fit to show, like "wrong email or password". */
+  async signIn(email, password, create = false, stay = true) {
+    const account = await (create ? cloud.signUp(email, password) : cloud.signIn(email, password));
     if (!stay) account.ephemeral = true;
     account.userID = userIDOf(account);
     // Nothing crosses between accounts: each has only its own and what it pulls.
@@ -166,6 +170,31 @@ export class Store extends EventTarget {
     // A sync for the store before this one may still be finishing.
     if (this.syncing) await this.syncing;
     await this.sync();
+  }
+
+  /** On launch, an account from before emails refreshes once for its email.
+   *  It stays signed in whatever the answer. */
+  renewLegacy() {
+    if (this.offline || !legacy(this.account) || !navigator.onLine) return;
+    this.syncing ??= this.#renew().finally(() => { this.syncing = null; });
+  }
+
+  async #renew() {
+    const account = this.account, generation = this.generation;
+    try {
+      const fresh = await cloud.refreshed(account, true);
+      if (this.generation !== generation) return;
+      this.#saveAccount(this.#renewed(account, fresh));
+      this.#emit();
+    } catch {}
+  }
+
+  /** The account after a refresh: the server's email, the same keeping. */
+  #renewed(account, fresh) {
+    return {
+      ...fresh, email: fresh.email ?? account.email ?? null, userID: userIDOf(fresh),
+      ...(account.ephemeral && { ephemeral: true }),
+    };
   }
 
   /** Pushes what's left (up to 10s), then forgets the account and its
@@ -289,7 +318,7 @@ export class Store extends EventTarget {
       const fresh = await cloud.refreshed(account, force);
       if (!current()) throw stale();
       if (fresh !== account) {
-        account = { ...fresh, userID: userIDOf(fresh), ...(account.ephemeral && { ephemeral: true }) };
+        account = this.#renewed(account, fresh);
         this.#saveAccount(account);
       }
     };
@@ -310,7 +339,7 @@ export class Store extends EventTarget {
     this.#setState("syncing");
 
     try {
-      await refresh(false);
+      await refresh(legacy(account));
 
       const dirty = read(area, keys.dirty, []);
       for (let i = 0; i < dirty.length; i += 200) {

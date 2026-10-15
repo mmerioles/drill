@@ -1,18 +1,19 @@
 import Foundation
 
-/// Account names: 3–20 of a-z, 0-9 and _, the same rule as the database.
-public enum Username {
-    public static let hint = "3–20 letters, digits or _"
+/// Account emails: something@somewhere.tld, at most 254 characters.
+public enum Email {
+    public static let hint = "not an email address"
 
     /// What the field keeps as you type: lowercase, no spaces.
     public static func clean(_ text: String) -> String {
         text.lowercased().filter { !$0.isWhitespace }
     }
 
-    public static func isValid(_ name: String) -> Bool {
-        (3...20).contains(name.count)
-            && name.allSatisfy { $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "_") }
+    public static func isValid(_ email: String) -> Bool {
+        email.count <= 254 && email.wholeMatch(of: shape) != nil
     }
+
+    nonisolated(unsafe) private static let shape = try! Regex(#"[^\s@]+@[^\s@]+\.[^\s@]+"#)
 }
 
 /// Passwords: 6+ characters (Supabase's floor) and at most 72 UTF-8 bytes (bcrypt's limit).

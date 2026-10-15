@@ -27,15 +27,15 @@ import androidx.compose.ui.unit.sp
 import io.github.mmerioles.drill.AppModel
 import io.github.mmerioles.drill.data.Sync
 import io.github.mmerioles.drill.core.Password
-import io.github.mmerioles.drill.core.Username
+import io.github.mmerioles.drill.core.Email
 import io.github.mmerioles.drill.ink.LocalPalette
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** What the live check knows about the username typed so far. */
+/** What the live check knows about the email typed so far. */
 private enum class Check { None, Checking, Available, Taken }
 
-/** Sign in or make an account, with a username and a password. */
+/** Sign in or make an account, with an email and a password. */
 @Composable
 fun AccountSheet(model: AppModel, close: () -> Unit) {
     val sheet = rememberSheet(close)
@@ -61,7 +61,7 @@ fun AccountForm(
     val ink = LocalPalette.current
     val scope = rememberCoroutineScope()
     // The passwords are never put in saved state.
-    var username by rememberSaveable { mutableStateOf("") }
+    var email by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
@@ -71,17 +71,17 @@ fun AccountForm(
     // Switching forms hides the marks until the next edit.
     var marks by remember { mutableStateOf(true) }
 
-    val valid = Username.valid(username)
+    val valid = Email.isValid(email)
 
     // 300 ms after the last keystroke, ask; a new keystroke drops the old ask.
-    LaunchedEffect(username, creating) {
+    LaunchedEffect(email, creating) {
         if (!creating || !valid) {
             check = Check.None
             return@LaunchedEffect
         }
         check = Check.Checking
         delay(300)
-        check = when (sync.usernameAvailable(username)) {
+        check = when (sync.emailAvailable(email)) {
             true -> Check.Available
             false -> Check.Taken
             null -> Check.None
@@ -104,13 +104,13 @@ fun AccountForm(
     val ready = if (creating) {
         check == Check.Available && passwordOk && confirmOk
     } else {
-        username.isNotEmpty() && password.isNotEmpty()
+        email.isNotEmpty() && password.isNotEmpty()
     }
 
     fun submit() {
         if (!ready) return
         working {
-            val problem = if (creating) sync.createAccount(username, password, stay) else sync.signIn(username, password, stay)
+            val problem = if (creating) sync.createAccount(email, password, stay) else sync.signIn(email, password, stay)
             if (problem == null) done()
             problem
         }
@@ -118,24 +118,24 @@ fun AccountForm(
 
     Column(modifier) {
         // The cross alone says it on screen; the words are for TalkBack.
-        val usernameProblem = when {
-            username.isEmpty() -> null
-            !valid -> "3–20 letters, digits or _"
-            check == Check.Taken -> "taken"
+        val emailProblem = when {
+            email.isEmpty() -> null
+            !valid -> "not an email address"
+            check == Check.Taken -> "already has an account"
             else -> null
         }
         Marked(
             creating && marks,
             when {
-                usernameProblem != null -> Mark.Failed
+                emailProblem != null -> Mark.Failed
                 check == Check.Checking -> Mark.Working
                 check == Check.Available -> Mark.Done
                 else -> Mark.None
             },
-            usernameProblem ?: if (check == Check.Available) "available" else null,
+            emailProblem ?: if (check == Check.Available) "available" else null,
         ) {
-            Field(username, { username = Username.clean(it); error = ""; marks = true }, it,
-                placeholder = "username", keyboard = KeyboardType.Ascii, weight = FontWeight.Normal, label = "username")
+            Field(email, { email = Email.clean(it); error = ""; marks = true }, it,
+                placeholder = "email", keyboard = KeyboardType.Email, weight = FontWeight.Normal, label = "email")
         }
         Marked(
             creating && marks,

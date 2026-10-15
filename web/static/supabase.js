@@ -6,16 +6,11 @@
 export const PROJECT = "https://fgqtpetuzseozttapzem.supabase.co";
 export const KEY = "sb_publishable_WeTl_T2-z_i1ycA7KSgCyQ_9a64WoAg";
 
-/** Supabase wants an email; accounts are a username, so one is derived and
- *  never shown. The domain is ours and can't receive mail. */
-export const EMAIL_DOMAIN = "users.mmerioles.github.io";
-export const USERNAME = /^[a-z0-9_]{3,20}$/;
+export const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export const syntheticEmail = (username) => `${username}@${EMAIL_DOMAIN}`;
-/** The account's email with the domain stripped. */
-export const usernameOf = (email) => (email ?? "").split("@")[0];
 /** What the field keeps as you type: lowercase, no spaces. */
-export const cleanUsername = (text) => text.toLowerCase().replace(/\s+/g, "");
+export const cleanEmail = (text) => text.toLowerCase().replace(/\s+/g, "");
+export const validEmail = (email) => email.length <= 254 && EMAIL.test(email);
 
 /** Tokens this close to running out are swapped before a sync. */
 const MARGIN = 5 * 60_000;
@@ -25,10 +20,11 @@ const UNREACHABLE = "can't connect. try again in a bit.";
 
 /** Supabase's error codes, in the app's words. */
 const SENTENCES = {
-  invalid_credentials: "wrong username or password",
-  invalid_grant: "wrong username or password",
-  user_already_exists: "that username is taken",
-  email_exists: "that username is taken",
+  invalid_credentials: "wrong email or password",
+  invalid_grant: "wrong email or password",
+  user_already_exists: "an account with this email already exists",
+  email_exists: "an account with this email already exists",
+  email_address_invalid: "that email doesn't look right",
   weak_password: "use at least 6 characters",
   signup_disabled: "sign-ups are closed for now",
   over_request_rate_limit: TOO_MANY,
@@ -43,18 +39,16 @@ function problem(message, flags = {}) {
 
 // MARK: Accounts
 
-/** { username, userID, token, refreshToken, expiresAt } */
-export function signIn(username, password) {
-  return tokens("auth/v1/token?grant_type=password",
-                { email: syntheticEmail(username), password });
+/** { email, userID, token, refreshToken, expiresAt } */
+export function signIn(email, password) {
+  return tokens("auth/v1/token?grant_type=password", { email, password });
 }
 
-/** With confirmation off the reply carries tokens, like a sign-in. The
- *  profile trigger rejects a taken or bad name as a database error. */
-export async function signUp(username, password) {
+/** With confirmation off the reply carries tokens, like a sign-in. A taken
+ *  email can come back as a database error. */
+export async function signUp(email, password) {
   try {
-    return await tokens("auth/v1/signup",
-                        { email: syntheticEmail(username), password, data: { username } });
+    return await tokens("auth/v1/signup", { email, password });
   } catch (e) {
     if (/database error/i.test(e.detail ?? "")) throw problem(SENTENCES.user_already_exists);
     throw e;
@@ -79,9 +73,9 @@ export function signOut(account) {
   return call("auth/v1/logout?scope=local", {}, account.token).catch(() => {});
 }
 
-/** The live check while someone types a username. Anyone may ask. */
-export async function usernameAvailable(name) {
-  const body = await call("rest/v1/rpc/username_available", { name });
+/** The live check while someone types an email. Anyone may ask. */
+export async function emailAvailable(email) {
+  const body = await call("rest/v1/rpc/email_available", { email });
   return body === true;
 }
 
@@ -109,7 +103,7 @@ async function tokens(path, fields) {
     throw problem(UNREACHABLE, { unreachable: true });
   }
   return {
-    username: usernameOf(t.user?.email),
+    email: t.user?.email ?? null,
     userID: t.user?.id ?? null,
     token: t.access_token,
     refreshToken: t.refresh_token,

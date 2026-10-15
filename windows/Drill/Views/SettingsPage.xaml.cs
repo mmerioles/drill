@@ -114,7 +114,7 @@ public partial class SettingsPage : UserControl
     private void ShowAccount()
     {
         var sync = _shell.Sync;
-        AccountName.Text = sync.Account?.Username ?? "sync";
+        AccountName.Text = sync.Account?.Email ?? "sync";
         AccountButton.Content = sync.IsSignedIn ? "sign out" : "sign in";
         AccountNote.Text = sync.State switch
         {

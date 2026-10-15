@@ -7,7 +7,7 @@ import { VIDEOS, markWatched, today as inspoToday, watched, watchedBefore } from
 import { SAMPLE_TAGS, sampleYear } from "./sample.js";
 import { chime, wakeAudio } from "./sound.js";
 import { Store } from "./store.js";
-import { USERNAME, cleanUsername, usernameAvailable } from "./supabase.js";
+import { cleanEmail, validEmail, emailAvailable } from "./supabase.js";
 
 const $ = (id) => document.getElementById(id);
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
@@ -542,7 +542,7 @@ function renderSync() {
   $("sync").hidden = !account || state === "syncing" || store.unpushed() === 0;
   $("sync").textContent = state === "offline" ? "offline" : "sync";
   $("auto-sync-row").hidden = !account;
-  $("account-line").textContent = account?.username ?? "sync";
+  $("account-line").textContent = account?.email ?? account?.username ?? "sync";
   $("account-action").textContent = account ? "sign out" : "sign in";
   $("sync-note").textContent = {
     signedOut: "sign in to sync across devices.",
@@ -570,7 +570,7 @@ function resetAccount(create) {
   clearTimeout(checkTimer);
   $("account-form").reset();
   renderAccount();
-  $("username").focus();
+  $("email").focus();
   // Autofill can fill the fields without an input event (Safari): look again.
   requestAnimationFrame(() => renderAccount());
 }
@@ -615,31 +615,22 @@ async function signOut() {
   if (!done && store.account) $("unsynced").showModal();
 }
 
-const username = () => $("username").value;
-const validName = () => USERNAME.test(username());
+/** The email as used: trimmed and lowercased. The field itself is left as
+ *  typed, since an email field can't keep the caret if its text is rewritten. */
+const email = () => cleanEmail($("email").value);
 
-/** Lowercases and drops spaces as you type, keeping the caret in place. */
-function tidyUsername() {
-  const field = $("username"), was = field.value, clean = cleanUsername(was);
-  if (clean === was) return;
-  const at = field.selectionStart ?? was.length;
-  const caret = cleanUsername(was.slice(0, at)).length;
-  field.value = clean;
-  field.setSelectionRange(caret, caret);
-}
-
-/** 300ms after the last keystroke on the create form, asks whether the name
- *  is free. A reply for a name no longer in the field is ignored. */
+/** 300ms after the last keystroke on the create form, asks whether the email
+ *  is free. A reply for an email no longer in the field is ignored. */
 function scheduleCheck() {
   clearTimeout(checkTimer);
-  const name = username();
-  if (!creating || !validName()) { availability = null; return; }
+  const name = email();
+  if (!creating || !validEmail(name)) { availability = null; return; }
   if (availability?.name === name) return;
   availability = { name, state: "checking" };
   checkTimer = setTimeout(async () => {
     let state = null; // no answer: the mark clears, and "create" waits for the next try
-    try { state = (await usernameAvailable(name)) ? "available" : "taken"; } catch {}
-    if (username() !== name || !creating) return;
+    try { state = (await emailAvailable(name)) ? "available" : "taken"; } catch {}
+    if (email() !== name || !creating) return;
     availability = state && { name, state };
     renderAccount();
   }, 300);
@@ -652,14 +643,14 @@ const goodPassword = (p) => p.length >= 6 && new TextEncoder().encode(p).length 
 const touched = new Set();
 
 function renderAccount() {
-  const name = username(), password = $("password").value, confirm = $("confirm").value;
+  const name = email(), password = $("password").value, confirm = $("confirm").value;
   const state = creating && availability?.name === name ? availability.state : null;
   const shows = (id) => creating && touched.has(id);
   // Each mark: null (none), "checking", "ok" or "bad", with words for screen readers.
   const marks = {
-    username: !shows("username") || !name ? [null, ""]
-      : !validName() ? ["bad", "3–20 letters, digits or _"]
-      : state === "taken" ? ["bad", "taken"]
+    email: !shows("email") || !name ? [null, ""]
+      : !validEmail(name) ? ["bad", "not an email address"]
+      : state === "taken" ? ["bad", "already has an account"]
       : state === "available" ? ["ok", "available"]
       : [state, ""],
     password: !shows("password") || !password ? [null, ""]
@@ -674,6 +665,7 @@ function renderAccount() {
   $("account-submit").textContent = creating ? "create account" : "sign in";
   $("account-submit").disabled = !ready || working;
   $("account-switch").textContent = creating ? "have an account?" : "new here?";
+  $("email").autocomplete = creating ? "email" : "username";
   $("password").autocomplete = creating ? "new-password" : "current-password";
   $("confirm-field").hidden = !creating;
   $("account-error").textContent = problem;
@@ -713,7 +705,7 @@ function submitAccount(e) {
   renderAccount(); // autofilled fields may not have said so yet
   if ($("account-submit").disabled) return;
   run(async () => {
-    await store.signIn(username(), $("password").value, creating, $("stay").checked);
+    await store.signIn(email(), $("password").value, creating, $("stay").checked);
     hideWelcome();
     $("account").close();
   });
@@ -989,7 +981,7 @@ $("account-form").addEventListener("submit", submitAccount);
 $("account-form").addEventListener("input", (e) => {
   touched.add(e.target.id);
   problem = "";
-  if (e.target.id === "username") { tidyUsername(); scheduleCheck(); }
+  if (e.target.id === "email") scheduleCheck();
   renderAccount();
 });
 $("account-form").addEventListener("change", () => renderAccount());
@@ -1080,6 +1072,7 @@ renderSync();
 scheduleMidnight();
 if (!demo && !store.account) showWelcome();
 if (!demo && settings.autoSync) store.sync();
+else if (!demo) store.renewLegacy();
 // Opened by a banner's start button when no tab was open.
 const startParam = new URLSearchParams(location.search).get("start");
 if (startParam) {

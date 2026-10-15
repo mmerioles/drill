@@ -69,8 +69,8 @@ internal static class Render
                 return new InkFrame(new SettingsPage(shell), minimizable: false);
             });
             Shot($"account-{t}", () => AccountScreen(theme, _ => { }));
-            Shot($"account-{t}-available", () => AccountScreen(theme, d => d.Pretend("teto", available: true)));
-            Shot($"account-{t}-taken", () => AccountScreen(theme, d => d.Pretend("miku", available: false)));
+            Shot($"account-{t}-available", () => AccountScreen(theme, d => d.Pretend("teto@example.com", available: true)));
+            Shot($"account-{t}-taken", () => AccountScreen(theme, d => d.Pretend("miku@example.com", available: false)));
             Shot($"inspo-{t}-today", () => { _ = new Demo(theme); return new InkFrame(new InspoPage(Watched()), minimizable: false); });
             Shot($"inspo-{t}-all", () =>
             {

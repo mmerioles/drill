@@ -10,14 +10,14 @@ using Drill.Services;
 namespace Drill.Views;
 
 /// <summary>
-/// Sign in, or make an account, as AccountSheet.swift: a username and a
-/// password. On the create form each field gets a mark as you type (the name
+/// Sign in, or make an account, as AccountSheet.swift: an email and a
+/// password. On the create form each field gets a mark as you type (the email
 /// checked 300ms after the last keystroke); the password is typed twice. In
 /// the account dialog, and inline on the welcome; both open on sign in.
 /// </summary>
 public partial class AccountForm : UserControl
 {
-    /// <summary>Where the username check stands.</summary>
+    /// <summary>Where the email check stands.</summary>
     private enum Check { None, Rule, Checking, Available, Taken, Unknown }
 
     private readonly Sync _sync;
@@ -47,19 +47,19 @@ public partial class AccountForm : UserControl
         }
         _rest =
         [
-            Underline(Username, UsernameLine, () => "CardLine"),
+            Underline(Email, EmailLine, () => "CardLine"),
             Underline(Password, PasswordLine, () => _creating ? "CardLine" : null),
             Underline(Confirm, ConfirmLine, () => null),
         ];
-        Username.TextChanged += (_, _) => { SetProblem(null); OnUsername(); };
+        Email.TextChanged += (_, _) => { SetProblem(null); OnEmail(); };
         Password.PasswordChanged += (_, _) => { SetProblem(null); PasswordHint.Visibility = HintFor(Password.Password); ShowPasswords(); };
         Confirm.PasswordChanged += (_, _) => { SetProblem(null); ConfirmHint.Visibility = HintFor(Confirm.Password); ShowPasswords(); };
-        _debounce.Tick += (_, _) => _ = CheckUsername();
+        _debounce.Tick += (_, _) => _ = CheckEmail();
         Unloaded += (_, _) => _debounce.Stop();
         Loaded += (_, _) =>
         {
             if (_check == Check.Checking) _debounce.Start(); // Loaded can come twice
-            Keyboard.Focus(Username);
+            Keyboard.Focus(Email);
         };
         Show();
     }
@@ -89,26 +89,26 @@ public partial class AccountForm : UserControl
         Primary.Content = _creating ? "create account" : "sign in";
         ConfirmRow.Visibility = _creating ? Visibility.Visible : Visibility.Collapsed;
         foreach (var rest in _rest) rest();
-        OnUsername();
+        OnEmail();
         ShowPasswords();
     }
 
-    // The username, lowercased as you type, and checked on the create form.
+    // The email, lowercased as you type, and checked on the create form.
 
-    private void OnUsername()
+    private void OnEmail()
     {
-        var tidy = SupabaseApi.TidyUsername(Username.Text);
-        if (tidy != Username.Text)
+        var tidy = SupabaseApi.TidyEmail(Email.Text);
+        if (tidy != Email.Text)
         {
-            Username.Text = tidy; // comes back through here
-            Username.CaretIndex = tidy.Length;
+            Email.Text = tidy; // comes back through here
+            Email.CaretIndex = tidy.Length;
             return;
         }
-        UsernameHint.Visibility = HintFor(tidy);
+        EmailHint.Visibility = HintFor(tidy);
         _checking?.Cancel();
         _debounce.Stop();
         if (!_creating || tidy.Length == 0) ShowCheck(Check.None);
-        else if (!SupabaseApi.IsUsername(tidy)) ShowCheck(Check.Rule);
+        else if (!SupabaseApi.IsEmail(tidy)) ShowCheck(Check.Rule);
         else
         {
             ShowCheck(Check.Checking);
@@ -116,15 +116,15 @@ public partial class AccountForm : UserControl
         }
     }
 
-    /// <summary>300ms after the last keystroke: one call, dropped if the name changes meanwhile.</summary>
-    private async Task CheckUsername()
+    /// <summary>300ms after the last keystroke: one call, dropped if the email changes meanwhile.</summary>
+    private async Task CheckEmail()
     {
         _debounce.Stop();
         var cts = new CancellationTokenSource();
         _checking = cts;
         try
         {
-            var free = await _sync.UsernameAvailable(Username.Text, cts.Token);
+            var free = await _sync.EmailAvailable(Email.Text, cts.Token);
             if (cts.IsCancellationRequested) return;
             ShowCheck(free ? Check.Available : Check.Taken);
         }
@@ -138,7 +138,7 @@ public partial class AccountForm : UserControl
     private void ShowCheck(Check check)
     {
         _check = check;
-        UsernameMark.Status = check switch
+        EmailMark.Status = check switch
         {
             Check.Checking => StatusMark.Kind.Working,
             Check.Available => StatusMark.Kind.Done,
@@ -148,13 +148,13 @@ public partial class AccountForm : UserControl
         // The cross alone says it on screen; the words are for hover and screen readers.
         string? problem = check switch
         {
-            Check.Rule => "3–20 letters, digits or _",
-            Check.Taken => "taken",
+            Check.Rule => "not an email address",
+            Check.Taken => "already has an account",
             Check.Unknown => "can't check right now.",
             _ => null,
         };
-        UsernameMark.ToolTip = problem;
-        AutomationProperties.SetHelpText(Username, problem ?? "");
+        EmailMark.ToolTip = problem;
+        AutomationProperties.SetHelpText(Email, problem ?? "");
         ShowReady();
     }
 
@@ -186,7 +186,7 @@ public partial class AccountForm : UserControl
 
     private bool Ready => _creating
         ? _check == Check.Available && SupabaseApi.IsConfirmed(Password.Password, Confirm.Password)
-        : Username.Text.Length > 0 && Password.Password.Length > 0;
+        : Email.Text.Length > 0 && Password.Password.Length > 0;
 
     private void ShowReady() => Primary.IsEnabled = Ready && !_working;
 
@@ -220,8 +220,8 @@ public partial class AccountForm : UserControl
         if (!Ready) return;
         await Run(async () =>
         {
-            if (_creating) await _sync.CreateAccount(Username.Text, Password.Password, Stay.IsOn);
-            else await _sync.SignIn(Username.Text, Password.Password, Stay.IsOn);
+            if (_creating) await _sync.CreateAccount(Email.Text, Password.Password, Stay.IsOn);
+            else await _sync.SignIn(Email.Text, Password.Password, Stay.IsOn);
             _done();
         });
     }
@@ -235,11 +235,11 @@ public partial class AccountForm : UserControl
 
     private void OnCancel(object sender, RoutedEventArgs e) => _cancel?.Invoke();
 
-    /// <summary>For --render: the create form with a name already checked, without asking a server; available also shows a good password and a confirm that doesn't match.</summary>
-    internal void Pretend(string username, bool available)
+    /// <summary>For --render: the create form with an email already checked, without asking a server; available also shows a good password and a confirm that doesn't match.</summary>
+    internal void Pretend(string email, bool available)
     {
         _creating = true;
-        Username.Text = username;
+        Email.Text = email;
         if (available)
         {
             Password.Password = "kasane-0401";

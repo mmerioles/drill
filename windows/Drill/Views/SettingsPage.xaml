@@ -69,7 +69,7 @@
                     <Button x:Name="AccountButton" DockPanel.Dock="Right" Style="{StaticResource CardButton}" VerticalAlignment="Center"
                             Click="OnAccount" />
                     <StackPanel VerticalAlignment="Center" Margin="0,8">
-                        <TextBlock x:Name="AccountName" Style="{StaticResource RowLabel}" />
+                        <TextBlock x:Name="AccountName" Style="{StaticResource RowLabel}" TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />
                         <ink:FadingText x:Name="AccountNote" CollapseWhenEmpty="True" FontSize="12" Opacity="0.55" HorizontalAlignment="Left" Duration="250" />
                     </StackPanel>
                 </DockPanel>

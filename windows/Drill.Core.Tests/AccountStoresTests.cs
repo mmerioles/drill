@@ -133,6 +133,6 @@ public sealed class AccountStoresTests : IDisposable
             .TrimEnd('=').Replace('+', '-').Replace('/', '_');
         Assert.Equal("6f1c-9a", new Account("teto@x", $"h.{payload}.s").UserID);
         Assert.Equal("kept", new Account("teto@x", $"h.{payload}.s", Id: "kept").UserID);
-        Assert.Equal("teto", new Account("teto@x", "not-a-jwt").UserID);
+        Assert.Equal("teto@x", new Account("teto@x", "not-a-jwt").UserID);
     }
 }

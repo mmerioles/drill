@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import io.github.mmerioles.drill.AppModel
 import io.github.mmerioles.drill.BuildConfig
 import io.github.mmerioles.drill.Theme
+import io.github.mmerioles.drill.data.Account
 import io.github.mmerioles.drill.data.Sync
 import io.github.mmerioles.drill.data.Updater
 import io.github.mmerioles.drill.ink.LocalPalette
@@ -96,7 +97,7 @@ private fun AccountRow(sync: Sync, signIn: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1f)) {
-            Words(sync.account?.username ?: "sync")
+            Words(sync.account?.let { if (it.legacy) it.email.removeSuffix(Account.LEGACY_SUFFIX) else it.email } ?: "sync")
             val note = when {
                 leaving == Leaving.Asking -> "you have unsynced sessions — sign out anyway?"
                 leaving == Leaving.Pushing -> "syncing before signing out…"

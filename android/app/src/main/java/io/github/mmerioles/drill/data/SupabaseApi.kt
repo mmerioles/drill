@@ -1,7 +1,6 @@
 package io.github.mmerioles.drill.data
 
 import io.github.mmerioles.drill.core.FocusSession
-import io.github.mmerioles.drill.core.Username
 import io.github.mmerioles.drill.core.WireDate
 import org.json.JSONArray
 import org.json.JSONException
@@ -11,22 +10,29 @@ import java.io.IOException
 /** Who you're signed in as. Tokens run out after an hour and come with a
  *  refresh token to get the next one. */
 data class Account(
-    val username: String,
+    val email: String,
     /** Supabase's user id; names the account's local store. */
     val userID: String,
     val token: String,
     val refreshToken: String,
     /** Epoch millis. */
     val expiresAt: Long,
-)
+) {
+    /** Made by a build that signed up usernames as `name@users.mmerioles.github.io`;
+     *  the next refresh brings the real email. */
+    val legacy get() = email.endsWith(LEGACY_SUFFIX)
+
+    companion object {
+        const val LEGACY_SUFFIX = "@users.mmerioles.github.io"
+    }
+}
 
 /** One page of a pull: rows after the cursor, the cursor to pull from next,
  *  and whether there's more. */
 data class Page(val sessions: List<FocusSession>, val cursor: String, val more: Boolean)
 
 /**
- * drill's sync: Supabase Auth for accounts (signed up with a synthetic email,
- * see [Username]), and the functions in supabase/migrations for the rest. The
+ * drill's sync: Supabase Auth for accounts, and the functions in supabase/migrations for the rest. The
  * publishable key is meant to ship in apps; row-level security keeps each
  * account to its own rows. Blocking; unreachable is an IOException.
  */
@@ -35,19 +41,15 @@ class SupabaseApi(private val project: String, private val key: String) {
     class Rejected(message: String) : Exception(message)
     class SignedOut : Exception()
 
-    fun signIn(username: String, password: String): Account =
-        tokens("auth/v1/token?grant_type=password", JSONObject().put("email", Username.email(username)).put("password", password))
+    fun signIn(email: String, password: String): Account =
+        tokens("auth/v1/token?grant_type=password", JSONObject().put("email", email).put("password", password))
 
-    /** The username rides along as metadata; a trigger makes the profile. */
-    fun createAccount(username: String, password: String): Account =
-        tokens("auth/v1/signup", JSONObject()
-            .put("email", Username.email(username))
-            .put("password", password)
-            .put("data", JSONObject().put("username", username)))
+    fun createAccount(email: String, password: String): Account =
+        tokens("auth/v1/signup", JSONObject().put("email", email).put("password", password))
 
     /** The answer is a bare `true` or `false`, not an object. */
-    fun usernameAvailable(name: String): Boolean =
-        request("rest/v1/rpc/username_available", body = JSONObject().put("name", name)).trim() == "true"
+    fun emailAvailable(email: String): Boolean =
+        request("rest/v1/rpc/email_available", body = JSONObject().put("email", email)).trim() == "true"
 
     /** The account with a token good for a while yet: the same one unless
      *  it's about to run out, or [force] says the server turned it down. */
@@ -85,7 +87,7 @@ class SupabaseApi(private val project: String, private val key: String) {
     private fun tokens(path: String, body: JSONObject): Account = try {
         val json = call(path, body = body)
         Account(
-            username = Username.fromEmail(json.getJSONObject("user").getString("email")),
+            email = json.getJSONObject("user").getString("email"),
             userID = json.getJSONObject("user").getString("id"),
             token = json.getString("access_token"),
             refreshToken = json.getString("refresh_token"),
@@ -114,7 +116,7 @@ class SupabaseApi(private val project: String, private val key: String) {
         val message = listOf("msg", "message", "error_description").firstNotNullOfOrNull { json.optString(it).ifEmpty { null } }
         when {
             (status == 401 && token != null) || (status == 403 && code == "28000") -> throw SignedOut()
-            // The profile trigger refusing a taken name fails the whole sign-up.
+            // Supabase's answer to an email it already has, on some setups.
             message?.contains("Database error") == true -> throw Rejected(TAKEN)
             code != null -> {
                 SENTENCES[code]?.let { throw Rejected(it) }
@@ -135,13 +137,14 @@ class SupabaseApi(private val project: String, private val key: String) {
         /** Tokens this close to running out are swapped before a sync. */
         private const val MARGIN = 5 * 60 * 1000L
 
-        private const val TAKEN = "that username is taken"
+        private const val TAKEN = "an account with this email already exists"
         private const val TOO_MANY = "too many tries. give it a minute."
 
         /** Supabase's error codes, in the apps' words. */
         private val SENTENCES = mapOf(
-            "invalid_credentials" to "wrong username or password",
-            "invalid_grant" to "wrong username or password",
+            "invalid_credentials" to "wrong email or password",
+            "invalid_grant" to "wrong email or password",
+            "email_address_invalid" to "that email doesn't look right",
             "user_already_exists" to TAKEN,
             "email_exists" to TAKEN,
             "weak_password" to "use at least 6 characters",

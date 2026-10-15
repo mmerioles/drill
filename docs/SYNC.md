@@ -19,23 +19,17 @@ pulled row is the whole merge.
 
 ## Accounts
 
-A username and a password (`20261015024006_usernames.sql`). Usernames are
-3–20 characters of `a-z 0-9 _`; apps lowercase and trim as the user types.
-Passwords need at least 8 characters.
-
-Supabase Auth wants an email, so each app derives one and never shows it:
-`<username>@users.mmerioles.github.io`. The username shown in the app is the
-account's email with the domain stripped. Email confirmation is off.
+An email and a password (`20261015075640_emails.sql`). Apps trim and lowercase the
+email; it's valid when it matches `^[^\s@]+@[^\s@]+\.[^\s@]+$` and is at
+most 254 characters. Passwords need 6+ characters (Supabase's floor), at most 72 UTF-8 bytes. Email confirmation
+is off: the email isn't verified at sign-up; it's kept for account recovery.
 
 ```
-POST /rest/v1/rpc/username_available   { "name": "…" } → true | false
-  anon key, no auth; false for names that fail the rule too
-POST /auth/v1/signup
-  { "email": synthetic, "password": "…", "data": { "username": "…" } }
-  → tokens, same shape as sign-in. A trigger on auth.users makes
-    public.profiles (user_id, username unique); a taken or bad name fails
-    the sign-up.
-POST /auth/v1/token?grant_type=password   { "email": synthetic, "password" }
+POST /rest/v1/rpc/email_available   { "email": "…" } → true | false
+  anon key, no auth; whether no account has that email yet
+POST /auth/v1/signup   { "email": "…", "password": "…" }
+  → tokens, same shape as sign-in
+POST /auth/v1/token?grant_type=password   { "email": "…", "password": "…" }
 POST /auth/v1/token?grant_type=refresh_token
 POST /auth/v1/logout
 ```
@@ -47,9 +41,16 @@ them with the refresh token before a sync, and once more if a call comes back
 
 Error mapping, from the Auth reply's `error_code`/`msg`:
 
-- sign-up: message containing `Database error`, or `user_already_exists` →
-  "that username is taken"; `weak_password` → "use at least 8 characters".
-- sign-in: `invalid_credentials` → "wrong username or password".
+- sign-up: message containing `Database error`, `user_already_exists` or
+  `email_exists` → "an account with this email already exists";
+  `email_address_invalid` → "that email doesn't look right"; `weak_password` →
+  "use at least 6 characters".
+- sign-in: `invalid_credentials` or `invalid_grant` → "wrong email or password".
+
+Apps store and show the account's email, updating it from `user.email` on
+every token refresh. An account stored by an older version (email ending
+`@users.mmerioles.github.io`) stays signed in; on launch, when online, the app
+refreshes once to pick up the real email.
 - anything else: the generic unreachable/rejected copy.
 
 ## Sessions
@@ -79,7 +80,7 @@ in pages of 500 ordered by `seq`; start with `after: 0`, save the returned
 `cursor` (a string; it equals `after` when nothing came back) and repeat
 while `more` is true.
 
-Row-level security: `sessions` and `profiles` are readable only by their own
+Row-level security: `sessions` is readable only by its own
 user (`user_id = auth.uid()`); nothing is writable from a client. Writes go
 through `push_sessions`, which runs as definer and stamps `auth.uid()` on
 every row. The publishable key is public by design.

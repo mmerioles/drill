@@ -18,54 +18,38 @@ public struct SupabaseAPI: Sendable {
         project: URL(string: "https://fgqtpetuzseozttapzem.supabase.co")!,
         key: "sb_publishable_WeTl_T2-z_i1ycA7KSgCyQ_9a64WoAg")
 
-    /// Auth wants an email, so every username gets one here. Never shown,
-    /// and the domain can't receive mail.
-    public static let emailDomain = "users.mmerioles.github.io"
-
-    public static func email(for username: String) -> String {
-        "\(username)@\(emailDomain)"
-    }
-
-    /// The email with its domain stripped: works offline, no extra fetch.
-    public static func username(from email: String) -> String {
-        String(email.prefix { $0 != "@" })
-    }
-
     /// Tokens this close to running out are swapped before a sync.
     private static let margin: TimeInterval = 5 * 60
 
     // MARK: Accounts
 
-    public func signIn(username: String, password: String) async throws -> Account {
-        try await tokens("auth/v1/token?grant_type=password",
-                         ["email": Self.email(for: username), "password": password])
+    public func signIn(email: String, password: String) async throws -> Account {
+        try await tokens("auth/v1/token?grant_type=password", ["email": email, "password": password])
     }
 
-    /// The username rides along as metadata; a trigger makes the profile,
-    /// and a taken name fails the whole sign-up.
-    public func createAccount(username: String, password: String) async throws -> Account {
-        struct Body: Encodable { var email: String; var password: String; var data: [String: String] }
-        let body = try JSONEncoder().encode(
-            Body(email: Self.email(for: username), password: password, data: ["username": username]))
+    public func createAccount(email: String, password: String) async throws -> Account {
+        let body = try JSONEncoder().encode(["email": email, "password": password])
         return try account(from: try await call("auth/v1/signup", body: body, signingUp: true))
     }
 
-    /// The live check while typing. False for names failing the rule too.
-    public func usernameAvailable(_ name: String) async throws -> Bool {
-        let body = try JSONEncoder().encode(["name": name])
-        let data = try await call("rest/v1/rpc/username_available", body: body)
+    /// The live check while typing.
+    public func emailAvailable(_ email: String) async throws -> Bool {
+        let body = try JSONEncoder().encode(["email": email])
+        let data = try await call("rest/v1/rpc/email_available", body: body)
         return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) == "true"
     }
 
     /// The same account unless its token is about to expire, or `force`
-    /// says the server turned it down.
+    /// says to swap it anyway. A new token brings the account's email.
     public func refreshed(_ account: Account, force: Bool) async throws -> Account {
         guard let refresh = account.refreshToken else { throw SyncError.signedOut }
         if !force, let expiresAt = account.expiresAt, expiresAt.timeIntervalSinceNow > Self.margin {
             return account
         }
         do {
-            return try await tokens("auth/v1/token?grant_type=refresh_token", ["refresh_token": refresh])
+            var fresh = try await tokens("auth/v1/token?grant_type=refresh_token", ["refresh_token": refresh])
+            if fresh.email.isEmpty { fresh.email = account.email }
+            return fresh
         } catch SyncError.rejected {
             throw SyncError.signedOut // the refresh token was used up or revoked
         }
@@ -105,7 +89,7 @@ public struct SupabaseAPI: Sendable {
             var user: User
         }
         guard let t = try? JSONDecoder().decode(Tokens.self, from: data) else { throw SyncError.unreachable }
-        return Account(username: Self.username(from: t.user.email ?? ""), token: t.access_token,
+        return Account(email: t.user.email ?? "", token: t.access_token,
                        refreshToken: t.refresh_token, expiresAt: Date().addingTimeInterval(t.expires_in))
     }
 
@@ -144,7 +128,7 @@ public struct SupabaseAPI: Sendable {
         if 200..<300 ~= status { return data }
 
         let (code, message) = Self.failure(data)
-        // The profile trigger rejecting a name (a race with the live check).
+        // A taken email, as some Auth versions say it.
         if signingUp, message.contains("Database error") { throw SyncError.rejected(Self.taken) }
         switch (status, code) {
         case (401, _) where token != nil, (403, "28000"):
@@ -159,18 +143,18 @@ public struct SupabaseAPI: Sendable {
         }
     }
 
-    private static let taken = "that username is taken"
+    private static let taken = "an account with this email already exists"
     private static let tooMany = "too many tries. give it a minute."
 
     /// Supabase's error codes, in the apps' words.
     private static let sentences: [String: String] = [
-        "invalid_credentials": "wrong username or password",
-        "invalid_grant": "wrong username or password",
+        "invalid_credentials": "wrong email or password",
+        "invalid_grant": "wrong email or password",
         "user_already_exists": taken,
         "email_exists": taken,
         "weak_password": "use at least 6 characters",
-        "email_address_invalid": "that username doesn't look right",
-        "validation_failed": "that username doesn't look right",
+        "email_address_invalid": "that email doesn't look right",
+        "validation_failed": "that email doesn't look right",
         "signup_disabled": "sign-ups are closed for now",
         "over_request_rate_limit": tooMany,
         "22023": "couldn't sync. try updating the app.",
@@ -179,30 +163,58 @@ public struct SupabaseAPI: Sendable {
 
 /// Tokens expire after an hour; the refresh token gets the next one.
 public struct Account: Codable, Equatable, Sendable {
-    public var username: String
+    public var email: String
     public var token: String
     public var refreshToken: String?
     public var expiresAt: Date?
 
-    public init(username: String, token: String, refreshToken: String? = nil, expiresAt: Date? = nil) {
-        self.username = username
+    public init(email: String, token: String, refreshToken: String? = nil, expiresAt: Date? = nil) {
+        self.email = email
         self.token = token
         self.refreshToken = refreshToken
         self.expiresAt = expiresAt
     }
 
+    /// Kept by a version with usernames, which stored the name; Auth knew
+    /// it as name@users.mmerioles.github.io until the switch to emails.
+    public var isLegacy: Bool { email.hasSuffix("@" + Self.legacyDomain) }
+
+    private static let legacyDomain = "users.mmerioles.github.io"
+
+    private enum CodingKeys: String, CodingKey { case email, username, token, refreshToken, expiresAt }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        if let email = try c.decodeIfPresent(String.self, forKey: .email) {
+            self.email = email
+        } else {
+            self.email = try c.decode(String.self, forKey: .username) + "@" + Self.legacyDomain
+        }
+        token = try c.decode(String.self, forKey: .token)
+        refreshToken = try c.decodeIfPresent(String.self, forKey: .refreshToken)
+        expiresAt = try c.decodeIfPresent(Date.self, forKey: .expiresAt)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(email, forKey: .email)
+        try c.encode(token, forKey: .token)
+        try c.encodeIfPresent(refreshToken, forKey: .refreshToken)
+        try c.encodeIfPresent(expiresAt, forKey: .expiresAt)
+    }
+
     /// The Supabase user id, the access token's `sub`. Every token the
-    /// account gets carries the same one. The username for a token that
+    /// account gets carries the same one. The email for a token that
     /// isn't a JWT.
     public var userID: String {
         let parts = token.split(separator: ".")
-        guard parts.count == 3 else { return username }
+        guard parts.count == 3 else { return email }
         var base64 = parts[1].replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
         base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
         guard let data = Data(base64Encoded: base64),
               let claims = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let sub = claims["sub"] as? String, !sub.isEmpty
-        else { return username }
+        else { return email }
         return sub.lowercased()
     }
 }
@@ -217,7 +229,7 @@ public enum SyncError: Error, Equatable, Sendable {
     case unreachable
     /// The token was revoked: sign in again.
     case signedOut
-    /// A sentence fit to show, like "wrong username or password".
+    /// A sentence fit to show, like "wrong email or password".
     case rejected(String)
 }
 

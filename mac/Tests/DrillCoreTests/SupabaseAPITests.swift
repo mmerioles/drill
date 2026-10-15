@@ -2,20 +2,24 @@ import Foundation
 import Testing
 @testable import DrillCore
 
-struct UsernameTests {
+struct EmailTests {
     @Test func rule() {
-        #expect(Username.isValid("teto"))
-        #expect(Username.isValid("kasane_0401"))
-        #expect(Username.isValid("abc"))
-        #expect(Username.isValid(String(repeating: "a", count: 20)))
-        #expect(!Username.isValid(""))
-        #expect(!Username.isValid("ab"))
-        #expect(!Username.isValid(String(repeating: "a", count: 21)))
-        #expect(!Username.isValid("Teto"))
-        #expect(!Username.isValid("te to"))
-        #expect(!Username.isValid("teto!"))
-        #expect(!Username.isValid("tétö"))
-        #expect(!Username.isValid("teto@users.mmerioles.github.io"))
+        #expect(Email.isValid("teto@example.com"))
+        #expect(Email.isValid("kasane.teto+drill@mail.example.co.jp"))
+        #expect(Email.isValid("a@b.c"))
+        #expect(!Email.isValid(""))
+        #expect(!Email.isValid("teto"))
+        #expect(!Email.isValid("teto@example"))
+        #expect(!Email.isValid("@example.com"))
+        #expect(!Email.isValid("teto@.com"))
+        #expect(!Email.isValid("teto@@example.com"))
+        #expect(!Email.isValid("te to@example.com"))
+        #expect(!Email.isValid("teto@example.com\n"))
+        let local = String(repeating: "a", count: 64)
+        let long = local + "@" + String(repeating: "b", count: 254 - 64 - 1 - 4) + ".com"
+        #expect(long.count == 254)
+        #expect(Email.isValid(long))
+        #expect(!Email.isValid("a" + long))
     }
 
     @Test func password() {
@@ -32,16 +36,29 @@ struct UsernameTests {
     }
 
     @Test func cleaning() {
-        #expect(Username.clean(" Te To ") == "teto")
-        #expect(Username.clean("KASANE_0401") == "kasane_0401")
-        #expect(Username.clean("a\tb\nc") == "abc")
+        #expect(Email.clean(" Teto@Example.COM ") == "teto@example.com")
+        #expect(Email.clean("kasane.teto+drill@example.com") == "kasane.teto+drill@example.com")
+        #expect(Email.clean("a\tb@c.d\n") == "ab@c.d")
+    }
+}
+
+struct AccountCodingTests {
+    @Test func keptByTheUsernameVersion() throws {
+        let old = #"{"username":"teto","token":"tok","refreshToken":"ref"}"#
+        let account = try JSONDecoder().decode(Account.self, from: Data(old.utf8))
+        #expect(account.email == "teto@users.mmerioles.github.io")
+        #expect(account.isLegacy)
+        #expect(account.refreshToken == "ref")
     }
 
-    @Test func syntheticEmail() {
-        #expect(SupabaseAPI.email(for: "teto") == "teto@users.mmerioles.github.io")
-        #expect(SupabaseAPI.username(from: "teto@users.mmerioles.github.io") == "teto")
-        #expect(SupabaseAPI.username(from: SupabaseAPI.email(for: "kasane_0401")) == "kasane_0401")
-        #expect(SupabaseAPI.username(from: "") == "")
+    @Test func roundTrips() throws {
+        let account = Account(email: "teto@example.com", token: "tok", refreshToken: "ref",
+                              expiresAt: Date(timeIntervalSince1970: 1_790_000_000))
+        let data = try JSONEncoder().encode(account)
+        #expect(try JSONDecoder().decode(Account.self, from: data) == account)
+        #expect(!account.isLegacy)
+        let json = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(json["username"] == nil)
     }
 }
 
@@ -57,30 +74,30 @@ struct UsernameTests {
 
     private static let tokens = """
         {"access_token":"tok","refresh_token":"ref","expires_in":3600,"token_type":"bearer",
-         "user":{"id":"u1","email":"teto@users.mmerioles.github.io"}}
+         "user":{"id":"u1","email":"teto@example.com"}}
         """
 
-    @Test func usernameAvailable() async throws {
+    @Test func emailAvailable() async throws {
         Stub.reply = { _ in (200, "true") }
-        #expect(try await api.usernameAvailable("teto"))
+        #expect(try await api.emailAvailable("teto@example.com"))
         let sent = try #require(Stub.last)
-        #expect(sent.request.url?.path == "/rest/v1/rpc/username_available")
+        #expect(sent.request.url?.path == "/rest/v1/rpc/email_available")
         #expect(sent.request.value(forHTTPHeaderField: "apikey") == "the-key")
         #expect(sent.request.value(forHTTPHeaderField: "Authorization") == nil)
-        #expect(sent.json["name"] as? String == "teto")
+        #expect(sent.json["email"] as? String == "teto@example.com")
         #expect(sent.json.count == 1)
 
         Stub.reply = { _ in (200, "false") }
-        #expect(try await !api.usernameAvailable("teto"))
+        #expect(try await !api.emailAvailable("teto@example.com"))
 
         Stub.reply = { _ in (500, #"{"code":"XX000","message":"boom"}"#) }
-        await #expect(throws: SyncError.unreachable) { try await api.usernameAvailable("teto") }
+        await #expect(throws: SyncError.unreachable) { try await api.emailAvailable("teto@example.com") }
     }
 
-    @Test func signUpSendsTheSyntheticEmailAndMetadata() async throws {
+    @Test func signUpSendsTheEmailAndNothingElse() async throws {
         Stub.reply = { _ in (200, Self.tokens) }
-        let me = try await api.createAccount(username: "teto", password: "kasane-0401")
-        #expect(me.username == "teto")
+        let me = try await api.createAccount(email: "teto@example.com", password: "kasane-0401")
+        #expect(me.email == "teto@example.com")
         #expect(me.token == "tok")
         #expect(me.refreshToken == "ref")
         #expect(me.expiresAt.map { $0.timeIntervalSinceNow > 3500 } == true)
@@ -88,39 +105,63 @@ struct UsernameTests {
         let sent = try #require(Stub.last)
         #expect(sent.request.url?.path == "/auth/v1/signup")
         #expect(sent.request.url?.query == nil)
-        #expect(sent.json["email"] as? String == "teto@users.mmerioles.github.io")
+        #expect(sent.json["email"] as? String == "teto@example.com")
         #expect(sent.json["password"] as? String == "kasane-0401")
-        #expect(sent.json["data"] as? [String: String] == ["username": "teto"])
+        #expect(sent.json.count == 2)
     }
 
     @Test func signUpRejections() async throws {
         Stub.reply = { _ in (500, #"{"code":500,"error_code":"unexpected_failure","msg":"Database error saving new user"}"#) }
-        await #expect(throws: SyncError.rejected("that username is taken")) {
-            try await api.createAccount(username: "teto", password: "kasane-0401")
+        await #expect(throws: SyncError.rejected("an account with this email already exists")) {
+            try await api.createAccount(email: "teto@example.com", password: "kasane-0401")
         }
         Stub.reply = { _ in (422, #"{"code":422,"error_code":"user_already_exists","msg":"User already registered"}"#) }
-        await #expect(throws: SyncError.rejected("that username is taken")) {
-            try await api.createAccount(username: "teto", password: "kasane-0401")
+        await #expect(throws: SyncError.rejected("an account with this email already exists")) {
+            try await api.createAccount(email: "teto@example.com", password: "kasane-0401")
         }
         Stub.reply = { _ in (422, #"{"code":422,"error_code":"weak_password","msg":"Password should be at least 6 characters."}"#) }
         await #expect(throws: SyncError.rejected("use at least 6 characters")) {
-            try await api.createAccount(username: "teto", password: "short")
+            try await api.createAccount(email: "teto@example.com", password: "short")
+        }
+        Stub.reply = { _ in (422, #"{"code":422,"error_code":"email_exists","msg":"Email address already registered"}"#) }
+        await #expect(throws: SyncError.rejected("an account with this email already exists")) {
+            try await api.createAccount(email: "teto@example.com", password: "kasane-0401")
+        }
+        Stub.reply = { _ in (400, #"{"code":400,"error_code":"email_address_invalid","msg":"Email address is invalid"}"#) }
+        await #expect(throws: SyncError.rejected("that email doesn't look right")) {
+            try await api.createAccount(email: "teto@example.com", password: "kasane-0401")
         }
     }
 
     @Test func signIn() async throws {
         Stub.reply = { _ in (200, Self.tokens) }
-        let me = try await api.signIn(username: "teto", password: "kasane-0401")
-        #expect(me.username == "teto")
+        let me = try await api.signIn(email: "teto@example.com", password: "kasane-0401")
+        #expect(me.email == "teto@example.com")
         let sent = try #require(Stub.last)
         #expect(sent.request.url?.path == "/auth/v1/token")
         #expect(sent.request.url?.query == "grant_type=password")
-        #expect(sent.json["email"] as? String == "teto@users.mmerioles.github.io")
+        #expect(sent.json["email"] as? String == "teto@example.com")
 
         Stub.reply = { _ in (400, #"{"code":400,"error_code":"invalid_credentials","msg":"Invalid login credentials"}"#) }
-        await #expect(throws: SyncError.rejected("wrong username or password")) {
-            try await api.signIn(username: "teto", password: "not-it")
+        await #expect(throws: SyncError.rejected("wrong email or password")) {
+            try await api.signIn(email: "teto@example.com", password: "not-it")
         }
+    }
+
+    @Test func refreshTakesTheEmailFromTheUser() async throws {
+        let old = Account(email: "teto@users.mmerioles.github.io", token: "old", refreshToken: "r0",
+                          expiresAt: Date().addingTimeInterval(3600))
+        Stub.reply = { _ in (200, Self.tokens) }
+        #expect(try await api.refreshed(old, force: false) == old)
+        let fresh = try await api.refreshed(old, force: true)
+        #expect(fresh.email == "teto@example.com")
+        #expect(!fresh.isLegacy)
+        let sent = try #require(Stub.last)
+        #expect(sent.request.url?.query == "grant_type=refresh_token")
+        #expect(sent.json["refresh_token"] as? String == "r0")
+
+        Stub.reply = { _ in (200, #"{"access_token":"t2","refresh_token":"r2","expires_in":3600,"user":{"id":"u1"}}"#) }
+        #expect(try await api.refreshed(fresh, force: true).email == "teto@example.com")
     }
 
     @Test func revokedTokenSignsOut() async throws {
@@ -175,13 +216,13 @@ final class Stub: URLProtocol {
 }
 
 /// Runs SupabaseAPI against the hosted project, as an account that already
-/// exists. Skipped unless DRILL_SUPABASE_TEST_USERNAME and
+/// exists. Skipped unless DRILL_SUPABASE_TEST_EMAIL and
 /// DRILL_SUPABASE_TEST_PASSWORD are set.
-private let supabaseLogin: (username: String, password: String)? = {
+private let supabaseLogin: (email: String, password: String)? = {
     let env = ProcessInfo.processInfo.environment
-    guard let username = env["DRILL_SUPABASE_TEST_USERNAME"], let password = env["DRILL_SUPABASE_TEST_PASSWORD"]
+    guard let email = env["DRILL_SUPABASE_TEST_EMAIL"], let password = env["DRILL_SUPABASE_TEST_PASSWORD"]
     else { return nil }
-    return (username, password)
+    return (email, password)
 }()
 
 @Suite(.serialized, .enabled(if: supabaseLogin != nil))
@@ -189,9 +230,9 @@ struct SupabaseAPILiveTests {
     let api = SupabaseAPI.hosted
 
     @Test func accountsAndSessionsRoundTrip() async throws {
-        let (username, password) = try #require(supabaseLogin)
-        let me = try await api.signIn(username: username, password: password)
-        #expect(me.username == username)
+        let (email, password) = try #require(supabaseLogin)
+        let me = try await api.signIn(email: email, password: password)
+        #expect(me.email == email)
         #expect(me.refreshToken != nil)
         #expect(try await api.refreshed(me, force: false) == me) // an hour left: kept
 
@@ -216,16 +257,15 @@ struct SupabaseAPILiveTests {
     }
 
     @Test func friendlyRejections() async throws {
-        let (username, password) = try #require(supabaseLogin)
-        await #expect(throws: SyncError.rejected("wrong username or password")) {
-            try await api.signIn(username: username, password: password + "-not-it")
+        let (email, password) = try #require(supabaseLogin)
+        await #expect(throws: SyncError.rejected("wrong email or password")) {
+            try await api.signIn(email: email, password: password + "-not-it")
         }
-        await #expect(throws: SyncError.rejected("that username is taken")) {
-            try await api.createAccount(username: username, password: password)
+        await #expect(throws: SyncError.rejected("an account with this email already exists")) {
+            try await api.createAccount(email: email, password: password)
         }
         await #expect(throws: SyncError.signedOut) { try await api.pull(after: "0", token: "not-a-token") }
-        #expect(try await api.usernameAvailable(username) == false)
-        #expect(try await api.usernameAvailable("no") == false) // too short
-        #expect(try await api.usernameAvailable("drill_" + String(UUID().uuidString.prefix(8)).lowercased()))
+        #expect(try await api.emailAvailable(email) == false)
+        #expect(try await api.emailAvailable("drill-\(UUID().uuidString.prefix(8).lowercased())@example.com"))
     }
 }

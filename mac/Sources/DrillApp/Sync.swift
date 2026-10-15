@@ -120,6 +120,7 @@ final class Sync {
     func start() {
         guard !started else { return }
         started = true
+        if let account, account.isLegacy { learnEmail(account) }
         startLoop()
         if let leftover { wipe(leftover) }
         NotificationCenter.default.addObserver(
@@ -145,6 +146,20 @@ final class Sync {
         loop = nil
     }
 
+    /// An account kept from the username days: one new token, before the
+    /// first sync, brings its real email. Failing changes nothing; the next
+    /// refresh tries again.
+    private func learnEmail(_ start: Account) {
+        running = Task { [weak self] in
+            guard let self else { return }
+            if let fresh = try? await api.refreshed(start, force: true), account?.userID == start.userID {
+                save(fresh)
+            }
+            running = nil
+            if autoSync { syncNow() }
+        }
+    }
+
     private func cameBack() {
         guard autoSync else { return }
         if lastStarted.map({ $0.timeIntervalSinceNow < -20 }) ?? true { syncNow() }
@@ -155,19 +170,19 @@ final class Sync {
     // These throw `Problem`, a sentence fit to show.
 
     /// Either way, the account's own store: nothing else on this Mac goes up with it.
-    func signIn(username: String, password: String, staySignedIn: Bool) async throws {
-        let account = try await attempt { try await api.signIn(username: username, password: password) }
+    func signIn(email: String, password: String, staySignedIn: Bool) async throws {
+        let account = try await attempt { try await api.signIn(email: email, password: password) }
         begin(account, staySignedIn: staySignedIn)
     }
 
-    func createAccount(username: String, password: String, staySignedIn: Bool) async throws {
-        let account = try await attempt { try await api.createAccount(username: username, password: password) }
+    func createAccount(email: String, password: String, staySignedIn: Bool) async throws {
+        let account = try await attempt { try await api.createAccount(email: email, password: password) }
         begin(account, staySignedIn: staySignedIn)
     }
 
     /// The live check on the create-account form. Throws on no answer.
-    func usernameAvailable(_ name: String) async throws -> Bool {
-        try await attempt { try await api.usernameAvailable(name) }
+    func emailAvailable(_ email: String) async throws -> Bool {
+        try await attempt { try await api.emailAvailable(email) }
     }
 
     private func begin(_ account: Account, staySignedIn: Bool) {

@@ -14,6 +14,6 @@ public sealed class AccountDialog : UserControl
         Content = _form;
     }
 
-    /// <summary>For --render: the create form with a name already checked, without asking a server.</summary>
-    internal void Pretend(string username, bool available) => _form.Pretend(username, available);
+    /// <summary>For --render: the create form with an email already checked, without asking a server.</summary>
+    internal void Pretend(string email, bool available) => _form.Pretend(email, available);
 }

@@ -55,8 +55,16 @@ class Sync(
     val isSignedIn get() = account != null
     private val ephemeral get() = prefs.getBoolean(Keys.EPHEMERAL, false)
 
+    /** Swapping a legacy account's token at launch, for its email; syncs wait for it. */
+    private var renaming: Job? = null
+
     init {
         scope.launch { recount() }
+        account?.takeIf { it.legacy }?.let { legacy ->
+            renaming = scope.launch {
+                runCatching { withContext(Dispatchers.IO) { fresh(legacy, force = true) } }
+            }
+        }
     }
 
     fun updateAuto(on: Boolean) {
@@ -76,18 +84,18 @@ class Sync(
     // Each returns null, or a sentence to show.
 
     /** An existing account: its own store, pulled from the start. */
-    suspend fun signIn(username: String, password: String, stay: Boolean): String? = problem {
-        begin(attempt { api.signIn(username, password) }, stay)
+    suspend fun signIn(email: String, password: String, stay: Boolean): String? = problem {
+        begin(attempt { api.signIn(email, password) }, stay)
     }
 
     /** A new account starts empty. */
-    suspend fun createAccount(username: String, password: String, stay: Boolean): String? = problem {
-        begin(attempt { api.createAccount(username, password) }, stay)
+    suspend fun createAccount(email: String, password: String, stay: Boolean): String? = problem {
+        begin(attempt { api.createAccount(email, password) }, stay)
     }
 
     /** Null when the server couldn't be asked. */
-    suspend fun usernameAvailable(name: String): Boolean? = try {
-        withContext(Dispatchers.IO) { api.usernameAvailable(name) }
+    suspend fun emailAvailable(email: String): Boolean? = try {
+        withContext(Dispatchers.IO) { api.emailAvailable(email) }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -217,10 +225,11 @@ class Sync(
         var token = start.token
         val store = store()
         try {
+            renaming?.join()
             val pulled = withContext(Dispatchers.IO) {
                 // Tokens last an hour: swap one that's nearly out, and once
                 // more if the server turns it down anyway.
-                token = fresh(start, force = false)
+                token = fresh(start, force = (account ?: start).legacy)
                 try {
                     exchange(token, store, start.userID)
                 } catch (e: SupabaseApi.SignedOut) {
@@ -275,9 +284,10 @@ class Sync(
         this.account = account
         prefs.edit().apply {
             if (account == null) {
-                remove(Keys.USERNAME); remove(Keys.USER_ID); remove(Keys.TOKEN); remove(Keys.REFRESH); remove(Keys.EXPIRES)
+                remove(Keys.EMAIL); remove(Keys.USERNAME); remove(Keys.USER_ID); remove(Keys.TOKEN); remove(Keys.REFRESH); remove(Keys.EXPIRES)
             } else {
-                putString(Keys.USERNAME, account.username)
+                remove(Keys.USERNAME)
+                putString(Keys.EMAIL, account.email)
                 putString(Keys.USER_ID, account.userID)
                 putString(Keys.TOKEN, account.token)
                 putString(Keys.REFRESH, account.refreshToken)
@@ -310,15 +320,20 @@ class Sync(
         }
 
         private fun storedAccount(prefs: SharedPreferences): Account? {
-            val username = prefs.getString(Keys.USERNAME, null) ?: return null
+            // An earlier build kept the bare username.
+            val email = prefs.getString(Keys.EMAIL, null)
+                ?: prefs.getString(Keys.USERNAME, null)?.let { it + Account.LEGACY_SUFFIX }
+                ?: return null
             val token = prefs.getString(Keys.TOKEN, null) ?: return null
             val refresh = prefs.getString(Keys.REFRESH, null) ?: return null
             val userID = prefs.getString(Keys.USER_ID, null) ?: LocalStores.subject(token) ?: return null
-            return Account(username, userID, token, refresh, prefs.getLong(Keys.EXPIRES, 0L))
+            return Account(email, userID, token, refresh, prefs.getLong(Keys.EXPIRES, 0L))
         }
     }
 
     private object Keys {
+        const val EMAIL = "sync.email"
+        /** Before emails: the account's username. */
         const val USERNAME = "sync.username"
         const val USER_ID = "sync.userID"
         const val TOKEN = "sync.token"

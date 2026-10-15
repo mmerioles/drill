@@ -4,22 +4,23 @@ using Drill.Core.Sync;
 
 namespace Drill.Core.Tests;
 
-/// <summary>SupabaseApi against canned replies: the username rule, the synthetic email, and the words for each error.</summary>
+/// <summary>SupabaseApi against canned replies: the email rule, the calls, and the words for each error.</summary>
 public class SupabaseApiTests
 {
     [Fact]
-    public void UsernameRule()
+    public void EmailRule()
     {
-        Assert.True(SupabaseApi.IsUsername("teto"));
-        Assert.True(SupabaseApi.IsUsername("kasane_0401"));
-        Assert.True(SupabaseApi.IsUsername(new string('a', 20)));
-        Assert.False(SupabaseApi.IsUsername("te"));
-        Assert.False(SupabaseApi.IsUsername(new string('a', 21)));
-        Assert.False(SupabaseApi.IsUsername("Teto"));
-        Assert.False(SupabaseApi.IsUsername("teto!"));
-        Assert.False(SupabaseApi.IsUsername("te to"));
-        Assert.False(SupabaseApi.IsUsername(""));
-        Assert.Equal("teto_0401", SupabaseApi.TidyUsername(" Teto_ 0401 "));
+        Assert.True(SupabaseApi.IsEmail("teto@example.com"));
+        Assert.True(SupabaseApi.IsEmail("kasane.teto+drill@mail.example.co.jp"));
+        Assert.False(SupabaseApi.IsEmail(""));
+        Assert.False(SupabaseApi.IsEmail("teto"));
+        Assert.False(SupabaseApi.IsEmail("teto@example"));
+        Assert.False(SupabaseApi.IsEmail("@example.com"));
+        Assert.False(SupabaseApi.IsEmail("teto@@example.com"));
+        Assert.False(SupabaseApi.IsEmail("te to@example.com"));
+        Assert.True(SupabaseApi.IsEmail(new string('a', 242) + "@example.com")); // 254
+        Assert.False(SupabaseApi.IsEmail(new string('a', 243) + "@example.com"));
+        Assert.Equal("teto@example.com", SupabaseApi.TidyEmail(" Teto@Example.COM "));
     }
 
     [Fact]
@@ -38,67 +39,79 @@ public class SupabaseApiTests
     }
 
     [Fact]
-    public void SyntheticEmail()
+    public async Task SignsUpWithTheEmail()
     {
-        Assert.Equal("teto@users.mmerioles.github.io", SupabaseApi.EmailFor("teto"));
-        Assert.Equal("teto", SupabaseApi.UsernameOf("teto@users.mmerioles.github.io"));
-        Assert.Equal("teto", new Account("teto@users.mmerioles.github.io", "t").Username);
-    }
-
-    [Fact]
-    public async Task SignsUpWithTheUsernameAsMetadata()
-    {
-        var (api, calls) = Fake(_ => Ok("""{"access_token":"a","refresh_token":"r","expires_in":3600,"user":{"email":"teto@users.mmerioles.github.io"}}"""));
-        var me = await api.CreateAccount("teto", "kasane-0401");
-        Assert.Equal("teto", me.Username);
+        var (api, calls) = Fake(_ => Ok("""{"access_token":"a","refresh_token":"r","expires_in":3600,"user":{"id":"u","email":"teto@example.com"}}"""));
+        var me = await api.CreateAccount(" Teto@Example.com", "kasane-0401");
+        Assert.Equal("teto@example.com", me.Email);
         Assert.Equal("a", me.Token);
         Assert.Equal("r", me.RefreshToken);
 
         var call = Assert.Single(calls);
         Assert.Equal("/auth/v1/signup", call.Path);
-        Assert.Equal("teto@users.mmerioles.github.io", (string?)call.Body["email"]);
+        Assert.Equal("teto@example.com", (string?)call.Body["email"]);
         Assert.Equal("kasane-0401", (string?)call.Body["password"]);
-        Assert.Equal("teto", (string?)call.Body["data"]?["username"]);
+        Assert.Null(call.Body["data"]);
     }
 
     [Fact]
-    public async Task SignsInWithTheSyntheticEmail()
+    public async Task SignsInWithTheEmail()
     {
-        var (api, calls) = Fake(_ => Ok("""{"access_token":"a","refresh_token":"r","expires_in":3600,"user":{"email":"teto@users.mmerioles.github.io"}}"""));
-        Assert.Equal("teto", (await api.SignIn("teto", "kasane-0401")).Username);
+        var (api, calls) = Fake(_ => Ok("""{"access_token":"a","refresh_token":"r","expires_in":3600,"user":{"email":"teto@example.com"}}"""));
+        Assert.Equal("teto@example.com", (await api.SignIn("teto@example.com", "kasane-0401")).Email);
         var call = Assert.Single(calls);
         Assert.Equal("/auth/v1/token", call.Path);
-        Assert.Equal("teto@users.mmerioles.github.io", (string?)call.Body["email"]);
+        Assert.Equal("teto@example.com", (string?)call.Body["email"]);
     }
 
     [Fact]
-    public async Task AsksWhetherANameIsFree()
+    public async Task AsksWhetherAnEmailIsFree()
     {
         var (api, calls) = Fake(_ => Ok("false"));
-        Assert.False(await api.UsernameAvailable("teto"));
+        Assert.False(await api.EmailAvailable("teto@example.com"));
         var call = Assert.Single(calls);
-        Assert.Equal("/rest/v1/rpc/username_available", call.Path);
-        Assert.Equal("teto", (string?)call.Body["name"]);
+        Assert.Equal("/rest/v1/rpc/email_available", call.Path);
+        Assert.Equal("teto@example.com", (string?)call.Body["email"]);
 
         var (free, _) = Fake(_ => Ok("true"));
-        Assert.True(await free.UsernameAvailable("miku"));
+        Assert.True(await free.EmailAvailable("miku@example.com"));
+    }
+
+    [Fact]
+    public async Task RefreshTakesTheRealEmailForAnOldAccount()
+    {
+        var old = new Account("teto@users.mmerioles.github.io", "t", "r0", DateTimeOffset.UtcNow.AddHours(1), "u");
+        Assert.True(old.IsLegacy);
+        var (api, calls) = Fake(_ => Ok("""{"access_token":"a","refresh_token":"r1","expires_in":3600,"user":{"id":"u","email":"teto@example.com"}}"""));
+        var fresh = await api.Refreshed(old, force: true);
+        Assert.Equal("teto@example.com", fresh.Email);
+        Assert.False(fresh.IsLegacy);
+        Assert.Equal(old.UserID, fresh.UserID);
+        Assert.Equal("r0", (string?)Assert.Single(calls).Body["refresh_token"]);
     }
 
     [Fact]
     public async Task FriendlyRejections()
     {
-        Assert.Equal("that username is taken", await Sentence(HttpStatusCode.InternalServerError,
+        const string Taken = "an account with this email already exists";
+        Assert.Equal(Taken, await Sentence(HttpStatusCode.InternalServerError,
             """{"code":500,"error_code":"unexpected_failure","msg":"Database error saving new user"}""",
-            api => api.CreateAccount("teto", "kasane-0401")));
-        Assert.Equal("that username is taken", await Sentence(HttpStatusCode.UnprocessableEntity,
+            api => api.CreateAccount("teto@example.com", "kasane-0401")));
+        Assert.Equal(Taken, await Sentence(HttpStatusCode.UnprocessableEntity,
             """{"code":422,"error_code":"user_already_exists","msg":"User already registered"}""",
-            api => api.CreateAccount("teto", "kasane-0401")));
+            api => api.CreateAccount("teto@example.com", "kasane-0401")));
+        Assert.Equal(Taken, await Sentence(HttpStatusCode.UnprocessableEntity,
+            """{"code":422,"error_code":"email_exists","msg":"Email address already registered"}""",
+            api => api.CreateAccount("teto@example.com", "kasane-0401")));
+        Assert.Equal("that email doesn't look right", await Sentence(HttpStatusCode.BadRequest,
+            """{"code":400,"error_code":"email_address_invalid","msg":"Email address is invalid"}""",
+            api => api.CreateAccount("teto@example.com", "kasane-0401")));
         Assert.Equal("use at least 6 characters", await Sentence(HttpStatusCode.UnprocessableEntity,
             """{"code":422,"error_code":"weak_password","msg":"Password should be at least 6 characters."}""",
-            api => api.CreateAccount("teto", "short")));
-        Assert.Equal("wrong username or password", await Sentence(HttpStatusCode.BadRequest,
+            api => api.CreateAccount("teto@example.com", "short")));
+        Assert.Equal("wrong email or password", await Sentence(HttpStatusCode.BadRequest,
             """{"code":400,"error_code":"invalid_credentials","msg":"Invalid login credentials"}""",
-            api => api.SignIn("teto", "not-it-at-all")));
+            api => api.SignIn("teto@example.com", "not-it-at-all")));
     }
 
     [Fact]

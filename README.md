@@ -32,7 +32,7 @@ updates install themselves.
 
 ## sync
 
-sign in with a username from settings. sessions sync on their own. details in [docs/SYNC.md](docs/SYNC.md).
+sign in with an email from settings. sessions sync on their own. details in [docs/SYNC.md](docs/SYNC.md).
 
 ## repo
 

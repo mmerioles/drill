@@ -216,7 +216,7 @@ private struct AccountRow: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(sync.account?.username ?? "sync")
+                Text(sync.account?.email ?? "sync").lineLimit(1).truncationMode(.middle)
                 Text(note).font(Ink.text(13)).foregroundStyle(Ink.faint)
                     .contentTransition(.opacity)
             }

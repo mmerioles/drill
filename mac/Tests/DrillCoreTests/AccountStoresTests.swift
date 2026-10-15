@@ -94,7 +94,7 @@ import Testing
             return "eyJhbGciOiJIUzI1NiJ9.\(body).sig"
         }
         let id = "6F1C2A3B-0000-4000-8000-0123456789AB"
-        #expect(Account(username: "teto", token: jwt(#"{"sub":"\#(id)","role":"authenticated"}"#)).userID == id.lowercased())
-        #expect(Account(username: "teto", token: "tok").userID == "teto")
+        #expect(Account(email: "teto@example.com", token: jwt(#"{"sub":"\#(id)","role":"authenticated"}"#)).userID == id.lowercased())
+        #expect(Account(email: "teto@example.com", token: "tok").userID == "teto@example.com")
     }
 }
