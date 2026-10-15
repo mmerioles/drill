@@ -139,8 +139,8 @@ final class AppModel {
         }
     }
 
-    /// Env for trying things out: `DRILL_DB` (the offline database file;
-    /// account ones go beside it), `DRILL_FAST=1` (minutes become seconds),
+    /// Env for trying things out: `DRILL_DB` (the old offline database
+    /// file; account ones go beside it), `DRILL_FAST=1` (minutes become seconds),
     /// `DRILL_THEME` (light|dark).
     static var stores: AccountStores {
         let env = ProcessInfo.processInfo.environment
@@ -442,7 +442,7 @@ final class AppModel {
         reload()
     }
 
-    /// Another account's sessions, or the offline ones.
+    /// Another account's sessions, or none while signed out.
     func use(_ new: SessionStore) {
         store = new
         reload()

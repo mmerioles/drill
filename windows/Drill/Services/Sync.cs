@@ -30,7 +30,7 @@ public sealed class Sync : Observable
     private Task? _running;
     private DateTimeOffset? _lastStarted;
     private bool _auto;
-    /// <summary>Whose store the model is showing; null for the offline one.</summary>
+    /// <summary>Whose store the model is showing; null for nobody's (an empty one in memory).</summary>
     private string? _userID;
 
     public Sync(AppModel model)
@@ -114,30 +114,21 @@ public sealed class Sync : Observable
 
     /// <summary>An existing account: its own store (empty unless kept from before), caught up from the start.</summary>
     public async Task SignIn(string username, string password, bool stay = true) =>
-        await Begin(await Attempt(() => Api.SignIn(username, password)), stay, creating: false);
+        await Begin(await Attempt(() => Api.SignIn(username, password)), stay);
 
-    /// <summary>Makes the account and signs in; confirmation is off, so there's nothing to wait for.</summary>
+    /// <summary>Makes the account and signs in, starting empty; confirmation is off, so there's nothing to wait for.</summary>
     public async Task CreateAccount(string username, string password, bool stay = true) =>
-        await Begin(await Attempt(() => Api.CreateAccount(username, password)), stay, creating: true);
+        await Begin(await Attempt(() => Api.CreateAccount(username, password)), stay);
 
     /// <summary>The live check while typing a name on the create form.</summary>
     public Task<bool> UsernameAvailable(string name, CancellationToken ct) => Api.UsernameAvailable(name, ct);
 
-    /// <summary>
-    /// Switches the model to the account's store. Only a new account takes
-    /// the sessions logged here offline; signing in uploads nothing from before.
-    /// </summary>
-    private async Task Begin(Account account, bool stay, bool creating)
+    /// <summary>Switches the model to the account's own store: nothing from another account, or from before, comes along.</summary>
+    private async Task Begin(Account account, bool stay)
     {
         if (_running is { } running) await running;
         var id = account.UserID;
         var store = id == _userID ? _model.Store : AppModel.Open(SqliteSessionStore.AccountPath(id));
-        if (creating && _userID is null)
-        {
-            var offline = _model.Store;
-            try { await Task.Run(() => AccountStores.MoveRows(offline, store)); } catch (Exception) { }
-            _prefs.Remove(AccountStores.PushedAtKey(id));
-        }
         _prefs.Remove(AccountStores.CursorKey(id)); // catch up from the start
         if (stay) _prefs.Remove(Keys.Ephemeral);
         else _prefs.Set(Keys.Ephemeral, true);
@@ -189,7 +180,7 @@ public sealed class Sync : Observable
 
     /// <summary>
     /// Signs out and leaves no trace of the account here: its store and sync
-    /// state are deleted, and the model goes back to the offline store.
+    /// state are deleted, and the model shows an empty store until someone signs in.
     /// Returns the token's revocation, for a caller that's quitting to wait on.
     /// </summary>
     public Task SignOut()
@@ -201,14 +192,19 @@ public sealed class Sync : Observable
         return revoke;
     }
 
-    /// <summary>Back to the offline store; with `forget`, the account's store is deleted too.</summary>
+    /// <summary>
+    /// Back to nobody's store, empty and in memory (the old offline file is
+    /// never used); with `forget`, the account's store is deleted too. A block
+    /// in progress ends first, logged to the account it was started in.
+    /// </summary>
     private void Drop(bool forget)
     {
         var id = _userID;
         _userID = null;
         _prefs.Remove(Keys.Ephemeral);
         if (id is null) return;
-        _model.UseStore(AppModel.Open(SqliteSessionStore.OfflinePath)); // closes the account's
+        _model.Reset();
+        _model.UseStore(SqliteSessionStore.InMemory()); // closes the account's
         if (forget) AccountStores.Forget(_prefs, id);
         Refresh();
     }
@@ -249,7 +245,7 @@ public sealed class Sync : Observable
         catch (SyncException e) when (e.Failure == SyncFailure.SignedOut)
         {
             if (Account?.Email != start.Email) return;
-            // The server ended the session: back to offline. The account's
+            // The server ended the session: back to the welcome. The account's
             // store stays for signing in again, unless it wasn't to be kept.
             var ephemeral = IsEphemeral;
             Save(null);

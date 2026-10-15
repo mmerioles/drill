@@ -163,7 +163,7 @@ fun App(model: AppModel, palette: MutableState<Boolean>) {
     val activity = LocalContext.current as ComponentActivity
     SideEffect { activity.enableEdgeToEdge(bars(model.theme), bars(model.theme)) }
     CompositionLocalProvider(LocalPalette provides if (dark) Palette.dark else Palette.light) {
-        if (model.sync.welcome) WelcomeScreen(model) else Screen(model, palette)
+        if (!model.sync.isSignedIn) WelcomeScreen(model) else Screen(model, palette)
     }
 }
 

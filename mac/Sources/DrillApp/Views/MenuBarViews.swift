@@ -40,6 +40,7 @@ struct MenuBarLabel: View {
 
 struct MenuBarPanel: View {
     @Environment(AppModel.self) private var model
+    @Environment(Sync.self) private var sync
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -77,6 +78,7 @@ struct MenuBarPanel: View {
                         .buttonStyle(.inkLink(selected: false, size: 13))
                 }
             }
+            .disabled(sync.showsWelcome)
 
             Rectangle().fill(Ink.ghost).frame(height: 1)
 

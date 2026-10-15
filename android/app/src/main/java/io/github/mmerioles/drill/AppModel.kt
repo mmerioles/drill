@@ -73,7 +73,7 @@ class AppModel(private val app: Application) {
         SupervisorJob() + Dispatchers.Main.immediate +
             CoroutineExceptionHandler { _, e -> Log.e(TAG, "background work failed", e) },
     )
-    /** The one store in use: the signed-in account's, or offline. Read and swapped only on [disk]. */
+    /** The one store in use: the signed-in account's, or an empty one in memory. Read and swapped only on [disk]. */
     @Volatile private var store = SessionStore(app, Sync.launchStore(app, prefs))
     /** The database, one call at a time, off the main thread. */
     private val disk = Dispatchers.IO.limitedParallelism(1)

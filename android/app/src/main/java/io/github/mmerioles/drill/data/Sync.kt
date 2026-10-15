@@ -45,10 +45,6 @@ class Sync(
     var auto by mutableStateOf(prefs.getBoolean(Keys.AUTO, true))
         private set
 
-    /** Chose offline, or signed in, since the last sign-out. */
-    var welcomed by mutableStateOf(prefs.getBoolean(Keys.WELCOMED, false))
-        private set
-
     private val api = SupabaseApi.hosted
     private var running: Job? = null
     private var flushing: Job? = null
@@ -57,14 +53,7 @@ class Sync(
     private var lastStarted = 0L
 
     val isSignedIn get() = account != null
-    /** The welcome screen, instead of the timer. */
-    val welcome get() = LocalStores.showWelcome(isSignedIn, welcomed)
     private val ephemeral get() = prefs.getBoolean(Keys.EPHEMERAL, false)
-
-    fun continueOffline() {
-        welcomed = true
-        prefs.edit().putBoolean(Keys.WELCOMED, true).apply()
-    }
 
     init {
         scope.launch { recount() }
@@ -86,14 +75,14 @@ class Sync(
 
     // Each returns null, or a sentence to show.
 
-    /** An existing account: its own store, pulled from the start; offline stays as it is. */
+    /** An existing account: its own store, pulled from the start. */
     suspend fun signIn(username: String, password: String, stay: Boolean): String? = problem {
-        begin(attempt { api.signIn(username, password) }, stay, bringOffline = false)
+        begin(attempt { api.signIn(username, password) }, stay)
     }
 
-    /** A new account takes the sessions made offline with it. */
+    /** A new account starts empty. */
     suspend fun createAccount(username: String, password: String, stay: Boolean): String? = problem {
-        begin(attempt { api.createAccount(username, password) }, stay, bringOffline = true)
+        begin(attempt { api.createAccount(username, password) }, stay)
     }
 
     /** Null when the server couldn't be asked. */
@@ -105,21 +94,16 @@ class Sync(
         null
     }
 
-    private suspend fun begin(account: Account, stay: Boolean, bringOffline: Boolean) {
+    private suspend fun begin(account: Account, stay: Boolean) {
         retiring?.join()
-        val mine = SessionStore(app, LocalStores.fileName(account.userID))
-        val offline = swap(mine)
-        withContext(Dispatchers.IO) {
-            if (bringOffline) LocalStores.handOver(offline, mine)
-            offline.close()
-        }
+        val signedOut = swap(SessionStore(app, LocalStores.fileName(account.userID)))
+        withContext(Dispatchers.IO) { signedOut.close() }
         prefs.edit()
             .putString(Keys.cursor(account.userID), "0")
             .putBoolean(Keys.EPHEMERAL, !stay)
             .apply()
         save(account)
         state = State.Idle
-        if (bringOffline) onPulled()
         recount()
         syncNow()
     }
@@ -184,11 +168,13 @@ class Sync(
     }
 
     /**
-     * Signed out at once, on the offline store; then, behind the scenes,
-     * [first], revoke the token, and delete the account's store. The account
-     * stays saved until that's done, so a launch mid-way finishes the job.
+     * Signed out at once, on an empty store in memory; then, behind the
+     * scenes, [first], revoke the token, and delete the account's store. The
+     * account stays saved until that's done, so a launch mid-way finishes the
+     * job. [dropped]: the server ended the session, so the account's store
+     * stays, unsent rows and all, for signing in again.
      */
-    private fun leave(account: Account, revoke: Boolean = true, keepUnpushed: Boolean = false, first: suspend () -> Unit = {}) {
+    private fun leave(account: Account, dropped: Boolean = false, first: suspend () -> Unit = {}) {
         val jobs = listOfNotNull(running, flushing)
         jobs.forEach { it.cancel() }
         running = null
@@ -196,19 +182,14 @@ class Sync(
         this.account = null
         state = State.SignedOut
         unpushed = 0
-        welcomed = false
-        prefs.edit().putBoolean(Keys.WELCOMED, false).apply()
-        val offline = SessionStore(app, LocalStores.fileName(null))
         retiring = scope.launch {
-            val old = swap(offline)
+            val old = swap(SessionStore(app, LocalStores.fileName(null)))
             jobs.joinAll()
             first()
             withContext(Dispatchers.IO) {
-                // A token the server turned down can't push; keep what it couldn't on the phone.
-                if (keepUnpushed) offline.save(old.dirty(), local = true)
-                if (revoke) api.signOut(account)
+                if (!dropped) api.signOut(account)
                 old.close()
-                app.deleteDatabase(old.databaseName)
+                if (!dropped) app.deleteDatabase(old.databaseName)
             }
             if (this@Sync.account == null) save(null)
             prefs.edit().remove(Keys.cursor(account.userID)).remove(Keys.EPHEMERAL).apply()
@@ -252,7 +233,7 @@ class Sync(
             state = State.Idle
         } catch (e: SupabaseApi.SignedOut) {
             if (account?.userID != start.userID) return
-            leave(start, revoke = false, keepUnpushed = true)
+            leave(start, dropped = true)
             return
         } catch (e: CancellationException) {
             throw e
@@ -307,10 +288,10 @@ class Sync(
 
     companion object {
         /**
-         * The store to open at launch: the stored account's, or offline. The
+         * The store to open at launch: the stored account's, or none. The
          * first launch of this build hands an account the file it was using.
          */
-        fun launchStore(context: Context, prefs: SharedPreferences): String {
+        fun launchStore(context: Context, prefs: SharedPreferences): String? {
             val userID = storedAccount(prefs)?.userID
             if (!prefs.getBoolean(Keys.SPLIT, false)) {
                 val dir = context.getDatabasePath(LocalStores.OFFLINE).parentFile!!
@@ -349,6 +330,5 @@ class Sync(
         const val AUTO = "sync.auto"
         const val EPHEMERAL = "sync.ephemeral"
         const val SPLIT = "sync.split"
-        const val WELCOMED = "drill.welcomed"
     }
 }

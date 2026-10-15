@@ -26,21 +26,21 @@ class LocalStoresTest {
             }
             return changed
         }
-        override fun clear() = rows.clear()
         fun pushed() = rows.replaceAll { _, v -> v.first to false }
     }
 
     /** One store per file name, like the phone's database folder. */
     private class Disk {
         val files = mutableMapOf<String, Rows>()
-        fun open(userID: String?) = files.getOrPut(LocalStores.fileName(userID)) { Rows() }
+        fun open(userID: String) = files.getOrPut(LocalStores.fileName(userID)!!) { Rows() }
+        fun legacy() = files.getOrPut(LocalStores.OFFLINE) { Rows() }
     }
 
     private fun session(id: String, at: Long = 1_000L) =
         FocusSession(id, at, at + 1_500_000, 1500.0, 1500.0, true, null, "android-TEST", at)
 
     @Test fun eachAccountHasItsOwnFile() {
-        assertEquals("drill.sqlite", LocalStores.fileName(null))
+        assertNull(LocalStores.fileName(null))
         assertEquals("drill-abc.sqlite", LocalStores.fileName("abc"))
         assertNotEquals(LocalStores.fileName("a"), LocalStores.fileName("b"))
     }
@@ -58,30 +58,27 @@ class LocalStoresTest {
         assertEquals(1, a.dirty().size)
     }
 
-    @Test fun signingInLeavesOfflineAlone() {
+    @Test fun signingInLeavesTheOldOfflineFileAlone() {
         val disk = Disk()
-        disk.open(null).save(listOf(session("O1")), local = true)
+        disk.legacy().save(listOf(session("O1")), local = true)
         val b = disk.open("user-b")
         assertTrue(b.dirty().isEmpty())
-        assertEquals(1, disk.open(null).all().size)
+        assertEquals(1, disk.legacy().all().size)
     }
 
-    @Test fun createAccountMovesOfflineRowsAndEmptiesOffline() {
+    @Test fun aNewAccountStartsEmpty() {
         val disk = Disk()
-        val offline = disk.open(null)
-        offline.save(listOf(session("O1"), session("O2", 2_000)), local = true)
-        offline.pushed() // even rows that were never meant for any account
-        val account = disk.open("new")
-        LocalStores.handOver(offline, account)
-        assertTrue(offline.all().isEmpty())
-        assertEquals(setOf("O1", "O2"), account.dirty().map { it.id }.toSet())
-        assertEquals(2_000L, account.all().first { it.id == "O2" }.updatedAt)
-    }
+        disk.legacy().save(listOf(session("O1")), local = true)
+        val a = disk.open("user-a")
+        a.save(listOf(session("A1"), session("A2", 2_000)), local = true)
+        a.pushed()
+        a.save(listOf(session("A3", 3_000)), local = true)
 
-    @Test fun welcomeOnlyWhenSignedOutAndNotChosenOffline() {
-        assertTrue(LocalStores.showWelcome(signedIn = false, welcomed = false))
-        assertFalse(LocalStores.showWelcome(signedIn = false, welcomed = true))
-        assertFalse(LocalStores.showWelcome(signedIn = true, welcomed = false))
+        val created = disk.open("new")
+        assertTrue(created.all().isEmpty())
+        assertTrue(created.dirty().isEmpty())
+        assertEquals(3, a.all().size)
+        assertEquals(1, disk.legacy().dirty().size)
     }
 
     @Test fun upgradeMovesTheFileOnceAndKeepsItsContents() {

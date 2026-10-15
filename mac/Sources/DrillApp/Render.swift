@@ -40,7 +40,7 @@ enum Render {
             model.tag = "15-213"
             model.toggle()
             model.freeze(at: Date() + 863)
-            write(MenuBarPanel().environment(model), theme: theme,
+            write(MenuBarPanel().environment(model).environment(sync), theme: theme,
                   to: folder.appending(path: "menubar-\(theme.rawValue).png"))
         }
         // The popover opens in its own window, which offscreen rendering can't reach.
@@ -57,7 +57,7 @@ enum Render {
             let view = MainView()
                 .environment(model)
                 .environment(Updater())
-                .environment(Sync(store: model.store, defaults: UserDefaults(suiteName: "drill.render")!, welcomed: false))
+                .environment(Sync(store: model.store, defaults: UserDefaults(suiteName: "drill.render")!, welcome: true))
                 .frame(width: MainView.windowSize.width, height: MainView.windowSize.height)
             write(view, theme: theme, to: folder.appending(path: "welcome-\(theme.rawValue).png"))
         }

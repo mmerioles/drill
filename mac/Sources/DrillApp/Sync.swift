@@ -26,12 +26,8 @@ final class Sync {
         }
     }
 
-    /// "continue offline" was picked. Cleared on sign-out, so the welcome shows.
-    var welcomed: Bool {
-        didSet { defaults.set(welcomed, forKey: Keys.welcomed) }
-    }
-
-    /// The account's own store while signed in, else the offline one.
+    /// The account's own store while signed in; signed out, one in memory
+    /// that nothing uses, as the timer waits for an account.
     private(set) var store: SessionStore
     /// Gets the new store when signing in or out swaps it.
     var onSwitch: (SessionStore) -> Void = { _ in }
@@ -40,6 +36,8 @@ final class Sync {
     private let api = SupabaseAPI.hosted
     /// Nil for --render: one store, never swapped.
     private let stores: AccountStores?
+    /// --render's main window, signed out but past the welcome.
+    private let demo: Bool
     private let deviceID: String
     private let defaults: UserDefaults
     /// Last run's account that wasn't kept: pushed and wiped from `start`.
@@ -61,27 +59,26 @@ final class Sync {
             defaults.set(defaults.data(forKey: Keys.account), forKey: Keys.leftover)
             defaults.removeObject(forKey: Keys.account)
             defaults.removeObject(forKey: Keys.ephemeral)
-            defaults.set(false, forKey: Keys.welcomed)
             account = nil
         }
         self.init(store: Self.open(stores, account?.userID), stores: stores, account: account, defaults: defaults,
-                  welcomed: defaults.bool(forKey: Keys.welcomed))
+                  demo: false)
         leftover = Self.decode(defaults.data(forKey: Keys.leftover))
     }
 
-    /// For --render: signed out, on one store.
-    convenience init(store: SessionStore, defaults: UserDefaults, welcomed: Bool = true) {
-        self.init(store: store, stores: nil, account: nil, defaults: defaults, welcomed: welcomed)
+    /// For --render: signed out, on one store, showing the timer unless `welcome`.
+    convenience init(store: SessionStore, defaults: UserDefaults, welcome: Bool = false) {
+        self.init(store: store, stores: nil, account: nil, defaults: defaults, demo: !welcome)
     }
 
     private init(store: SessionStore, stores: AccountStores?, account: Account?, defaults: UserDefaults,
-                 welcomed: Bool) {
+                 demo: Bool) {
         self.store = store
         self.stores = stores
         self.defaults = defaults
         self.deviceID = DeviceIdentity.current(defaults)
         self.account = account
-        self.welcomed = welcomed
+        self.demo = demo
         autoSync = defaults.object(forKey: Keys.auto) as? Bool ?? true
         state = account == nil ? .signedOut : .idle
         countUnpushed()
@@ -91,16 +88,16 @@ final class Sync {
         data.flatMap { try? JSONDecoder().decode(Account.self, from: $0) }
     }
 
-    /// Keeps the timer usable even if the disk isn't; nothing is kept then.
+    /// In memory when signed out, or if the disk fails; nothing is kept then.
     private static func open(_ stores: AccountStores, _ userID: String?) -> SessionStore {
-        (try? stores.open(userID)) ?? (try! SQLiteSessionStore.inMemory())
+        userID.flatMap { try? stores.open($0) } ?? (try! SQLiteSessionStore.inMemory())
     }
 
     var isSignedIn: Bool { account != nil }
     /// Signed in without "stay signed in": signed out on quit.
     var isEphemeral: Bool { isSignedIn && defaults.bool(forKey: Keys.ephemeral) }
-    /// The welcome takes the main window until you sign in or go offline.
-    var showsWelcome: Bool { !isSignedIn && !welcomed }
+    /// The welcome takes the main window, and the timer waits, until you sign in.
+    var showsWelcome: Bool { !isSignedIn && !demo }
 
     /// The home link: only while there's something to send and nothing sending.
     var showsLink: Bool { isSignedIn && unpushed > 0 && state != .syncing }
@@ -157,16 +154,15 @@ final class Sync {
 
     // These throw `Problem`, a sentence fit to show.
 
-    /// Opens the account's own store: nothing from this Mac goes up with it.
+    /// Either way, the account's own store: nothing else on this Mac goes up with it.
     func signIn(username: String, password: String, staySignedIn: Bool) async throws {
         let account = try await attempt { try await api.signIn(username: username, password: password) }
-        begin(account, staySignedIn: staySignedIn, carryingOffline: false)
+        begin(account, staySignedIn: staySignedIn)
     }
 
-    /// The one time offline sessions join an account.
     func createAccount(username: String, password: String, staySignedIn: Bool) async throws {
         let account = try await attempt { try await api.createAccount(username: username, password: password) }
-        begin(account, staySignedIn: staySignedIn, carryingOffline: true)
+        begin(account, staySignedIn: staySignedIn)
     }
 
     /// The live check on the create-account form. Throws on no answer.
@@ -174,17 +170,9 @@ final class Sync {
         try await attempt { try await api.usernameAvailable(name) }
     }
 
-    private func begin(_ account: Account, staySignedIn: Bool, carryingOffline: Bool) {
-        let marks = marks(account)
-        if let stores {
-            let mine = Self.open(stores, account.userID)
-            if carryingOffline {
-                marks.clear()
-                try? AccountStores.moveRows(from: store, to: mine)
-            }
-            use(mine)
-        }
-        marks.cursor = "0"
+    private func begin(_ account: Account, staySignedIn: Bool) {
+        if let stores { use(Self.open(stores, account.userID)) }
+        marks(account).cursor = "0"
         defaults.set(!staySignedIn, forKey: Keys.ephemeral)
         save(account)
         state = .idle
@@ -247,7 +235,6 @@ final class Sync {
         save(nil)
         defaults.removeObject(forKey: Keys.ephemeral)
         state = .signedOut
-        welcomed = false
         if let stores {
             use(Self.open(stores, nil))
             stores.remove(account.userID, defaults: defaults)
@@ -320,7 +307,6 @@ final class Sync {
         save(nil)
         defaults.removeObject(forKey: Keys.ephemeral)
         state = .signedOut
-        welcomed = false
         if let stores { use(Self.open(stores, nil)) }
         countUnpushed()
     }
@@ -382,7 +368,6 @@ final class Sync {
         static let account = "drill.sync.account"
         static let ephemeral = "drill.sync.ephemeral"
         static let leftover = "drill.sync.leftover"
-        static let welcomed = "drill.welcomed"
         static let auto = "drill.sync.auto"
     }
 }

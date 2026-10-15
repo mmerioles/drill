@@ -20,7 +20,7 @@ if (demo && window.self !== window.top) document.documentElement.classList.add("
 
 // MARK: Persistence
 
-const KEY = { timer: "drill.timer", settings: "drill.settings", tag: "drill.tag", welcomed: "drill.welcomed" };
+const KEY = { timer: "drill.timer", settings: "drill.settings", tag: "drill.tag" };
 const load = (key, fallback) => {
   try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
 };
@@ -586,7 +586,7 @@ function openAccount() {
 /** Whether the welcome screen is up, in place of the timer. */
 let welcoming = false;
 
-/** The account form on its own, making an account unless switched. */
+/** The account form on its own, signing in unless switched. */
 function showWelcome() {
   if (demo) return;
   for (const d of document.querySelectorAll("dialog[open]")) d.close();
@@ -594,7 +594,7 @@ function showWelcome() {
   $("welcome-form").append($("account-form"));
   document.documentElement.classList.add("welcoming");
   $("welcome").hidden = false;
-  resetAccount(true);
+  resetAccount(false);
 }
 
 function hideWelcome() {
@@ -714,7 +714,6 @@ function submitAccount(e) {
   if ($("account-submit").disabled) return;
   run(async () => {
     await store.signIn(username(), $("password").value, creating, $("stay").checked);
-    save(KEY.welcomed, true);
     hideWelcome();
     $("account").close();
   });
@@ -1001,10 +1000,6 @@ $("account").addEventListener("click", (e) => { if (e.target === e.currentTarget
 $("unsynced").addEventListener("close", () => {
   if ($("unsynced").returnValue === "sign-out") store.signOut(true);
 });
-$("continue-offline").addEventListener("click", () => {
-  save(KEY.welcomed, true);
-  hideWelcome();
-});
 
 const grid = $("grid");
 grid.addEventListener("pointermove", (e) => {
@@ -1028,16 +1023,11 @@ store.addEventListener("sync", renderSync);
 store.addEventListener("account", () => {
   hovered = null;
   if (store.account) hideWelcome();
-  else if (!welcoming) {
-    save(KEY.welcomed, false);
-    showWelcome();
-  }
+  else if (!welcoming) showWelcome();
 });
 
 // Another tab started, paused or finished the timer.
 addEventListener("storage", (e) => {
-  // Another tab went on offline from its welcome.
-  if (e.key === KEY.welcomed && welcoming && !store.account && load(KEY.welcomed, false)) hideWelcome();
   if (e.key !== KEY.timer) return;
   restoreTimer(load(KEY.timer, null));
   schedule();
@@ -1088,7 +1078,7 @@ renderTags();
 renderYear();
 renderSync();
 scheduleMidnight();
-if (!demo && !store.account && !load(KEY.welcomed, false)) showWelcome();
+if (!demo && !store.account) showWelcome();
 if (!demo && settings.autoSync) store.sync();
 // Opened by a banner's start button when no tab was open.
 const startParam = new URLSearchParams(location.search).get("start");

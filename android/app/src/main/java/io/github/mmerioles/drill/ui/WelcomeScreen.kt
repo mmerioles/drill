@@ -32,12 +32,12 @@ import androidx.compose.ui.unit.sp
 import io.github.mmerioles.drill.AppModel
 import io.github.mmerioles.drill.ink.LocalPalette
 
-/** First launch, and after signing out: make an account, sign in, or carry on offline. */
+/** Whenever nobody is signed in: sign in, or make an account. */
 @Composable
 fun WelcomeScreen(model: AppModel) {
     val ink = LocalPalette.current
     val focus = LocalFocusManager.current
-    var creating by rememberSaveable { mutableStateOf(true) }
+    var creating by rememberSaveable { mutableStateOf(false) }
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
@@ -57,7 +57,6 @@ fun WelcomeScreen(model: AppModel) {
                 Words("drill", Modifier.semantics { heading() }, size = 34.sp, weight = FontWeight.SemiBold)
                 Words("a quiet pomodoro timer", Modifier.padding(top = 6.dp), size = 15.sp, color = ink.faint)
                 AccountForm(model.sync, creating, { creating = it }, Modifier.fillMaxWidth().padding(top = 40.dp)) {}
-                Link("continue offline", Modifier.padding(top = 28.dp), action = model.sync::continueOffline)
             }
         }
     }

@@ -43,7 +43,7 @@ struct DrillApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         .commands {
-            TimerCommands(model: model)
+            TimerCommands(model: model, sync: sync)
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") { Task { await updater.check() } }
                     .disabled(!updater.isEnabled)
@@ -57,7 +57,7 @@ struct DrillApp: App {
         .windowResizability(.contentSize)
 
         MenuBarExtra {
-            MenuBarPanel().environment(model)
+            MenuBarPanel().environment(model).environment(sync)
         } label: {
             MenuBarLabel().environment(model)
         }
@@ -71,25 +71,30 @@ struct DrillApp: App {
 
 private struct TimerCommands: Commands {
     let model: AppModel
+    let sync: Sync
     @FocusedValue(\.palette) private var palette
+    /// The timer waits for an account.
+    private var locked: Bool { sync.showsWelcome }
 
     var body: some Commands {
         CommandMenu("Timer") {
             Button("Commands…") { palette?.wrappedValue.toggle() }
                 .keyboardShortcut("k", modifiers: .command)
-                .disabled(palette == nil)
+                .disabled(palette == nil || locked)
             Divider()
             Button(model.isRunning ? "Pause" : (model.isActive ? "Resume" : "Start"), action: model.toggle)
                 .keyboardShortcut(.return, modifiers: .command)
+                .disabled(locked)
             Button("Skip", action: model.skip)
                 .keyboardShortcut(.rightArrow, modifiers: .command)
-                .disabled(model.isStopwatch)
+                .disabled(model.isStopwatch || locked)
             Button(Copy.reset(intervals: model.isIntervals).capitalized, action: model.reset)
                 .keyboardShortcut("r", modifiers: .command)
+                .disabled(locked)
             Divider()
             Button("Switch to \(Copy.modeName(model.mode.next).capitalized)", action: model.switchMode)
                 .keyboardShortcut("t", modifiers: .command)
-                .disabled(model.isActive)
+                .disabled(model.isActive || locked)
         }
     }
 }

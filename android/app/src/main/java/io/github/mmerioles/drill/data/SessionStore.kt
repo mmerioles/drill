@@ -11,7 +11,7 @@ import io.github.mmerioles.drill.core.SessionRows
 
 /** Sessions in SQLite, one file per account (see [io.github.mmerioles.drill.core.LocalStores]).
  *  Newer updatedAt wins; local rows stay dirty until pushed. */
-class SessionStore(context: Context, name: String) :
+class SessionStore(context: Context, name: String?) :
     SQLiteOpenHelper(context, name, null, 1), SessionRows {
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -102,11 +102,6 @@ class SessionStore(context: Context, name: String) :
         } finally {
             db.endTransaction()
         }
-    }
-
-    @Synchronized
-    override fun clear() {
-        writableDatabase.execSQL("DELETE FROM sessions")
     }
 
     private fun query(sql: String, args: Array<String>): List<FocusSession> =

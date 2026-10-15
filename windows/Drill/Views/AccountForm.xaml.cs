@@ -13,7 +13,7 @@ namespace Drill.Views;
 /// Sign in, or make an account, as AccountSheet.swift: a username and a
 /// password. On the create form each field gets a mark as you type (the name
 /// checked 300ms after the last keystroke); the password is typed twice. In
-/// the account dialog, and inline on the welcome.
+/// the account dialog, and inline on the welcome; both open on sign in.
 /// </summary>
 public partial class AccountForm : UserControl
 {
@@ -33,12 +33,11 @@ public partial class AccountForm : UserControl
     /// <param name="done">Signed in.</param>
     /// <param name="cancel">Null: no cancel link, as on the welcome.</param>
     /// <param name="heading">False: no heading, as on the welcome, which has its own.</param>
-    public AccountForm(Sync sync, Action done, Action? cancel, bool creating = false, bool heading = true)
+    public AccountForm(Sync sync, Action done, Action? cancel, bool heading = true)
     {
         _sync = sync;
         _done = done;
         _cancel = cancel;
-        _creating = creating;
         InitializeComponent();
         if (!heading) Heading.Visibility = Visibility.Collapsed;
         if (cancel is null)

@@ -117,11 +117,12 @@ Every client (`store.js`, `Sync.swift`, `Sync.kt`, `Sync.cs`):
 3. Run at launch, after each logged session, every few minutes, and when the
    sync button is pressed.
 
-Sessions belong to one account. Each client keeps an offline store (used
-only while signed out) and one store per signed-in account, keyed by its
-Supabase user id, with that account's own push mark and cursor. Signing in
-opens the account's store, pulls from `0` and pushes only that store's rows:
-nothing written offline or under another account goes up. Making an account
-is the one exception: offline sessions move into the new account's store.
-Signing out pushes what it can (asking first if that fails), then deletes the
-account's store and marks. With "stay signed in" off, quitting does the same.
+Sessions belong to one account, and an account is required: signed out,
+the apps show only the sign-in screen. Each client keeps one store per
+signed-in account, keyed by its Supabase user id, with that account's own
+push mark and cursor. Signing in or making an account opens that account's
+store (a new one starts empty), pulls from `0` and pushes only that store's
+rows; nothing ever moves between accounts. A pre-accounts offline store is
+left on disk untouched. Signing out pushes what it can (asking first if that
+fails), then deletes the account's store and marks. With "stay signed in"
+off, quitting does the same.

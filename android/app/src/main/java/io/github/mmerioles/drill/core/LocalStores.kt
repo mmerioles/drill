@@ -3,34 +3,25 @@ package io.github.mmerioles.drill.core
 import java.io.File
 import java.util.Base64
 
-/** What moving sessions between stores needs from one. */
+/** A store's rows, as the tests see them. */
 interface SessionRows {
     /** Every row, tombstones too. */
     fun all(): List<FocusSession>
     fun dirty(): List<FocusSession>
     fun save(rows: List<FocusSession>, local: Boolean): Int
-    fun clear()
 }
 
 /**
- * Sessions belong to one account. The offline store is used only while
- * nobody is signed in; each signed-in account has its own, keyed by its
- * Supabase user id, and nothing crosses between them except when an account
- * is created from offline.
+ * Sessions belong to one account. Each account has its own store, keyed by
+ * its Supabase user id, and nothing ever crosses between them. Signed out,
+ * nothing is kept (an in-memory store); the old offline file is left as it is.
  */
 object LocalStores {
+    /** Before accounts were required: the store used while signed out. Never opened now. */
     const val OFFLINE = "drill.sqlite"
 
-    fun fileName(userID: String?) = if (userID == null) OFFLINE else "drill-$userID.sqlite"
-
-    /** Create account: the offline rows join the new account, unpushed, and leave offline. */
-    fun handOver(offline: SessionRows, account: SessionRows) {
-        account.save(offline.all(), local = true)
-        offline.clear()
-    }
-
-    /** At launch: nobody signed in and offline not chosen yet. */
-    fun showWelcome(signedIn: Boolean, welcomed: Boolean) = !signedIn && !welcomed
+    /** Null: in memory. */
+    fun fileName(userID: String?) = userID?.let { "drill-$it.sqlite" }
 
     /**
      * Once, at the first launch of the build that split the stores: an

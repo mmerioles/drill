@@ -93,7 +93,7 @@ public partial class App : Application, Shell
         Palette.Apply(Model.Theme, Resources);
         Sync = new Sync(Model);
         Model.OnLogged = Sync.Logged;
-        Sync.PropertyChanged += (_, p) => { if (p.PropertyName == nameof(Sync.IsSignedIn) && Sync.IsSignedIn) Model.Welcoming = false; };
+        Sync.PropertyChanged += (_, p) => { if (p.PropertyName == nameof(Sync.IsSignedIn)) Model.Welcoming = !Sync.IsSignedIn; };
         Updater = new Updater();
 
         Model.Finished += Finished;
@@ -127,7 +127,7 @@ public partial class App : Application, Shell
 
     private void Finish(string[] args)
     {
-        Model.Welcoming = !Sync.IsSignedIn && !Model.Welcomed;
+        Model.Welcoming = !Sync.IsSignedIn;
         Sync.Start();
         Updater.Start();
         SetJumpList();
@@ -219,12 +219,8 @@ public partial class App : Application, Shell
         }
     }
 
-    /// <summary>Signs out; the welcome asks again at next launch. Returns the token's revocation.</summary>
-    private Task SignedOut()
-    {
-        Model.Welcomed = false;
-        return Sync.SignOut();
-    }
+    /// <summary>Signs out; the welcome shows until someone signs in. Returns the token's revocation.</summary>
+    private Task SignedOut() => Sync.SignOut();
 
     /// <summary>Sessions that couldn't be pushed are lost on sign-out: ask first.</summary>
     private static Task<bool> Confirm(FrameworkElement from)

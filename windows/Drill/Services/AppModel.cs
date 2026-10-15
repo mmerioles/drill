@@ -35,7 +35,7 @@ public abstract class Observable : INotifyPropertyChanged
 public sealed class AppModel : Observable
 {
     public PomodoroEngine Engine { get; }
-    /// <summary>The offline store, or the signed-in account's: swapped by <see cref="UseStore"/>.</summary>
+    /// <summary>The signed-in account's store, or an empty one in memory: swapped by <see cref="UseStore"/>.</summary>
     public ISessionStore Store { get; private set; }
     public string DeviceID { get; }
     public Prefs Prefs { get; }
@@ -89,8 +89,9 @@ public sealed class AppModel : Observable
     }
 
     /// <summary>
-    /// Production wiring: the signed-in account's store, or the offline one.
-    /// DRILL_DB (the offline store), DRILL_FAST=1 and DRILL_THEME=light|dark are for trying things out.
+    /// Production wiring: the signed-in account's store, or an empty one in
+    /// memory while nobody is (the old offline file is never opened).
+    /// DRILL_DB (where the stores live), DRILL_FAST=1 and DRILL_THEME=light|dark are for trying things out.
     /// </summary>
     public static AppModel Live()
     {
@@ -98,7 +99,7 @@ public sealed class AppModel : Observable
         var userID = Sync.StoredAccount(prefs)?.UserID;
         try { AccountStores.Upgrade(prefs, SqliteSessionStore.OfflinePath, userID); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } // tried again next launch
-        var store = Open(userID is null ? SqliteSessionStore.OfflinePath : SqliteSessionStore.AccountPath(userID));
+        var store = userID is null ? SqliteSessionStore.InMemory() : Open(SqliteSessionStore.AccountPath(userID));
         var fast = Environment.GetEnvironmentVariable("DRILL_FAST") == "1"
             ? new TimerConfig { Focus = 20, ShortBreak = 5, LongBreak = 10 } : null;
         var model = new AppModel(store, prefs, fast);
@@ -203,14 +204,7 @@ public sealed class AppModel : Observable
         set { if (Set(ref _theme, value)) Prefs.Set(Keys.Theme, value == Theme.Light ? "light" : "dark"); }
     }
 
-    /// <summary>The first-launch choice was made: "continue offline", or an account.</summary>
-    public bool Welcomed
-    {
-        get => Prefs.Get<bool?>(Keys.Welcomed) ?? false;
-        set => Prefs.Set(Keys.Welcomed, value);
-    }
-
-    /// <summary>The main window shows the welcome in place of the timer.</summary>
+    /// <summary>Nobody's signed in: the main window shows the welcome in place of the timer, and the timer doesn't start.</summary>
     public bool Welcoming { get; set => Set(ref field, value); }
 
     /// <summary>Whether the tray hint toast has been shown, so it shows once.</summary>
@@ -241,6 +235,7 @@ public sealed class AppModel : Observable
 
     public void Toggle()
     {
+        if (Welcoming) return;
         var starting = Engine.IsIdle;
         Now = _clock();
         Engine.Toggle(Now);
@@ -267,6 +262,7 @@ public sealed class AppModel : Observable
 
     public void Skip()
     {
+        if (Welcoming) return;
         Now = _clock();
         Handle(Engine.Skip(Now));
         SyncTicking();
@@ -403,6 +399,5 @@ public sealed class AppModel : Observable
         public const string Theme = "drill.theme";
         public const string Tray = "drill.keepInTray";
         public const string ToldTray = "drill.toldAboutTray";
-        public const string Welcomed = "drill.welcomed";
     }
 }

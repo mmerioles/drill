@@ -1,8 +1,8 @@
 import Foundation
 
-/// Sessions belong to one account. Signed out, the app uses the offline
-/// store; signed in, that account's own store beside it. Only making an
-/// account carries offline sessions over.
+/// Sessions belong to one account: each has its own store, beside the old
+/// offline one. Nothing moves between them; the offline store is only read
+/// by the one-time `upgrade`.
 public struct AccountStores {
     public let offlineURL: URL
 
@@ -14,21 +14,14 @@ public struct AccountStores {
         SQLiteSessionStore.accountURL(userID: userID, beside: offlineURL)
     }
 
-    public func open(_ userID: String?) throws -> SQLiteSessionStore {
-        try SQLiteSessionStore(url: userID.map(url(for:)) ?? offlineURL)
+    public func open(_ userID: String) throws -> SQLiteSessionStore {
+        try SQLiteSessionStore(url: url(for: userID))
     }
 
     /// The account's sessions and its sync marks, after signing out.
     public func remove(_ userID: String, defaults: UserDefaults) {
         SQLiteSessionStore.remove(at: url(for: userID))
         SyncMarks(defaults: defaults, userID: userID).clear()
-    }
-
-    /// Making an account: every offline row (tombstones too) goes to the new
-    /// account's store, unpushed there, and the offline store is emptied.
-    public static func moveRows(from offline: SessionStore, to account: SessionStore) throws {
-        for session in try offline.changes(since: .distantPast) { try account.save(session) }
-        try offline.removeAll()
     }
 
     /// Once, before any store opens: before this version a signed-in Mac kept

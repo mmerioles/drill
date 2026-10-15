@@ -10,6 +10,9 @@ import Testing
         return UserDefaults(suiteName: name)!
     }()
 
+    /// The offline store from before accounts were required.
+    func legacy() throws -> SQLiteSessionStore { try SQLiteSessionStore(url: stores.offlineURL) }
+
     func session(_ at: TimeInterval) -> FocusSession {
         let start = Date(timeIntervalSince1970: at)
         return FocusSession(startedAt: start, endedAt: start + 1500, focusSeconds: 1500, plannedSeconds: 1500,
@@ -24,23 +27,21 @@ import Testing
         let b = try stores.open("bbb")
         #expect(try b.changes(since: SyncMarks(defaults: defaults, userID: "bbb").pushedAt).isEmpty)
         #expect(try b.sessions(from: .distantPast, to: .distantFuture).isEmpty)
-        #expect(try stores.open(nil).changes(since: .distantPast).isEmpty)
+        #expect(try legacy().changes(since: .distantPast).isEmpty)
         #expect(try a.changeCount(since: SyncMarks(defaults: defaults, userID: "aaa").pushedAt) == 1)
         #expect(stores.url(for: "aaa").lastPathComponent == "drill-aaa.sqlite")
     }
 
-    @Test func makingAnAccountMovesOfflineSessions() throws {
-        let offline = try stores.open(nil)
-        var gone = session(200)
-        gone.deletedAt = Date(timeIntervalSince1970: 300)
-        gone.updatedAt = Date(timeIntervalSince1970: 300)
-        try offline.save(session(100))
-        try offline.save(gone)
+    @Test func aNewAccountStartsEmpty() throws {
+        try legacy().save(session(100))
+        try stores.open("aaa").save(session(200))
+        SyncMarks(defaults: defaults, userID: "aaa").pushedAt = Date(timeIntervalSince1970: 50)
 
         let mine = try stores.open("new")
-        try AccountStores.moveRows(from: offline, to: mine)
-        #expect(try offline.changes(since: .distantPast).isEmpty)
-        #expect(try mine.changes(since: SyncMarks(defaults: defaults, userID: "new").pushedAt).count == 2)
+        #expect(try mine.sessions(from: .distantPast, to: .distantFuture).isEmpty)
+        #expect(try mine.changes(since: SyncMarks(defaults: defaults, userID: "new").pushedAt).isEmpty)
+        #expect(try legacy().changes(since: .distantPast).count == 1)
+        #expect(try stores.open("aaa").changes(since: .distantPast).count == 1)
     }
 
     @Test func signingOutForgetsTheAccount() throws {
@@ -56,7 +57,7 @@ import Testing
     @Test func upgradeMovesTheOfflineStoreOnceAndKeepsItsMarks() throws {
         let pushed = Date(timeIntervalSince1970: 150)
         do {
-            let old = try stores.open(nil)
+            let old = try legacy()
             try old.save(session(100))
             try old.save(session(200))
         }
@@ -69,19 +70,19 @@ import Testing
         #expect(marks.cursor == "42")
         #expect(defaults.object(forKey: "drill.sync.pushedAt") == nil)
         #expect(try stores.open("aaa").changeCount(since: marks.pushedAt) == 1)
-        #expect(try stores.open(nil).changes(since: .distantPast).isEmpty)
+        #expect(try legacy().changes(since: .distantPast).isEmpty)
 
         // Never again, even for another account.
-        try stores.open(nil).save(session(300))
+        try legacy().save(session(300))
         stores.upgrade(signedInAs: "bbb", defaults: defaults)
         #expect(!FileManager.default.fileExists(atPath: stores.url(for: "bbb").path))
-        #expect(try stores.open(nil).changes(since: .distantPast).count == 1)
+        #expect(try legacy().changes(since: .distantPast).count == 1)
     }
 
     @Test func upgradeSignedOutMovesNothing() throws {
-        try stores.open(nil).save(session(100))
+        try legacy().save(session(100))
         stores.upgrade(signedInAs: nil, defaults: defaults)
-        #expect(try stores.open(nil).changes(since: .distantPast).count == 1)
+        #expect(try legacy().changes(since: .distantPast).count == 1)
         #expect(defaults.bool(forKey: AccountStores.upgraded))
     }
 

@@ -8,8 +8,7 @@ struct AccountSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        AccountForm(preview: preview, creating: preview != .none, titled: true,
-                    cancel: { dismiss() }, done: { dismiss() })
+        AccountForm(preview: preview, titled: true, cancel: { dismiss() }, done: { dismiss() })
             .padding(24)
             .frame(width: 440)
             .background(Ink.paper)
@@ -17,9 +16,9 @@ struct AccountSheet: View {
 }
 
 /// Sign in or make an account: a username and a password. In the settings
-/// sheet and on the welcome screen.
+/// sheet and on the welcome screen; opens on sign in.
 struct AccountForm: View {
-    /// For --render, which can't type.
+    /// For --render, which can't type: a filled-in create form.
     enum Preview { case none, available, taken }
 
     @Environment(Sync.self) private var sync
@@ -43,13 +42,13 @@ struct AccountForm: View {
     /// What the live check last said about the name in the field.
     private enum Check: Equatable { case none, checking, available, taken }
 
-    init(preview: Preview = .none, creating: Bool, titled: Bool, cancel: (() -> Void)?, done: @escaping () -> Void) {
+    init(preview: Preview = .none, titled: Bool, cancel: (() -> Void)?, done: @escaping () -> Void) {
         self.preview = preview
         self.titled = titled
         self.cancel = cancel
         self.done = done
         let filled = preview != .none
-        _creating = State(initialValue: creating)
+        _creating = State(initialValue: filled)
         _username = State(initialValue: filled ? "teto" : "")
         _password = State(initialValue: filled ? "kasane-0401" : "")
         _confirm = State(initialValue: filled ? "kasane-0401" : "")

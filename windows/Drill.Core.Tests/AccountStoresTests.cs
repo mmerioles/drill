@@ -49,20 +49,24 @@ public sealed class AccountStoresTests : IDisposable
     }
 
     [Fact]
-    public void MakingAnAccountMovesTheOfflineRows()
+    public void ANewAccountStartsEmpty()
     {
-        using var offline = new SqliteSessionStore(Offline);
-        var kept = Session(100);
-        var gone = Session(200) with { DeletedAt = DateTimeOffset.FromUnixTimeSeconds(300), UpdatedAt = DateTimeOffset.FromUnixTimeSeconds(300) };
-        offline.Save(kept);
-        offline.Save(gone);
-        using var account = new SqliteSessionStore(SqliteSessionStore.AccountPath("new", Offline));
+        var prefs = Prefs.InMemory();
+        using (var offline = new SqliteSessionStore(Offline)) offline.Save(Session(100));
+        using (var a = new SqliteSessionStore(SqliteSessionStore.AccountPath("a", Offline))) a.Save(Session(200));
+        prefs.Set(AccountStores.PushedAtKey("a"), DateTimeOffset.FromUnixTimeSeconds(50));
 
-        AccountStores.MoveRows(offline, account);
+        using var created = new SqliteSessionStore(SqliteSessionStore.AccountPath("new", Offline));
+        var since = prefs.Get<DateTimeOffset?>(AccountStores.PushedAtKey("new")) ?? DateTimeOffset.MinValue;
+        Assert.Empty(All(created));
+        Assert.Empty(created.Changes(since));
+        Assert.Equal(0, created.Unpushed(since, "test"));
 
-        Assert.Empty(All(offline));
-        Assert.Equal([kept.Id, gone.Id], All(account).Select(s => s.Id));
-        Assert.Equal(2, account.Unpushed(DateTimeOffset.MinValue, "test"));
+        // The others are left as they were.
+        using var offlineAfter = new SqliteSessionStore(Offline);
+        Assert.Single(All(offlineAfter));
+        using var aAfter = new SqliteSessionStore(SqliteSessionStore.AccountPath("a", Offline));
+        Assert.Single(All(aAfter));
     }
 
     [Fact]

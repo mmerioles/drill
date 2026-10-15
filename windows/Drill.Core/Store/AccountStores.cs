@@ -1,9 +1,9 @@
 namespace Drill.Core.Store;
 
 /// <summary>
-/// Sessions belong to one account. The offline store is used while nobody's
-/// signed in; each account gets its own store, and its own sync state in
-/// prefs, so signing in never uploads another account's history.
+/// Sessions belong to one account. Each account gets its own store, and its
+/// own sync state in prefs, so nothing ever moves between accounts. The old
+/// offline store is left where it is, untouched, after the upgrade.
 /// </summary>
 public static class AccountStores
 {
@@ -40,13 +40,6 @@ public static class AccountStores
         prefs.Remove(SharedPushedAt);
         prefs.Remove(SharedCursor);
         prefs.Set(Upgraded, true);
-    }
-
-    /// <summary>Making an account: the offline sessions move into it, all unpushed, and the offline store empties.</summary>
-    public static void MoveRows(ISessionStore from, ISessionStore to)
-    {
-        foreach (var s in from.Changes(DateTimeOffset.MinValue)) to.Save(s);
-        from.Clear();
     }
 
     /// <summary>An account's store and sync state, gone from this PC. The store must be closed first.</summary>

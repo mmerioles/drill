@@ -2,8 +2,9 @@
 // The browser is just another device: it pushes rows it wrote, pulls rows
 // it hasn't seen, and merges with one rule — newer updatedAt wins.
 //
-// Each account keeps its own sessions, under drill.u.<userID>.*; the plain
-// drill.* keys are the offline store, used only while nobody is signed in.
+// Each account keeps its own sessions, under drill.u.<userID>.*. Nobody signed
+// in means no store at all; the plain drill.* keys from before accounts were
+// required are left alone, except by the site's demo.
 // An account that shouldn't stay signed in lives in sessionStorage, keys and
 // all, so closing the tab forgets it.
 
@@ -109,7 +110,7 @@ export class Store extends EventTarget {
     addEventListener("storage", (e) => {
       if (e.key === null || e.key === KEY.account) {
         if (userIDOf(this.account) !== this.userID) this.#activate();
-      } else if (e.storageArea === this.area && (e.key === this.keys.sessions || e.key === this.keys.dirty)) {
+      } else if (this.keys && e.storageArea === this.area && (e.key === this.keys.sessions || e.key === this.keys.dirty)) {
         this.sessions = read(this.area, this.keys.sessions, {});
         this.#changed();
       }
@@ -126,7 +127,7 @@ export class Store extends EventTarget {
     return null;
   }
 
-  /** Where the account (or the offline store) keeps its keys. */
+  /** Where the account (or the demo) keeps its keys. */
   #areaOf(account) {
     return account?.ephemeral ? sessionStorage : localStorage;
   }
@@ -136,8 +137,8 @@ export class Store extends EventTarget {
     const account = this.account;
     this.userID = userIDOf(account);
     this.area = this.#areaOf(account);
-    this.keys = keysFor(this.userID);
-    this.sessions = read(this.area, this.keys.sessions, {});
+    this.keys = this.userID || this.offline ? keysFor(this.userID) : null;
+    this.sessions = this.keys ? read(this.area, this.keys.sessions, {}) : {};
     this.generation++;
     this.syncState = account ? "synced" : "signedOut"; // signedOut | syncing | synced | offline
     if (!announce) return;
@@ -157,15 +158,8 @@ export class Store extends EventTarget {
     const account = await (create ? cloud.signUp(username, password) : cloud.signIn(username, password));
     if (!stay) account.ephemeral = true;
     account.userID = userIDOf(account);
-    const area = this.#areaOf(account), to = keysFor(account.userID);
-    if (create) {
-      // A new account takes what was logged offline; nothing else ever crosses.
-      const rows = read(localStorage, OFFLINE.sessions, {});
-      write(area, to.sessions, rows);
-      write(area, to.dirty, Object.keys(rows));
-      remove(localStorage, ...Object.values(OFFLINE));
-    }
-    write(area, to.cursor, "0");
+    // Nothing crosses between accounts: each has only its own and what it pulls.
+    write(this.#areaOf(account), keysFor(account.userID).cursor, "0");
     for (const a of areas()) remove(a, KEY.account);
     this.#saveAccount(account);
     this.#activate();
@@ -175,8 +169,8 @@ export class Store extends EventTarget {
   }
 
   /** Pushes what's left (up to 10s), then forgets the account and its
-   *  sessions and goes back to the offline store. Resolves to false, having
-   *  done nothing, when sessions couldn't be pushed and `force` isn't set. */
+   *  sessions. Resolves to false, having done nothing, when sessions
+   *  couldn't be pushed and `force` isn't set. */
   async signOut(force = false) {
     const account = this.account;
     if (!account) return true;
@@ -194,7 +188,7 @@ export class Store extends EventTarget {
     return true;
   }
 
-  /** Drops an account and its sessions, and opens the offline store. */
+  /** Drops an account and its sessions. */
   #forget(account) {
     const area = this.#areaOf(account), id = userIDOf(account);
     if (id) remove(area, ...Object.values(keysFor(id)));
@@ -203,7 +197,7 @@ export class Store extends EventTarget {
   }
 
   /** How many local changes haven't been pushed yet. */
-  unpushed() { return read(this.area, this.keys.dirty, []).length; }
+  unpushed() { return this.keys ? read(this.area, this.keys.dirty, []).length : 0; }
 
   /** Live sessions, oldest first. */
   live() {
@@ -224,6 +218,7 @@ export class Store extends EventTarget {
 
   /** Logs a finished focus block from the engine. */
   log(record, tag) {
+    if (!this.keys) return;
     const now = Date.now();
     const session = {
       id: hashedUUID(`${this.deviceID}:${record.startedAt}`),
@@ -243,6 +238,7 @@ export class Store extends EventTarget {
 
   /** Last-writer-wins on updatedAt. Local writes are queued for push. */
   #merge(rows, local) {
+    if (!this.keys) return;
     const dirty = new Set(read(this.area, this.keys.dirty, []));
     let changed = false;
     for (const row of rows) {
