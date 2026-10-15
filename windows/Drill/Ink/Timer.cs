@@ -443,6 +443,7 @@ public sealed class StatusMark : FrameworkElement
 
     private void Pop()
     {
+        InvalidateVisual(); // None draws nothing, but only once it redraws
         if (Status is Kind.Done or Kind.Pending or Kind.Failed)
             Animate.Settle(this, PopProperty, Status == Kind.Pending ? 0.5 : 0.4, 1, 420,
                            new ElasticLikeEase());

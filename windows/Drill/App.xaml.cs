@@ -210,6 +210,7 @@ public partial class App : Application, Shell
             if (!await Sync.Flush(TimeSpan.FromSeconds(10)) && !await Confirm(from)) return;
             _ = SignedOut();
             Model.Welcoming = true;
+            _settings?.Close();
             OpenMain();
         }
         finally
