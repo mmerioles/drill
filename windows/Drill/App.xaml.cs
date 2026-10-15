@@ -22,6 +22,8 @@ public interface Shell
     void OpenInspo();
     /// <summary>The sign-in dialog, over whichever window `from` is in.</summary>
     void ShowAccount(FrameworkElement from);
+    /// <summary>Pushes what's left (asking over `from` if it can't), signs out, and shows the welcome.</summary>
+    Task SignOut(FrameworkElement from);
     void SetTheme(Theme theme);
     void Quit();
 }
@@ -53,6 +55,7 @@ public partial class App : Application, Shell
     private (DateTime At, Type? Kind) _popupLost;
     private readonly Notifier _notifier = new();
     private bool _quitting;
+    private bool _signingOut;
     /// <summary>Signals from another launch that arrive before the model exists wait here.</summary>
     private List<Action>? _early = [];
 
@@ -88,8 +91,9 @@ public partial class App : Application, Shell
         Updater.SweepDownloads();
         Model = AppModel.Live();
         Palette.Apply(Model.Theme, Resources);
-        Sync = new Sync(Model.Store, Model.DeviceID, Model.Prefs, onPulled: Model.Reload);
+        Sync = new Sync(Model);
         Model.OnLogged = Sync.Logged;
+        Sync.PropertyChanged += (_, p) => { if (p.PropertyName == nameof(Sync.IsSignedIn) && Sync.IsSignedIn) Model.Welcoming = false; };
         Updater = new Updater();
 
         Model.Finished += Finished;
@@ -109,6 +113,21 @@ public partial class App : Application, Shell
 
         SessionEnding += (_, _) => Quit(); // signing out or shutting down: never hide, just go
 
+        // An account that wasn't to be kept, still here: drill didn't get to end it on quit.
+        if (Sync.IsEphemeral) EndThenFinish(args);
+        else Finish(args);
+    }
+
+    private async void EndThenFinish(string[] args)
+    {
+        await Sync.Flush(TimeSpan.FromSeconds(10));
+        _ = SignedOut();
+        Finish(args);
+    }
+
+    private void Finish(string[] args)
+    {
+        Model.Welcoming = !Sync.IsSignedIn && !Model.Welcomed;
         Sync.Start();
         Updater.Start();
         SetJumpList();
@@ -180,6 +199,43 @@ public partial class App : Application, Shell
         var frame = FindFrame(from);
         if (frame is null) return;
         frame.Dialogs.Show(new AccountDialog(Sync, frame.Dialogs.Close));
+    }
+
+    public async Task SignOut(FrameworkElement from)
+    {
+        if (_signingOut || !Sync.IsSignedIn) return;
+        _signingOut = true;
+        try
+        {
+            if (!await Sync.Flush(TimeSpan.FromSeconds(10)) && !await Confirm(from)) return;
+            _ = SignedOut();
+            Model.Welcoming = true;
+            OpenMain();
+        }
+        finally
+        {
+            _signingOut = false;
+        }
+    }
+
+    /// <summary>Signs out; the welcome asks again at next launch. Returns the token's revocation.</summary>
+    private Task SignedOut()
+    {
+        Model.Welcomed = false;
+        return Sync.SignOut();
+    }
+
+    /// <summary>Sessions that couldn't be pushed are lost on sign-out: ask first.</summary>
+    private static Task<bool> Confirm(FrameworkElement from)
+    {
+        if (FindFrame(from) is not { } frame) return Task.FromResult(false);
+        var answer = new TaskCompletionSource<bool>();
+        frame.Dialogs.Show(new ConfirmDialog("you have unsynced sessions — sign out anyway?", "sign out", yes =>
+        {
+            answer.TrySetResult(yes);
+            frame.Dialogs.Close();
+        }));
+        return answer.Task;
     }
 
     private static InkFrame? FindFrame(DependencyObject? d)
@@ -349,7 +405,23 @@ public partial class App : Application, Shell
         _tray?.Dispose();
         _tray = null;
         foreach (Window w in Windows) w.Close();
-        Shutdown();
+        if (Sync is { IsEphemeral: true }) _ = EndThenShutdown();
+        else Shutdown();
+    }
+
+    /// <summary>An account that wasn't to be kept: push what's left, then sign out and delete its store.</summary>
+    private async Task EndThenShutdown()
+    {
+        try
+        {
+            await Sync.Flush(TimeSpan.FromSeconds(10));
+            var revoke = SignedOut();
+            await Task.WhenAny(revoke, Task.Delay(TimeSpan.FromSeconds(3)));
+        }
+        finally
+        {
+            Shutdown();
+        }
     }
 
     /// <summary>
@@ -360,6 +432,7 @@ public partial class App : Application, Shell
     {
         _tray?.Dispose();
         _tray = null;
+        if (Sync is { IsEphemeral: true }) _ = SignedOut(); // no time to push: just don't keep it
         (Model?.Store as IDisposable)?.Dispose();
         try { _mutex?.ReleaseMutex(); } catch (ApplicationException) { } // a second launch never owned it
         _mutex?.Dispose();

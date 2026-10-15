@@ -129,10 +129,9 @@ public partial class SettingsPage : UserControl
         _showing = false;
     }
 
-    private void OnAccount(object sender, RoutedEventArgs e)
+    private async void OnAccount(object sender, RoutedEventArgs e)
     {
-        var sync = _shell.Sync;
-        if (sync.IsSignedIn) sync.SignOut();
+        if (_shell.Sync.IsSignedIn) await _shell.SignOut(this);
         else _shell.ShowAccount(this);
     }
 

@@ -96,6 +96,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         model.updater.start()
         model.pinNightMode()
+        model.launched()
         setContent { App(model, palette) }
     }
 
@@ -112,6 +113,12 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         unregisterReceiver(clockChanged)
         super.onStop()
+    }
+
+    /** No quit hook on Android: leaving for good is the nearest thing. */
+    override fun onDestroy() {
+        if (isFinishing) model.sync.endEphemeral()
+        super.onDestroy()
     }
 
     override fun onResume() {
@@ -156,7 +163,7 @@ fun App(model: AppModel, palette: MutableState<Boolean>) {
     val activity = LocalContext.current as ComponentActivity
     SideEffect { activity.enableEdgeToEdge(bars(model.theme), bars(model.theme)) }
     CompositionLocalProvider(LocalPalette provides if (dark) Palette.dark else Palette.light) {
-        Screen(model, palette)
+        if (model.sync.welcome) WelcomeScreen(model) else Screen(model, palette)
     }
 }
 

@@ -1,4 +1,4 @@
-<UserControl x:Class="Drill.Views.AccountDialog"
+<UserControl x:Class="Drill.Views.AccountForm"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ink="clr-namespace:Drill.Ink">
@@ -45,12 +45,17 @@
                 </Grid>
             </StackPanel>
         </Border>
+        <!-- Off: the account ends when drill quits. -->
+        <DockPanel Margin="0,14,0,0">
+            <ink:Toggle x:Name="Stay" DockPanel.Dock="Right" IsOn="True" AutomationProperties.Name="stay signed in" VerticalAlignment="Center" />
+            <TextBlock Text="stay signed in" Style="{StaticResource Base}" FontSize="15" VerticalAlignment="Center" />
+        </DockPanel>
         <TextBlock x:Name="Problem" Style="{StaticResource Base}" FontSize="13" Opacity="0.52" Margin="0,10,0,0"
                    TextWrapping="Wrap" Visibility="Collapsed" />
         <DockPanel Margin="0,24,0,0">
             <ink:InkLink x:Name="SwitchMode" VerticalAlignment="Center" Click="OnSwitch" Margin="-2,0,0,0" />
             <ink:Capsule x:Name="Primary" DockPanel.Dock="Right" FontSize="15" Height="40" Padding="32,0" Click="OnSubmit" IsDefault="True" />
-            <ink:InkLink Content="cancel" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="0,0,14,0"
+            <ink:InkLink x:Name="Cancel" Content="cancel" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="0,0,14,0"
                          Click="OnCancel" IsCancel="True" />
             <Border />
         </DockPanel>

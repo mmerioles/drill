@@ -73,7 +73,8 @@ class AppModel(private val app: Application) {
         SupervisorJob() + Dispatchers.Main.immediate +
             CoroutineExceptionHandler { _, e -> Log.e(TAG, "background work failed", e) },
     )
-    private val store = SessionStore(app)
+    /** The one store in use: the signed-in account's, or offline. Read and swapped only on [disk]. */
+    @Volatile private var store = SessionStore(app, Sync.launchStore(app, prefs))
     /** The database, one call at a time, off the main thread. */
     private val disk = Dispatchers.IO.limitedParallelism(1)
     /** Writes still on their way to disk, for [settle]. */
@@ -81,7 +82,9 @@ class AppModel(private val app: Application) {
     val deviceID: String = prefs.getString("deviceID", null)
         ?: "android-${UUID.randomUUID().toString().uppercase()}".also { prefs.edit().putString("deviceID", it).apply() }
 
-    val sync = Sync(store, deviceID, prefs, scope, onPulled = ::reload)
+    val sync = Sync(app, prefs, scope, store = { store }, swap = ::swap, onPulled = ::reload)
+    /** The once-per-process launch check has run. */
+    private var launched = false
     val updater = Updater(app, scope)
 
     var config by mutableStateOf(loadConfig())
@@ -242,6 +245,20 @@ class AppModel(private val app: Application) {
         if (video.youtube in watched) return
         watched = watched + (video.youtube to Inspo.day())
         prefs.edit().putStringSet("inspo.seen", watched.map { (id, day) -> "$id:$day" }.toSet()).apply()
+    }
+
+    /** A fresh process's first screen: an account that wasn't to stay signed in signs out. */
+    fun launched() {
+        if (launched) return
+        launched = true
+        sync.endEphemeral()
+    }
+
+    /** Everything reads and writes [next] from now on; returns the store it replaced. */
+    private suspend fun swap(next: SessionStore): SessionStore {
+        val old = withContext(disk) { store.also { store = next } }
+        reload()
+        return old
     }
 
     /** Reads the year and the recent tags again, as of now. */

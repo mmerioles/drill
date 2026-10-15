@@ -33,6 +33,27 @@ public final class SQLiteSessionStore: SessionStore {
             .appending(path: "drill.sqlite")
     }
 
+    /// One account's store: `drill-<userID>.sqlite` beside the offline one.
+    public static func accountURL(userID: String, beside offline: URL = defaultURL) -> URL {
+        offline.deletingLastPathComponent().appendingPathComponent("drill-\(userID).sqlite")
+    }
+
+    /// Deletes a database and its WAL files.
+    public static func remove(at url: URL) {
+        for suffix in ["", "-wal", "-shm"] {
+            try? FileManager.default.removeItem(atPath: url.path + suffix)
+        }
+    }
+
+    /// Moves a closed database and its WAL files.
+    public static func move(_ from: URL, to: URL) throws {
+        let fm = FileManager.default
+        try fm.createDirectory(at: to.deletingLastPathComponent(), withIntermediateDirectories: true)
+        for suffix in ["", "-wal", "-shm"] where fm.fileExists(atPath: from.path + suffix) {
+            try fm.moveItem(atPath: from.path + suffix, toPath: to.path + suffix)
+        }
+    }
+
     // MARK: Schema
 
     private func migrate() throws {
@@ -116,6 +137,10 @@ public final class SQLiteSessionStore: SessionStore {
             count = Int($0.int(0))
         }
         return count
+    }
+
+    public func removeAll() throws {
+        try exec("DELETE FROM sessions")
     }
 
     private static let columns =

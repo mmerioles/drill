@@ -117,5 +117,11 @@ Every client (`store.js`, `Sync.swift`, `Sync.kt`, `Sync.cs`):
 3. Run at launch, after each logged session, every few minutes, and when the
    sync button is pressed.
 
-On sign-in a client resets its push mark and cursor, so local sessions join
-the account and the whole account comes down.
+Sessions belong to one account. Each client keeps an offline store (used
+only while signed out) and one store per signed-in account, keyed by its
+Supabase user id, with that account's own push mark and cursor. Signing in
+opens the account's store, pulls from `0` and pushes only that store's rows:
+nothing written offline or under another account goes up. Making an account
+is the one exception: offline sessions move into the new account's store.
+Signing out pushes what it can (asking first if that fails), then deletes the
+account's store and marks. With "stay signed in" off, quitting does the same.

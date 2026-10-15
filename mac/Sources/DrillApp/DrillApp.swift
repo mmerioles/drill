@@ -12,9 +12,17 @@ struct DrillApp: App {
     init() {
         Render.runIfAsked()
         Rename.carryOver()
-        let model = AppModel.live()
-        let sync = Sync(store: model.store, deviceID: model.deviceID, onPulled: { [weak model] in model?.reload() })
+        let sync = Sync(stores: AppModel.stores)
+        let model = AppModel.live(store: sync.store)
+        sync.onSwitch = { [weak model] in model?.use($0) }
+        sync.onPulled = { [weak model] in model?.reload() }
         model.onLogged = { [weak sync] in sync?.logged() }
+        // Not kept signed in: the block so far is logged, sent, then the account goes.
+        AppDelegate.beforeQuit = { [weak model, weak sync] in
+            guard let sync, sync.isEphemeral else { return nil }
+            if model?.isActive == true { model?.reset() }
+            return Task { await sync.quitting() }
+        }
         // Checks run from launch, whether or not the main window opens.
         let updater = Updater()
         updater.start()
@@ -87,6 +95,18 @@ private struct TimerCommands: Commands {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Work to finish before quitting, if any.
+    @MainActor static var beforeQuit: (@MainActor () -> Task<Void, Never>?)?
+
     /// The timer keeps running in the menu bar after the window closes.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let work = Self.beforeQuit?() else { return .terminateNow }
+        Task { @MainActor in
+            await work.value
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
 }

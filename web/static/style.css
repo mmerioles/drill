@@ -265,6 +265,26 @@ button, input { font: inherit; color: inherit; }
 .account-actions .capsule:disabled { opacity: .5; cursor: default; }
 .account-actions .capsule:disabled:active { transform: none; }
 
+.stay {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 36px; margin: -4px 0 8px; color: var(--faint); font-size: 14px;
+}
+.ask { font-size: 15px; margin: 4px 0 20px; }
+
+/* Welcome: the account form on its own, before the timer. */
+
+.welcoming .app { display: none; }
+.welcome {
+  min-height: 100dvh; display: flex; align-items: center; justify-content: center;
+  padding: calc(24px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));
+}
+.welcome[hidden] { display: none; }
+.welcome-body { width: min(360px, 100%); display: flex; flex-direction: column; }
+.welcome h1 { text-align: center; font-size: 32px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.tagline { text-align: center; color: var(--faint); margin: 6px 0 36px; }
+.welcome #account-title, .welcome [data-close] { display: none; }
+#continue-offline { align-self: center; margin-top: 32px; font-size: 14px; }
+
 /* Inspo */
 
 .inspo-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 16px; }

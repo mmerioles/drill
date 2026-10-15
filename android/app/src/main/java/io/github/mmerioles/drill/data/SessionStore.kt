@@ -7,10 +7,12 @@ import android.database.DatabaseUtils
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import io.github.mmerioles.drill.core.FocusSession
+import io.github.mmerioles.drill.core.SessionRows
 
-/** Sessions in SQLite. Newer updatedAt wins; local rows stay dirty until pushed. */
-class SessionStore(context: Context) :
-    SQLiteOpenHelper(context, "drill.sqlite", null, 1) {
+/** Sessions in SQLite, one file per account (see [io.github.mmerioles.drill.core.LocalStores]).
+ *  Newer updatedAt wins; local rows stay dirty until pushed. */
+class SessionStore(context: Context, name: String) :
+    SQLiteOpenHelper(context, name, null, 1), SessionRows {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -38,7 +40,7 @@ class SessionStore(context: Context) :
     /** Saves rows that win the merge. Local rows always win and queue a push.
      *  Returns how many rows changed. */
     @Synchronized
-    fun save(rows: List<FocusSession>, local: Boolean): Int {
+    override fun save(rows: List<FocusSession>, local: Boolean): Int {
         if (rows.isEmpty()) return 0
         val db = writableDatabase
         var changed = 0
@@ -75,7 +77,10 @@ class SessionStore(context: Context) :
         ).use { c -> buildList { while (c.moveToNext()) add(c.getString(0)) } }
 
     @Synchronized
-    fun dirty(): List<FocusSession> = query("SELECT * FROM sessions WHERE dirty = 1", emptyArray())
+    override fun all(): List<FocusSession> = query("SELECT * FROM sessions", emptyArray())
+
+    @Synchronized
+    override fun dirty(): List<FocusSession> = query("SELECT * FROM sessions WHERE dirty = 1", emptyArray())
 
     /** How many rows are waiting to be pushed. */
     @Synchronized
@@ -99,10 +104,9 @@ class SessionStore(context: Context) :
         }
     }
 
-    /** On sign-in, everything on this phone joins the account. */
     @Synchronized
-    fun markAllDirty() {
-        writableDatabase.execSQL("UPDATE sessions SET dirty = 1")
+    override fun clear() {
+        writableDatabase.execSQL("DELETE FROM sessions")
     }
 
     private fun query(sql: String, args: Array<String>): List<FocusSession> =

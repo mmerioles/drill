@@ -4,7 +4,7 @@ import InkKit
 import SwiftUI
 
 /// `Drill --render <folder>`: draws the main window (and one taller than the
-/// stack), settings, inspo, the menu bar panel, a day's popover, the account
+/// stack), the welcome, settings, inspo, the menu bar panel, a day's popover, the account
 /// sheet and the marks to PNGs at 2×, light and dark, from a made-up year in
 /// memory.
 /// (Offscreen rendering draws the AppKit tag field as a placeholder box.)
@@ -26,16 +26,14 @@ enum Render {
                 let view = MainView(palettePreview: query)
                     .environment(model)
                     .environment(Updater())
-                    .environment(Sync(store: model.store, deviceID: model.deviceID,
-                                      defaults: UserDefaults(suiteName: "drill.render")!, onPulled: {}))
+                    .environment(Sync(store: model.store, defaults: UserDefaults(suiteName: "drill.render")!))
                     .frame(width: MainView.windowSize.width, height: height ?? MainView.windowSize.height)
                 if !write(view, theme: theme, to: folder.appending(path: "\(name)-\(theme.rawValue).png")) {
                     failed += 1
                 }
             }
             let model = demo(theme: theme)
-            let sync = Sync(store: model.store, deviceID: model.deviceID,
-                            defaults: UserDefaults(suiteName: "drill.render")!, onPulled: {})
+            let sync = Sync(store: model.store, defaults: UserDefaults(suiteName: "drill.render")!)
             write(SettingsView().environment(model).environment(Updater()).environment(sync),
                   theme: theme, to: folder.appending(path: "settings-\(theme.rawValue).png"))
             write(InspoView(), theme: theme, to: folder.appending(path: "inspo-\(theme.rawValue).png"))
@@ -54,12 +52,21 @@ enum Render {
             write(view, theme: theme, to: folder.appending(path: "day-\(preview)-\(theme.rawValue).png"))
         }
 
-        for (theme, preview) in [(Theme.light, AccountSheet.Preview.available), (.dark, .available),
+        for theme in Theme.allCases {
+            let model = demo(theme: theme)
+            let view = MainView()
+                .environment(model)
+                .environment(Updater())
+                .environment(Sync(store: model.store, defaults: UserDefaults(suiteName: "drill.render")!, welcomed: false))
+                .frame(width: MainView.windowSize.width, height: MainView.windowSize.height)
+            write(view, theme: theme, to: folder.appending(path: "welcome-\(theme.rawValue).png"))
+        }
+
+        for (theme, preview) in [(Theme.light, AccountForm.Preview.available), (.dark, .available),
                                  (.light, .taken), (.dark, .taken)] {
             let model = demo(theme: theme)
             let view = AccountSheet(preview: preview)
-                .environment(Sync(store: model.store, deviceID: model.deviceID,
-                                  defaults: UserDefaults(suiteName: "drill.render")!, onPulled: {}))
+                .environment(Sync(store: model.store, defaults: UserDefaults(suiteName: "drill.render")!))
             write(view, theme: theme, to: folder.appending(path: "account-\(preview)-\(theme.rawValue).png"))
         }
 

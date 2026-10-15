@@ -4,6 +4,8 @@ import SwiftUI
 struct MainView: View {
     /// For --render: shows the palette with this query typed.
     var palettePreview: String?
+    /// For --render: fills the welcome's form.
+    var welcomePreview: AccountForm.Preview = .none
     @Environment(AppModel.self) private var model
     @Environment(Updater.self) private var updater
     @Environment(Sync.self) private var sync
@@ -64,15 +66,21 @@ struct MainView: View {
             .frame(height: Page.header - Page.underHeader)
             .padding(.top, Page.underHeader)
 
-            VStack(spacing: 0) {
-                TimerView()
-                HeatmapSection(openToday: openToday)
-                    .padding(.top, 56)
-            }
-            .onGeometryChange(for: CGFloat.self, of: \.size.height) { stackHeight = $0 }
-            .padding(.top, above)
+            if sync.showsWelcome {
+                Spacer(minLength: 0)
+                WelcomeView(preview: welcomePreview)
+                Spacer(minLength: Page.bottom + Page.header)
+            } else {
+                VStack(spacing: 0) {
+                    TimerView()
+                    HeatmapSection(openToday: openToday)
+                        .padding(.top, 56)
+                }
+                .onGeometryChange(for: CGFloat.self, of: \.size.height) { stackHeight = $0 }
+                .padding(.top, above)
 
-            Spacer(minLength: Page.bottom)
+                Spacer(minLength: Page.bottom)
+            }
         }
         .padding(.horizontal, Page.gutter)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -83,6 +91,7 @@ struct MainView: View {
         .focused($pageFocused)
         .defaultFocus($pageFocused, true)
         .onKeyPress(.space) {
+            guard !sync.showsWelcome else { return .ignored }
             model.toggle()
             return .handled
         }

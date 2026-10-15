@@ -44,6 +44,12 @@ internal static class Render
         foreach (var theme in new[] { Theme.Light, Theme.Dark })
         {
             var t = theme == Theme.Light ? "light" : "dark";
+            Shot($"welcome-{t}", () =>
+            {
+                var shell = new Demo(theme);
+                shell.Model.Welcoming = true;
+                return new InkFrame(new MainPage(shell), underCaption: true);
+            });
             Shot($"main-{t}-idle", () => MainScreen(theme, running: false, paused: false));
             Shot($"main-{t}-running", () => MainScreen(theme, running: true, paused: false));
             Shot($"main-{t}-paused", () => MainScreen(theme, running: true, paused: true));
@@ -200,7 +206,7 @@ internal static class Render
             var prefs = Prefs.InMemory();
             Model = new AppModel(store, prefs, clock: () => Now) { Theme = theme };
             Palette.Apply(theme, Application.Current.Resources);
-            Sync = new Sync(store, Model.DeviceID, prefs, () => { });
+            Sync = new Sync(Model);
         }
 
         /// <summary>A year like the mac screenshots': busier lately, three subjects, a 13-day streak.</summary>
@@ -233,6 +239,7 @@ internal static class Render
         public void OpenSettings() { }
         public void OpenInspo() { }
         public void ShowAccount(FrameworkElement from) { }
+        public Task SignOut(FrameworkElement from) => Task.CompletedTask;
         public void SetTheme(Theme theme) { }
         public void Quit() { }
     }

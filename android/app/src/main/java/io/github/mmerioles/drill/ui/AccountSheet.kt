@@ -23,6 +23,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.mmerioles.drill.AppModel
+import io.github.mmerioles.drill.data.Sync
 import io.github.mmerioles.drill.core.Username
 import io.github.mmerioles.drill.ink.LocalPalette
 import kotlinx.coroutines.delay
@@ -34,17 +35,36 @@ private enum class Check { None, Checking, Available, Taken }
 /** Sign in or make an account, with a username and a password. */
 @Composable
 fun AccountSheet(model: AppModel, close: () -> Unit) {
+    val sheet = rememberSheet(close)
+    var creating by rememberSaveable { mutableStateOf(false) }
+    Sheet(sheet) {
+        SheetTitle(if (creating) "create account" else "sign in")
+        AccountForm(model.sync, creating, { creating = it }, Modifier.padding(top = 16.dp), cancel = { sheet.close() }) {
+            sheet.close()
+        }
+    }
+}
+
+/** The fields and buttons of signing in or creating an account; the sheet and the welcome screen share it. */
+@Composable
+fun AccountForm(
+    sync: Sync,
+    creating: Boolean,
+    switch: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    cancel: (() -> Unit)? = null,
+    done: () -> Unit,
+) {
     val ink = LocalPalette.current
-    val sync = model.sync
     val scope = rememberCoroutineScope()
     // The passwords are never put in saved state.
-    var creating by rememberSaveable { mutableStateOf(false) }
     var username by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var check by remember { mutableStateOf(Check.None) }
+    var stay by rememberSaveable { mutableStateOf(true) }
 
     val valid = Username.valid(username)
 
@@ -80,63 +100,62 @@ fun AccountSheet(model: AppModel, close: () -> Unit) {
     } else {
         valid && password.isNotEmpty()
     }
-    val sheet = rememberSheet(close)
 
     fun submit() {
         if (!ready) return
         working {
-            val problem = if (creating) sync.createAccount(username, password) else sync.signIn(username, password)
-            if (problem == null) sheet.close()
+            val problem = if (creating) sync.createAccount(username, password, stay) else sync.signIn(username, password, stay)
+            if (problem == null) done()
             problem
         }
     }
 
-    Sheet(sheet) {
-        Column {
-            SheetTitle(if (creating) "create account" else "sign in")
-            Box(Modifier.fillMaxWidth().padding(top = 16.dp)) {
-                Field(username, { username = Username.clean(it); error = "" }, Modifier.fillMaxWidth().padding(end = if (creating) 24.dp else 0.dp),
-                    placeholder = "username", keyboard = KeyboardType.Ascii, weight = FontWeight.Normal, label = "username")
-                if (creating) {
-                    StatusMark(
-                        when (check) {
-                            Check.Checking -> Mark.Working
-                            Check.Available -> Mark.Done
-                            Check.Taken -> Mark.Failed
-                            Check.None -> Mark.None
-                        },
-                        Modifier.align(Alignment.CenterEnd).padding(bottom = 6.dp),
-                    )
-                }
-            }
-            val hint = when {
-                !creating || username.isEmpty() -> null
-                !valid -> "3–20 letters, digits or _"
-                check == Check.Taken -> "taken"
-                else -> null
-            }
-            if (hint != null) Words(hint, Modifier.padding(top = 6.dp), size = 13.sp, color = ink.faint)
-            Field(password, { password = it; error = "" }, Modifier.fillMaxWidth().padding(top = 24.dp),
-                placeholder = "password", password = true, weight = FontWeight.Normal, label = "password",
-                done = ::submit)
+    Column(modifier) {
+        Box(Modifier.fillMaxWidth()) {
+            Field(username, { username = Username.clean(it); error = "" }, Modifier.fillMaxWidth().padding(end = if (creating) 24.dp else 0.dp),
+                placeholder = "username", keyboard = KeyboardType.Ascii, weight = FontWeight.Normal, label = "username")
             if (creating) {
-                Field(confirm, { confirm = it; error = "" }, Modifier.fillMaxWidth().padding(top = 24.dp),
-                    placeholder = "confirm password", password = true, weight = FontWeight.Normal, label = "confirm password", done = ::submit)
-                if (mismatch) Words("passwords don't match", Modifier.padding(top = 6.dp), size = 13.sp, color = ink.faint)
+                StatusMark(
+                    when (check) {
+                        Check.Checking -> Mark.Working
+                        Check.Available -> Mark.Done
+                        Check.Taken -> Mark.Failed
+                        Check.None -> Mark.None
+                    },
+                    Modifier.align(Alignment.CenterEnd).padding(bottom = 6.dp),
+                )
             }
-            if (error.isNotEmpty()) {
-                Words(error, Modifier.padding(top = 10.dp), size = 13.sp, color = ink.accent)
-            } else if (creating) {
-                Words("password needs 8+ characters.", Modifier.padding(top = 10.dp), size = 13.sp, color = ink.faint)
-            }
-            Spacer(Modifier.height(24.dp))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Link(if (creating) "have an account?" else "new here?") { creating = !creating; error = "" }
-                Spacer(Modifier.weight(1f))
-                Link("cancel") { sheet.close() }
+        }
+        val hint = when {
+            !creating || username.isEmpty() -> null
+            !valid -> "3–20 letters, digits or _"
+            check == Check.Taken -> "taken"
+            else -> null
+        }
+        if (hint != null) Words(hint, Modifier.padding(top = 6.dp), size = 13.sp, color = ink.faint)
+        Field(password, { password = it; error = "" }, Modifier.fillMaxWidth().padding(top = 24.dp),
+            placeholder = "password", password = true, weight = FontWeight.Normal, label = "password",
+            done = ::submit)
+        if (creating) {
+            Field(confirm, { confirm = it; error = "" }, Modifier.fillMaxWidth().padding(top = 24.dp),
+                placeholder = "confirm password", password = true, weight = FontWeight.Normal, label = "confirm password", done = ::submit)
+            if (mismatch) Words("passwords don't match", Modifier.padding(top = 6.dp), size = 13.sp, color = ink.faint)
+        }
+        Box(Modifier.padding(top = 12.dp)) { SwitchRow("stay signed in", stay) { stay = it } }
+        if (error.isNotEmpty()) {
+            Words(error, Modifier.padding(top = 10.dp), size = 13.sp, color = ink.accent)
+        } else if (creating) {
+            Words("password needs 8+ characters.", Modifier.padding(top = 10.dp), size = 13.sp, color = ink.faint)
+        }
+        Spacer(Modifier.height(24.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Link(if (creating) "have an account?" else "new here?") { switch(!creating); error = "" }
+            Spacer(Modifier.weight(1f))
+            if (cancel != null) {
+                Link("cancel", action = cancel)
                 Spacer(Modifier.width(8.dp))
-                Capsule(if (creating) "create account" else "sign in", small = true, enabled = ready && !busy, action = ::submit)
             }
+            Capsule(if (creating) "create account" else "sign in", small = true, enabled = ready && !busy, action = ::submit)
         }
     }
 }

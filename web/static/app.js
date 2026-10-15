@@ -20,7 +20,7 @@ if (demo && window.self !== window.top) document.documentElement.classList.add("
 
 // MARK: Persistence
 
-const KEY = { timer: "drill.timer", settings: "drill.settings", tag: "drill.tag" };
+const KEY = { timer: "drill.timer", settings: "drill.settings", tag: "drill.tag", welcomed: "drill.welcomed" };
 const load = (key, fallback) => {
   try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
 };
@@ -561,17 +561,57 @@ let creating = false, working = false, problem = "";
  *  checking | available | taken, or null when there's nothing to say. */
 let availability = null, checkTimer = null;
 
-function openAccount() {
-  creating = false;
+/** A fresh form, signing in or (`create`) making an account. */
+function resetAccount(create) {
+  creating = create;
   problem = "";
   availability = null;
   clearTimeout(checkTimer);
   $("account-form").reset();
   renderAccount();
-  $("account").showModal();
   $("username").focus();
   // Autofill can fill the fields without an input event (Safari): look again.
   requestAnimationFrame(() => renderAccount());
+}
+
+function openAccount() {
+  $("account").prepend($("account-form"));
+  $("account").showModal();
+  resetAccount(false);
+}
+
+// MARK: Welcome
+
+/** Whether the welcome screen is up, in place of the timer. */
+let welcoming = false;
+
+/** The account form on its own, making an account unless switched. */
+function showWelcome() {
+  if (demo) return;
+  for (const d of document.querySelectorAll("dialog[open]")) d.close();
+  welcoming = true;
+  $("welcome-form").append($("account-form"));
+  document.documentElement.classList.add("welcoming");
+  $("welcome").hidden = false;
+  resetAccount(true);
+}
+
+function hideWelcome() {
+  if (!welcoming) return;
+  welcoming = false;
+  $("welcome").hidden = true;
+  document.documentElement.classList.remove("welcoming");
+  $("account").prepend($("account-form"));
+  renderYear();
+}
+
+/** Pushes first; with sessions it couldn't push, asks before dropping them. */
+async function signOut() {
+  const action = $("account-action");
+  action.disabled = true;
+  const done = await store.signOut().catch(() => false);
+  action.disabled = false;
+  if (!done && store.account) $("unsynced").showModal();
 }
 
 const username = () => $("username").value;
@@ -652,7 +692,9 @@ function submitAccount(e) {
   renderAccount(); // autofilled fields may not have said so yet
   if ($("account-submit").disabled) return;
   run(async () => {
-    await store.signIn(username(), $("password").value, creating);
+    await store.signIn(username(), $("password").value, creating, $("stay").checked);
+    save(KEY.welcomed, true);
+    hideWelcome();
     $("account").close();
   });
 }
@@ -882,7 +924,7 @@ tagInput.addEventListener("keydown", (e) => {
 // button, which has its own.
 document.addEventListener("keydown", (e) => {
   if ((e.key !== " " && e.key !== "Enter") || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-  if (e.target.closest?.("input, textarea, select, button, a, dialog, [contenteditable]")) return;
+  if (welcoming || e.target.closest?.("input, textarea, select, button, a, dialog, [contenteditable]")) return;
   e.preventDefault();
   toggle();
 });
@@ -890,8 +932,8 @@ document.addEventListener("keydown", (e) => {
 const palette = createPalette($("palette"), commands);
 document.addEventListener("keydown", (e) => {
   if (e.key?.toLowerCase() !== "k" || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
-  // Not over another dialog.
-  if ([...document.querySelectorAll("dialog[open]")].some((d) => d.id !== "palette")) return;
+  // Not over another dialog, nor the welcome.
+  if (welcoming || [...document.querySelectorAll("dialog[open]")].some((d) => d.id !== "palette")) return;
   e.preventDefault();
   palette.toggle();
 });
@@ -911,7 +953,7 @@ $("theme").addEventListener("keydown", (e) => {
 });
 $("sync").addEventListener("click", () => store.sync());
 $("account-action").addEventListener("click", () => {
-  if (store.account) return store.signOut();
+  if (store.account) return signOut();
   $("settings").close();
   openAccount();
 });
@@ -931,6 +973,13 @@ for (const b of $("account").querySelectorAll("[data-close]")) {
   b.addEventListener("click", () => $("account").close());
 }
 $("account").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+$("unsynced").addEventListener("close", () => {
+  if ($("unsynced").returnValue === "sign-out") store.signOut(true);
+});
+$("continue-offline").addEventListener("click", () => {
+  save(KEY.welcomed, true);
+  hideWelcome();
+});
 
 const grid = $("grid");
 grid.addEventListener("pointermove", (e) => {
@@ -949,9 +998,21 @@ new ResizeObserver(() => {
 
 store.addEventListener("change", () => { renderTags(); renderYear(); renderSync(); });
 store.addEventListener("sync", renderSync);
+// Signed in or out, here or in another tab: the store swapped, so everything
+// drawn from it is redrawn (by "change"), and signing out goes to the welcome.
+store.addEventListener("account", () => {
+  hovered = null;
+  if (store.account) hideWelcome();
+  else if (!welcoming) {
+    save(KEY.welcomed, false);
+    showWelcome();
+  }
+});
 
 // Another tab started, paused or finished the timer.
 addEventListener("storage", (e) => {
+  // Another tab went on offline from its welcome.
+  if (e.key === KEY.welcomed && welcoming && !store.account && load(KEY.welcomed, false)) hideWelcome();
   if (e.key !== KEY.timer) return;
   restoreTimer(load(KEY.timer, null));
   schedule();
@@ -1002,6 +1063,7 @@ renderTags();
 renderYear();
 renderSync();
 scheduleMidnight();
+if (!demo && !store.account && !load(KEY.welcomed, false)) showWelcome();
 if (!demo && settings.autoSync) store.sync();
 // Opened by a banner's start button when no tab was open.
 const startParam = new URLSearchParams(location.search).get("start");

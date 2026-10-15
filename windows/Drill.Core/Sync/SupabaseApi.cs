@@ -120,7 +120,8 @@ public sealed class SupabaseApi(Uri project, string key, HttpClient? http = null
                 Email: (string?)t["user"]?["email"] ?? "",
                 Token: (string)t["access_token"]!,
                 RefreshToken: (string)t["refresh_token"]!,
-                ExpiresAt: DateTimeOffset.UtcNow.AddSeconds((double)t["expires_in"]!));
+                ExpiresAt: DateTimeOffset.UtcNow.AddSeconds((double)t["expires_in"]!),
+                Id: (string?)t["user"]?["id"]);
         }
         catch (Exception e) when (e is JsonException or NullReferenceException or InvalidOperationException or FormatException)
         {

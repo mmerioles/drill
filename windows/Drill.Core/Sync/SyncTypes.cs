@@ -8,11 +8,35 @@ namespace Drill.Core.Sync;
 /// call after sign-in; it runs out after an hour, and the refresh token gets
 /// the next one. The email is the synthetic one Supabase keys the user by.
 /// </summary>
-public sealed record Account(string Email, string Token, string? RefreshToken = null, DateTimeOffset? ExpiresAt = null)
+public sealed record Account(string Email, string Token, string? RefreshToken = null, DateTimeOffset? ExpiresAt = null, string? Id = null)
 {
     /// <summary>The name shown in the app: the email without its domain.</summary>
     [JsonIgnore]
     public string Username => SupabaseApi.UsernameOf(Email);
+
+    /// <summary>
+    /// The Supabase user id, which names this account's store. Accounts saved
+    /// before it was kept have it in their token's `sub`.
+    /// </summary>
+    [JsonIgnore]
+    public string UserID => Id is { Length: > 0 } id ? id : SubjectOf(Token) ?? Username;
+
+    private static string? SubjectOf(string token)
+    {
+        var parts = token.Split('.');
+        if (parts.Length < 2) return null;
+        try
+        {
+            var payload = parts[1].Replace('-', '+').Replace('_', '/');
+            payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
+            var json = System.Text.Json.Nodes.JsonNode.Parse(Convert.FromBase64String(payload));
+            return (string?)json?["sub"] is { Length: > 0 } sub ? sub : null;
+        }
+        catch (Exception e) when (e is FormatException or System.Text.Json.JsonException or InvalidOperationException or ArgumentException)
+        {
+            return null;
+        }
+    }
 }
 
 /// <summary>One page of a pull: rows after the cursor, the next cursor, and whether there's more.</summary>

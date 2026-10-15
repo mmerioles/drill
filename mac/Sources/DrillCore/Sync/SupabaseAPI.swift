@@ -190,6 +190,21 @@ public struct Account: Codable, Equatable, Sendable {
         self.refreshToken = refreshToken
         self.expiresAt = expiresAt
     }
+
+    /// The Supabase user id, the access token's `sub`. Every token the
+    /// account gets carries the same one. The username for a token that
+    /// isn't a JWT.
+    public var userID: String {
+        let parts = token.split(separator: ".")
+        guard parts.count == 3 else { return username }
+        var base64 = parts[1].replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
+        guard let data = Data(base64Encoded: base64),
+              let claims = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let sub = claims["sub"] as? String, !sub.isEmpty
+        else { return username }
+        return sub.lowercased()
+    }
 }
 
 public struct SyncPage: Decodable, Sendable {

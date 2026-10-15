@@ -15,7 +15,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -77,22 +81,42 @@ fun SettingsSheet(model: AppModel, close: () -> Unit, signIn: () -> Unit) {
     }
 }
 
+/** Signing out pushes first; when it can't, it asks. */
+private enum class Leaving { No, Pushing, Asking }
+
 @Composable
 private fun AccountRow(sync: Sync, signIn: () -> Unit) {
     val ink = LocalPalette.current
+    val scope = rememberCoroutineScope()
+    var leaving by remember { mutableStateOf(Leaving.No) }
+    fun signOut(anyway: Boolean) {
+        leaving = Leaving.Pushing
+        scope.launch { leaving = if (sync.signOut(anyway)) Leaving.No else Leaving.Asking }
+    }
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1f)) {
             Words(sync.account?.username ?: "sync")
-            val note = when (sync.state) {
-                Sync.State.SignedOut -> "sign in to sync across devices."
-                Sync.State.Syncing -> "syncing…"
-                Sync.State.Idle -> "synced."
-                Sync.State.Offline -> "offline. your sessions are safe here."
+            val note = when {
+                leaving == Leaving.Asking -> "you have unsynced sessions — sign out anyway?"
+                leaving == Leaving.Pushing -> "syncing before signing out…"
+                else -> when (sync.state) {
+                    Sync.State.SignedOut -> "sign in to sync across devices."
+                    Sync.State.Syncing -> "syncing…"
+                    Sync.State.Idle -> "synced."
+                    Sync.State.Offline -> "offline. your sessions are safe here."
+                }
             }
             Words(note, size = 13.sp, color = ink.faint)
         }
-        if (sync.isSignedIn) Link("sign out", action = sync::signOut) else Link("sign in", primary = true, action = signIn)
+        when {
+            !sync.isSignedIn -> Link("sign in", primary = true, action = signIn)
+            leaving == Leaving.Asking -> {
+                Link("cancel") { leaving = Leaving.No }
+                Link("sign out", primary = true) { signOut(anyway = true) }
+            }
+            else -> Link("sign out", enabled = leaving == Leaving.No) { signOut(anyway = false) }
+        }
     }
 }
 

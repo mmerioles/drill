@@ -12,6 +12,8 @@ import java.io.IOException
  *  refresh token to get the next one. */
 data class Account(
     val username: String,
+    /** Supabase's user id; names the account's local store. */
+    val userID: String,
     val token: String,
     val refreshToken: String,
     /** Epoch millis. */
@@ -84,6 +86,7 @@ class SupabaseApi(private val project: String, private val key: String) {
         val json = call(path, body = body)
         Account(
             username = Username.fromEmail(json.getJSONObject("user").getString("email")),
+            userID = json.getJSONObject("user").getString("id"),
             token = json.getString("access_token"),
             refreshToken = json.getString("refresh_token"),
             expiresAt = System.currentTimeMillis() + json.getLong("expires_in") * 1000,

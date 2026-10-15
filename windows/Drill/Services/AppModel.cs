@@ -35,7 +35,8 @@ public abstract class Observable : INotifyPropertyChanged
 public sealed class AppModel : Observable
 {
     public PomodoroEngine Engine { get; }
-    public ISessionStore Store { get; }
+    /// <summary>The offline store, or the signed-in account's: swapped by <see cref="UseStore"/>.</summary>
+    public ISessionStore Store { get; private set; }
     public string DeviceID { get; }
     public Prefs Prefs { get; }
 
@@ -87,22 +88,47 @@ public sealed class AppModel : Observable
         Reload();
     }
 
-    /// <summary>Production wiring. DRILL_DB, DRILL_FAST=1 and DRILL_THEME=light|dark are for trying things out.</summary>
+    /// <summary>
+    /// Production wiring: the signed-in account's store, or the offline one.
+    /// DRILL_DB (the offline store), DRILL_FAST=1 and DRILL_THEME=light|dark are for trying things out.
+    /// </summary>
     public static AppModel Live()
     {
-        var path = Environment.GetEnvironmentVariable("DRILL_DB") is { Length: > 0 } db ? db : SqliteSessionStore.DefaultPath;
-        ISessionStore store;
-        try { store = new SqliteSessionStore(path); }
-        catch (Exception) { store = SqliteSessionStore.InMemory(); } // keep the timer usable even if the disk isn't
+        var prefs = Prefs.Standard();
+        var userID = Sync.StoredAccount(prefs)?.UserID;
+        try { AccountStores.Upgrade(prefs, SqliteSessionStore.OfflinePath, userID); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } // tried again next launch
+        var store = Open(userID is null ? SqliteSessionStore.OfflinePath : SqliteSessionStore.AccountPath(userID));
         var fast = Environment.GetEnvironmentVariable("DRILL_FAST") == "1"
             ? new TimerConfig { Focus = 20, ShortBreak = 5, LongBreak = 10 } : null;
-        var model = new AppModel(store, Prefs.Standard(), fast);
+        var model = new AppModel(store, prefs, fast);
         switch (Environment.GetEnvironmentVariable("DRILL_THEME"))
         {
             case "light": model.Theme = Theme.Light; break;
             case "dark": model.Theme = Theme.Dark; break;
         }
         return model;
+    }
+
+    /// <summary>The store at `path`, or one in memory: keep the timer usable even if the disk isn't.</summary>
+    public static ISessionStore Open(string path)
+    {
+        try { return new SqliteSessionStore(path); }
+        catch (Exception) { return SqliteSessionStore.InMemory(); }
+    }
+
+    /// <summary>Signed in, out, or a new account: everything shown comes from `store` now. The old one is closed.</summary>
+    public void UseStore(ISessionStore store)
+    {
+        var old = Store;
+        if (ReferenceEquals(old, store)) return;
+        Store = store;
+        (old as IDisposable)?.Dispose();
+        _tagFilter = null;
+        Reload();
+        Raise(nameof(Store));
+        Raise(nameof(TagFilter));
+        Raise(string.Empty);
     }
 
     // State
@@ -176,6 +202,16 @@ public sealed class AppModel : Observable
         get => _theme;
         set { if (Set(ref _theme, value)) Prefs.Set(Keys.Theme, value == Theme.Light ? "light" : "dark"); }
     }
+
+    /// <summary>The first-launch choice was made: "continue offline", or an account.</summary>
+    public bool Welcomed
+    {
+        get => Prefs.Get<bool?>(Keys.Welcomed) ?? false;
+        set => Prefs.Set(Keys.Welcomed, value);
+    }
+
+    /// <summary>The main window shows the welcome in place of the timer.</summary>
+    public bool Welcoming { get; set => Set(ref field, value); }
 
     /// <summary>Whether the tray hint toast has been shown, so it shows once.</summary>
     public bool ToldAboutTray
@@ -367,5 +403,6 @@ public sealed class AppModel : Observable
         public const string Theme = "drill.theme";
         public const string Tray = "drill.keepInTray";
         public const string ToldTray = "drill.toldAboutTray";
+        public const string Welcomed = "drill.welcomed";
     }
 }

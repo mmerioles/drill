@@ -2,13 +2,27 @@ import DrillCore
 import InkKit
 import SwiftUI
 
-/// Sign in or make an account: a username and a password.
+/// Sign in or make an account, from settings.
 struct AccountSheet: View {
+    var preview: AccountForm.Preview = .none
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        AccountForm(preview: preview, creating: preview != .none, titled: true,
+                    cancel: { dismiss() }, done: { dismiss() })
+            .padding(24)
+            .frame(width: 440)
+            .background(Ink.paper)
+    }
+}
+
+/// Sign in or make an account: a username and a password. In the settings
+/// sheet and on the welcome screen.
+struct AccountForm: View {
     /// For --render, which can't type.
     enum Preview { case none, available, taken }
 
     @Environment(Sync.self) private var sync
-    @Environment(\.dismiss) private var dismiss
 
     @State private var creating: Bool
     @State private var username: String
@@ -18,17 +32,24 @@ struct AccountSheet: View {
     @State private var checking: Task<Void, Never>?
     @State private var problem: String?
     @State private var working = false
+    @State private var staySignedIn = true
     @FocusState private var focused: Field?
 
     private let preview: Preview
+    private let titled: Bool
+    private let cancel: (() -> Void)?
+    private let done: () -> Void
     private enum Field { case username, password, confirm }
     /// What the live check last said about the name in the field.
     private enum Check: Equatable { case none, checking, available, taken }
 
-    init(preview: Preview = .none) {
+    init(preview: Preview = .none, creating: Bool, titled: Bool, cancel: (() -> Void)?, done: @escaping () -> Void) {
         self.preview = preview
+        self.titled = titled
+        self.cancel = cancel
+        self.done = done
         let filled = preview != .none
-        _creating = State(initialValue: filled)
+        _creating = State(initialValue: creating)
         _username = State(initialValue: filled ? "teto" : "")
         _password = State(initialValue: filled ? "kasane-0401" : "")
         _confirm = State(initialValue: filled ? "kasane-0401" : "")
@@ -37,9 +58,11 @@ struct AccountSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(creating ? "make an account" : "sign in")
-                .font(Ink.text(20, .semibold))
-                .foregroundStyle(Ink.ink)
+            if titled {
+                Text(creating ? "make an account" : "sign in")
+                    .font(Ink.text(20, .semibold))
+                    .foregroundStyle(Ink.ink)
+            }
 
             fields {
                 row("username") {
@@ -65,6 +88,15 @@ struct AccountSheet: View {
                     }
                     hint(confirmHint)
                 }
+                Divider().overlay(Ink.ghost)
+                row("stay signed in") {
+                    Spacer()
+                    Toggle("", isOn: $staySignedIn)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .accessibilityLabel("stay signed in")
+                }
             }
 
             message(problem ?? (creating ? "password needs 8+ characters." : " "))
@@ -76,14 +108,15 @@ struct AccountSheet: View {
                 }
                 .buttonStyle(.inkLink(selected: false, size: 15))
                 Spacer()
-                cancel
+                if let cancel {
+                    Button("cancel", action: cancel)
+                        .buttonStyle(.inkLink(selected: false, size: 15))
+                        .keyboardShortcut(.cancelAction)
+                }
                 primary(creating ? "create account" : "sign in", ready: ready, action: submit)
             }
         }
         .textFieldStyle(.plain)
-        .padding(24)
-        .frame(width: 440)
-        .background(Ink.paper)
         .onAppear { focused = .username }
         .onChange(of: username) { _, text in
             let clean = Username.clean(text)
@@ -142,11 +175,11 @@ struct AccountSheet: View {
     private func submit() {
         run {
             if creating {
-                try await sync.createAccount(username: username, password: password)
+                try await sync.createAccount(username: username, password: password, staySignedIn: staySignedIn)
             } else {
-                try await sync.signIn(username: username, password: password)
+                try await sync.signIn(username: username, password: password, staySignedIn: staySignedIn)
             }
-            dismiss()
+            done()
         }
     }
 
@@ -201,12 +234,6 @@ struct AccountSheet: View {
             .font(Ink.text(13))
             .foregroundStyle(Ink.faint)
             .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private var cancel: some View {
-        Button("cancel") { dismiss() }
-            .buttonStyle(.inkLink(selected: false, size: 15))
-            .keyboardShortcut(.cancelAction)
     }
 
     private func primary(_ title: String, ready: Bool, action: @escaping () -> Void) -> some View {

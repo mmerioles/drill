@@ -21,6 +21,8 @@ public partial class MainPage : UserControl
     private bool _listening;
     /// <summary>Something changed while the window was hidden in the tray; caught up when it's back.</summary>
     private bool _stale;
+    /// <summary>Shown in place of the timer while <see cref="AppModel.Welcoming"/>; the timer keeps its room, so the window keeps its size.</summary>
+    private WelcomeView? _welcome;
 
     public MainPage(Shell shell)
     {
@@ -54,7 +56,7 @@ public partial class MainPage : UserControl
         Year.HoveredChanged += ShowCaption;
         Year.SizeChanged += (_, _) => ShowCaption(); // the legend needs a 600-wide grid
         SizeChanged += (_, _) => Fit();
-        Loaded += (_, _) => Focus();
+        Loaded += (_, _) => { if (_welcome is null) Focus(); };
 
         for (var level = 0; level < 5; level++)
         {
@@ -65,6 +67,24 @@ public partial class MainPage : UserControl
         }
 
         Show();
+        ShowWelcome();
+    }
+
+    private void ShowWelcome()
+    {
+        if (Model.Welcoming && _welcome is null)
+        {
+            _welcome = new WelcomeView(_shell);
+            Root.Children.Insert(Root.Children.IndexOf(Paper) + 1, _welcome);
+            Paper.Visibility = Visibility.Hidden;
+        }
+        else if (!Model.Welcoming && _welcome is { } welcome)
+        {
+            Root.Children.Remove(welcome);
+            _welcome = null;
+            Paper.Visibility = Visibility.Visible;
+            Focus();
+        }
     }
 
     private void Listen(bool on)
@@ -79,6 +99,7 @@ public partial class MainPage : UserControl
             Palette.Changed += Recolor;
             Recolor();
             Show(); // whatever changed while away
+            ShowWelcome();
         }
         else
         {
@@ -98,7 +119,7 @@ public partial class MainPage : UserControl
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
         base.OnPreviewKeyDown(e);
-        if (_palette.IsOpen) return;
+        if (_palette.IsOpen || _welcome is not null) return;
         var ctrl = Keyboard.Modifiers == ModifierKeys.Control;
         var plain = Keyboard.Modifiers == ModifierKeys.None;
         var typing = TagBox.IsKeyboardFocusWithin || Keyboard.FocusedElement is TextBoxBase or PasswordBox;
@@ -129,6 +150,11 @@ public partial class MainPage : UserControl
 
     private void OnModel(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(AppModel.Welcoming))
+        {
+            ShowWelcome();
+            return;
+        }
         // Hidden in the tray: no clock work every second, just one catch-up on return.
         if (!IsVisible)
         {

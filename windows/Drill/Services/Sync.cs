@@ -12,7 +12,8 @@ public enum SyncState { SignedOut, Idle, Syncing, Offline }
 /// <summary>
 /// The account and the sync loop (docs/SYNC.md, as mac's Sync.swift): push
 /// local changes, then pull remote ones. The account is kept in prefs,
-/// DPAPI-encrypted to this Windows user.
+/// DPAPI-encrypted to this Windows user. Each account has its own store and
+/// sync state (<see cref="AccountStores"/>); the model shows whichever is in use.
 /// </summary>
 public sealed class Sync : Observable
 {
@@ -22,23 +23,24 @@ public sealed class Sync : Observable
     private static readonly TimeSpan Every = TimeSpan.FromMinutes(5);
     private static readonly SupabaseApi Api = SupabaseApi.Hosted;
 
-    private readonly ISessionStore _store;
+    private readonly AppModel _model;
     private readonly string _deviceID;
     private readonly Prefs _prefs;
-    private readonly Action _onPulled;
     private readonly DispatcherTimer _loop;
     private Task? _running;
     private DateTimeOffset? _lastStarted;
     private bool _auto;
+    /// <summary>Whose store the model is showing; null for the offline one.</summary>
+    private string? _userID;
 
-    public Sync(ISessionStore store, string deviceID, Prefs prefs, Action onPulled)
+    public Sync(AppModel model)
     {
-        _store = store;
-        _deviceID = deviceID;
-        _prefs = prefs;
-        _onPulled = onPulled;
-        Account = LoadAccount();
-        _auto = prefs.Get<bool?>(Keys.Auto) ?? true;
+        _model = model;
+        _deviceID = model.DeviceID;
+        _prefs = model.Prefs;
+        Account = StoredAccount(_prefs);
+        _userID = Account?.UserID;
+        _auto = _prefs.Get<bool?>(Keys.Auto) ?? true;
         State = Account is null ? SyncState.SignedOut : SyncState.Idle;
         _loop = new DispatcherTimer(DispatcherPriority.Background) { Interval = Every };
         _loop.Tick += (_, _) => SyncNow();
@@ -96,30 +98,54 @@ public sealed class Sync : Observable
 
     private void Refresh()
     {
-        var since = _prefs.Get<DateTimeOffset?>(Keys.PushedAt) ?? DateTimeOffset.MinValue;
-        try { HasUnpushed = _store.Unpushed(since, _deviceID) > 0; } catch (Exception) { HasUnpushed = false; }
+        if (_userID is not { } id)
+        {
+            HasUnpushed = false;
+            return;
+        }
+        var since = _prefs.Get<DateTimeOffset?>(AccountStores.PushedAtKey(id)) ?? DateTimeOffset.MinValue;
+        try { HasUnpushed = _model.Store.Unpushed(since, _deviceID) > 0; } catch (Exception) { HasUnpushed = false; }
     }
 
     // Account
 
-    public async Task SignIn(string username, string password) =>
-        Begin(await Attempt(() => Api.SignIn(username, password)));
+    /// <summary>Signed out, the account was ended on quit, and it ends at next launch if it wasn't.</summary>
+    public bool IsEphemeral => Account is not null && _prefs.Get<bool?>(Keys.Ephemeral) == true;
+
+    /// <summary>An existing account: its own store (empty unless kept from before), caught up from the start.</summary>
+    public async Task SignIn(string username, string password, bool stay = true) =>
+        await Begin(await Attempt(() => Api.SignIn(username, password)), stay, creating: false);
 
     /// <summary>Makes the account and signs in; confirmation is off, so there's nothing to wait for.</summary>
-    public async Task CreateAccount(string username, string password) =>
-        Begin(await Attempt(() => Api.CreateAccount(username, password)));
+    public async Task CreateAccount(string username, string password, bool stay = true) =>
+        await Begin(await Attempt(() => Api.CreateAccount(username, password)), stay, creating: true);
 
     /// <summary>The live check while typing a name on the create form.</summary>
     public Task<bool> UsernameAvailable(string name, CancellationToken ct) => Api.UsernameAvailable(name, ct);
 
-    /// <summary>Everything already on this PC joins the account.</summary>
-    private void Begin(Account account)
+    /// <summary>
+    /// Switches the model to the account's store. Only a new account takes
+    /// the sessions logged here offline; signing in uploads nothing from before.
+    /// </summary>
+    private async Task Begin(Account account, bool stay, bool creating)
     {
+        if (_running is { } running) await running;
+        var id = account.UserID;
+        var store = id == _userID ? _model.Store : AppModel.Open(SqliteSessionStore.AccountPath(id));
+        if (creating && _userID is null)
+        {
+            var offline = _model.Store;
+            try { await Task.Run(() => AccountStores.MoveRows(offline, store)); } catch (Exception) { }
+            _prefs.Remove(AccountStores.PushedAtKey(id));
+        }
+        _prefs.Remove(AccountStores.CursorKey(id)); // catch up from the start
+        if (stay) _prefs.Remove(Keys.Ephemeral);
+        else _prefs.Set(Keys.Ephemeral, true);
+        _userID = id;
+        _model.UseStore(store);
         Save(account);
-        // Upload everything, and catch up from the start.
-        _prefs.Remove(Keys.PushedAt);
-        _prefs.Remove(Keys.Cursor);
         State = SyncState.Idle;
+        Refresh();
         SyncNow();
     }
 
@@ -139,11 +165,52 @@ public sealed class Sync : Observable
         }
     }
 
-    public void SignOut()
+    /// <summary>
+    /// Before signing out: pushes what's left, for up to `limit`. True when
+    /// nothing's left unpushed (or there's no account).
+    /// </summary>
+    public async Task<bool> Flush(TimeSpan limit)
     {
-        if (Account is { } account) _ = Task.Run(() => Api.SignOut(account));
+        if (Account is null || _userID is null) return true;
+        var work = FlushAll();
+        await Task.WhenAny(work, Task.Delay(limit));
+        Refresh();
+        return work.IsCompleted && !HasUnpushed;
+    }
+
+    private async Task FlushAll()
+    {
+        if (_running is { } running) await running;
+        Refresh();
+        if (!HasUnpushed) return;
+        SyncNow();
+        if (_running is { } again) await again;
+    }
+
+    /// <summary>
+    /// Signs out and leaves no trace of the account here: its store and sync
+    /// state are deleted, and the model goes back to the offline store.
+    /// Returns the token's revocation, for a caller that's quitting to wait on.
+    /// </summary>
+    public Task SignOut()
+    {
+        var revoke = Account is { } account ? Task.Run(() => Api.SignOut(account)) : Task.CompletedTask;
         Save(null);
+        Drop(forget: true);
         State = SyncState.SignedOut;
+        return revoke;
+    }
+
+    /// <summary>Back to the offline store; with `forget`, the account's store is deleted too.</summary>
+    private void Drop(bool forget)
+    {
+        var id = _userID;
+        _userID = null;
+        _prefs.Remove(Keys.Ephemeral);
+        if (id is null) return;
+        _model.UseStore(AppModel.Open(SqliteSessionStore.OfflinePath)); // closes the account's
+        if (forget) AccountStores.Forget(_prefs, id);
+        Refresh();
     }
 
     // Syncing
@@ -159,6 +226,9 @@ public sealed class Sync : Observable
     private async Task Run(Account start)
     {
         State = SyncState.Syncing;
+        // This account's store and state, whatever's swapped in meanwhile.
+        var store = _model.Store;
+        var id = _userID ?? start.UserID;
         try
         {
             // Tokens last an hour: swap one that's nearly out, and once more
@@ -166,12 +236,12 @@ public sealed class Sync : Observable
             var token = await Fresh(start, force: false);
             try
             {
-                await Exchange(token);
+                await Exchange(token, store, id);
             }
             catch (SyncException e) when (e.Failure == SyncFailure.SignedOut && start.RefreshToken is not null)
             {
                 token = await Fresh(start, force: true);
-                await Exchange(token);
+                await Exchange(token, store, id);
             }
             if (Account?.Token != token) return; // signed out meanwhile
             State = SyncState.Idle;
@@ -179,7 +249,11 @@ public sealed class Sync : Observable
         catch (SyncException e) when (e.Failure == SyncFailure.SignedOut)
         {
             if (Account?.Email != start.Email) return;
+            // The server ended the session: back to offline. The account's
+            // store stays for signing in again, unless it wasn't to be kept.
+            var ephemeral = IsEphemeral;
             Save(null);
+            Drop(forget: ephemeral);
             State = SyncState.SignedOut;
         }
         catch (Exception)
@@ -204,26 +278,28 @@ public sealed class Sync : Observable
     }
 
     /// <summary>Push what changed here, then pull what changed elsewhere.</summary>
-    private async Task Exchange(string token)
+    private async Task Exchange(string token, ISessionStore store, string id)
     {
+        var pushedAt = AccountStores.PushedAtKey(id);
+        var cursor = AccountStores.CursorKey(id);
         var mark = DateTimeOffset.UtcNow;
-        var since = _prefs.Get<DateTimeOffset?>(Keys.PushedAt) ?? DateTimeOffset.MinValue;
-        var changes = await Task.Run(() => _store.Changes(since));
+        var since = _prefs.Get<DateTimeOffset?>(pushedAt) ?? DateTimeOffset.MinValue;
+        var changes = await Task.Run(() => store.Changes(since));
         for (var i = 0; i < changes.Count; i += 200)
             await Api.Push(changes.Skip(i).Take(200).ToList(), _deviceID, token);
-        _prefs.Set(Keys.PushedAt, mark);
+        _prefs.Set(pushedAt, mark);
 
         var pulled = false;
         SyncPage page;
         do
         {
-            page = await Api.Pull(_prefs.Get<string>(Keys.Cursor) ?? "0", token);
+            page = await Api.Pull(_prefs.Get<string>(cursor) ?? "0", token);
             var rows = page.Sessions;
-            await Task.Run(() => { foreach (var s in rows) _store.Save(s); });
+            await Task.Run(() => { foreach (var s in rows) store.Save(s); });
             pulled |= rows.Count > 0;
-            _prefs.Set(Keys.Cursor, page.Cursor);
+            _prefs.Set(cursor, page.Cursor);
         } while (page.More);
-        if (pulled) _onPulled();
+        if (pulled && ReferenceEquals(store, _model.Store)) _model.Reload();
     }
 
     // Keeping the account
@@ -242,9 +318,10 @@ public sealed class Sync : Observable
         _prefs.Set(Keys.Account, Convert.ToBase64String(ProtectedData.Protect(json, Entropy, DataProtectionScope.CurrentUser)));
     }
 
-    private Account? LoadAccount()
+    /// <summary>The account kept in `prefs`, if it can be read.</summary>
+    public static Account? StoredAccount(Prefs prefs)
     {
-        if (_prefs.Get<string>(Keys.Account) is not { } sealed_) return null;
+        if (prefs.Get<string>(Keys.Account) is not { } sealed_) return null;
         try
         {
             var json = ProtectedData.Unprotect(Convert.FromBase64String(sealed_), Entropy, DataProtectionScope.CurrentUser);
@@ -259,8 +336,7 @@ public sealed class Sync : Observable
     private static class Keys
     {
         public const string Account = "drill.sync.account";
-        public const string Cursor = "drill.sync.cursor";
-        public const string PushedAt = "drill.sync.pushedAt";
         public const string Auto = "drill.sync.auto";
+        public const string Ephemeral = "drill.sync.ephemeral";
     }
 }

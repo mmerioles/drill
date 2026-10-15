@@ -88,7 +88,8 @@ final class AppModel {
         }
     }
 
-    let store: SessionStore
+    /// Swapped by sign-in and sign-out (`use`).
+    private(set) var store: SessionStore
     let deviceID: String
     /// Called after any write, so sync can send it along.
     var onLogged: (() -> Void)?
@@ -138,18 +139,16 @@ final class AppModel {
         }
     }
 
-    /// Env for trying things out: `DRILL_DB` (database file), `DRILL_FAST=1`
-    /// (minutes become seconds), `DRILL_THEME` (light|dark).
-    static func live() -> AppModel {
+    /// Env for trying things out: `DRILL_DB` (the offline database file;
+    /// account ones go beside it), `DRILL_FAST=1` (minutes become seconds),
+    /// `DRILL_THEME` (light|dark).
+    static var stores: AccountStores {
         let env = ProcessInfo.processInfo.environment
-        let url = env["DRILL_DB"].map { URL(filePath: $0) } ?? SQLiteSessionStore.defaultURL
-        let store: SessionStore
-        do {
-            store = try SQLiteSessionStore(url: url)
-        } catch {
-            // Keep the timer usable even if the disk isn't; nothing is kept.
-            store = try! SQLiteSessionStore.inMemory()
-        }
+        return AccountStores(offlineURL: env["DRILL_DB"].map { URL(filePath: $0) } ?? SQLiteSessionStore.defaultURL)
+    }
+
+    static func live(store: SessionStore) -> AppModel {
+        let env = ProcessInfo.processInfo.environment
         let fast = env["DRILL_FAST"] == "1"
         let model = AppModel(
             store: store,
@@ -440,6 +439,12 @@ final class AppModel {
         } catch {
             lastError = failure
         }
+        reload()
+    }
+
+    /// Another account's sessions, or the offline ones.
+    func use(_ new: SessionStore) {
+        store = new
         reload()
     }
 

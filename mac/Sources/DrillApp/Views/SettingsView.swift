@@ -210,6 +210,7 @@ private struct UpdateMark: View {
 private struct AccountRow: View {
     @Environment(Sync.self) private var sync
     @State private var signingIn = false
+    @State private var unsent = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -220,7 +221,9 @@ private struct AccountRow: View {
             }
             Spacer(minLength: 16)
             if sync.isSignedIn {
-                Button("sign out", action: sync.signOut)
+                Button("sign out") {
+                    Task { if !(await sync.signOut()) { unsent = true } }
+                }
             } else {
                 Button("sign in") { signingIn = true }
             }
@@ -231,6 +234,10 @@ private struct AccountRow: View {
         .frame(minHeight: 44)
         .padding(.vertical, 6)
         .sheet(isPresented: $signingIn) { AccountSheet() }
+        .confirmationDialog("you have unsynced sessions — sign out anyway?", isPresented: $unsent) {
+            Button("sign out", role: .destructive) { Task { await sync.signOut(anyway: true) } }
+            Button("cancel", role: .cancel) {}
+        }
     }
 
     private var note: String {

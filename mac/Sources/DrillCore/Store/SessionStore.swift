@@ -15,4 +15,7 @@ public protocol SessionStore: AnyObject {
 
     /// How many rows `changes(since:)` would return.
     func changeCount(since: Date) throws -> Int
+
+    /// Empties the store, tombstones too.
+    func removeAll() throws
 }

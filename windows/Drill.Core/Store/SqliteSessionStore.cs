@@ -22,6 +22,9 @@ public interface ISessionStore
 
     /// <summary>How many rows made on `deviceID` were touched after `since`: local changes not yet pushed.</summary>
     int Unpushed(DateTimeOffset since, string deviceID);
+
+    /// <summary>Removes every row, tombstones included.</summary>
+    void Clear();
 }
 
 /// <summary>SQLite, with the mac app's schema (dates are Unix seconds).</summary>
@@ -47,6 +50,18 @@ public sealed class SqliteSessionStore : ISessionStore, IDisposable
 
     /// <summary>%LOCALAPPDATA%\Drill\drill.sqlite</summary>
     public static string DefaultPath => Path.Combine(Paths.DataFolder, "drill.sqlite");
+
+    /// <summary>The store used while nobody's signed in: DRILL_DB when set (for trying things out), else <see cref="DefaultPath"/>.</summary>
+    public static string OfflinePath =>
+        Environment.GetEnvironmentVariable("DRILL_DB") is { Length: > 0 } db ? db : DefaultPath;
+
+    /// <summary>One account's store, drill-&lt;userID&gt;.sqlite next to the offline one.</summary>
+    public static string AccountPath(string userID, string? offlinePath = null)
+    {
+        var safe = string.Concat(userID.Where(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_'));
+        var folder = Path.GetDirectoryName(Path.GetFullPath(offlinePath ?? OfflinePath))!;
+        return Path.Combine(folder, $"drill-{safe}.sqlite");
+    }
 
     /// <summary>Closes the file, waiting for any read or write in flight (sync runs off the UI thread).</summary>
     public void Dispose()
@@ -141,6 +156,11 @@ public sealed class SqliteSessionStore : ISessionStore, IDisposable
             cmd.Parameters.AddWithValue("$device", deviceID);
             return Convert.ToInt32(cmd.ExecuteScalar());
         }
+    }
+
+    public void Clear()
+    {
+        lock (_gate) Exec("DELETE FROM sessions");
     }
 
     private const string Columns =

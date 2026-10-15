@@ -11,15 +11,17 @@ namespace Drill.Views;
 /// <summary>
 /// Sign in, or make an account, as AccountSheet.swift: a username and a
 /// password. On the create form the name is checked as you type, 300ms after
-/// the last keystroke; the password is typed twice.
+/// the last keystroke; the password is typed twice. In the account dialog,
+/// and inline on the welcome.
 /// </summary>
-public partial class AccountDialog : UserControl
+public partial class AccountForm : UserControl
 {
     /// <summary>Where the username check stands.</summary>
     private enum Check { None, Rule, Checking, Available, Taken, Unknown }
 
     private readonly Sync _sync;
-    private readonly Action _dismiss;
+    private readonly Action _done;
+    private readonly Action? _cancel;
     private readonly DispatcherTimer _debounce = new() { Interval = TimeSpan.FromMilliseconds(300) };
     private readonly Action[] _rest;
     private CancellationTokenSource? _checking;
@@ -27,11 +29,22 @@ public partial class AccountDialog : UserControl
     private bool _creating;
     private bool _working;
 
-    public AccountDialog(Sync sync, Action dismiss)
+    /// <param name="done">Signed in.</param>
+    /// <param name="cancel">Null: no cancel link, as on the welcome.</param>
+    /// <param name="heading">False: no heading, as on the welcome, which has its own.</param>
+    public AccountForm(Sync sync, Action done, Action? cancel, bool creating = false, bool heading = true)
     {
         _sync = sync;
-        _dismiss = dismiss;
+        _done = done;
+        _cancel = cancel;
+        _creating = creating;
         InitializeComponent();
+        if (!heading) Heading.Visibility = Visibility.Collapsed;
+        if (cancel is null)
+        {
+            Cancel.IsCancel = false;
+            Cancel.Visibility = Visibility.Collapsed;
+        }
         _rest =
         [
             Underline(Username, UsernameLine, () => "CardLine"),
@@ -192,9 +205,9 @@ public partial class AccountDialog : UserControl
         if (!Ready) return;
         await Run(async () =>
         {
-            if (_creating) await _sync.CreateAccount(Username.Text, Password.Password);
-            else await _sync.SignIn(Username.Text, Password.Password);
-            _dismiss();
+            if (_creating) await _sync.CreateAccount(Username.Text, Password.Password, Stay.IsOn);
+            else await _sync.SignIn(Username.Text, Password.Password, Stay.IsOn);
+            _done();
         });
     }
 
@@ -205,7 +218,7 @@ public partial class AccountDialog : UserControl
         Show();
     }
 
-    private void OnCancel(object sender, RoutedEventArgs e) => _dismiss();
+    private void OnCancel(object sender, RoutedEventArgs e) => _cancel?.Invoke();
 
     /// <summary>For --render: the create form with a name already checked, without asking a server.</summary>
     internal void Pretend(string username, bool available)
