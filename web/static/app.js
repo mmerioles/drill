@@ -658,15 +658,17 @@ function renderAccount() {
   $("confirm").hidden = $("confirm-hint").hidden = !creating;
   $("confirm-hint").textContent = creating && password && confirm && confirm !== password ? "passwords don't match" : "";
   $("account-error").textContent = problem || (creating ? "password needs 8+ characters." : " ");
-  $("username-hint").textContent = creating && name && !validName() ? "3–20 letters, digits or _"
-    : state === "taken" ? "taken" : "";
+  // The cross alone says what's wrong on screen; the words stay for screen readers.
+  const invalid = creating && name && !validName();
+  $("username-hint").textContent = invalid ? "3–20 letters, digits or _" : state === "taken" ? "taken" : "";
+  const shown = invalid ? "taken" : state;
 
   // The mark at the field's edge: the working arc, a green check or a red cross.
   const mark = $("username-mark");
-  mark.toggleAttribute("hidden", !state); // an <svg> has no .hidden
-  if (state && mark.dataset.state !== state) {
-    mark.dataset.state = state;
-    const [kind, className] = { checking: ["working", "checking"], available: ["check", "ok"], taken: ["cross", "taken"] }[state];
+  mark.toggleAttribute("hidden", !shown); // an <svg> has no .hidden
+  if (shown && mark.dataset.state !== shown) {
+    mark.dataset.state = shown;
+    const [kind, className] = { checking: ["working", "checking"], available: ["check", "ok"], taken: ["cross", "taken"] }[shown];
     mark.setAttribute("class", `field-mark ${className}`);
     mark.replaceChildren(...glyph(kind, 14, 0).map((d) => svgEl("path", { d })));
   }

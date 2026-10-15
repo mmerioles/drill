@@ -1,5 +1,7 @@
 package io.github.mmerioles.drill.ui
 
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -115,24 +117,25 @@ fun AccountForm(
             Field(username, { username = Username.clean(it); error = "" }, Modifier.fillMaxWidth().padding(end = if (creating) 24.dp else 0.dp),
                 placeholder = "username", keyboard = KeyboardType.Ascii, weight = FontWeight.Normal, label = "username")
             if (creating) {
+                // The cross alone says it on screen; the words are for TalkBack.
+                val problem = when {
+                    username.isEmpty() -> null
+                    !valid -> "3–20 letters, digits or _"
+                    check == Check.Taken -> "taken"
+                    else -> null
+                }
                 StatusMark(
-                    when (check) {
-                        Check.Checking -> Mark.Working
-                        Check.Available -> Mark.Done
-                        Check.Taken -> Mark.Failed
-                        Check.None -> Mark.None
+                    when {
+                        problem != null -> Mark.Failed
+                        check == Check.Checking -> Mark.Working
+                        check == Check.Available -> Mark.Done
+                        else -> Mark.None
                     },
-                    Modifier.align(Alignment.CenterEnd).padding(bottom = 6.dp),
+                    Modifier.align(Alignment.CenterEnd).padding(bottom = 6.dp)
+                        .semantics { problem?.let { contentDescription = it } },
                 )
             }
         }
-        val hint = when {
-            !creating || username.isEmpty() -> null
-            !valid -> "3–20 letters, digits or _"
-            check == Check.Taken -> "taken"
-            else -> null
-        }
-        if (hint != null) Words(hint, Modifier.padding(top = 6.dp), size = 13.sp, color = ink.faint)
         Field(password, { password = it; error = "" }, Modifier.fillMaxWidth().padding(top = 24.dp),
             placeholder = "password", password = true, weight = FontWeight.Normal, label = "password",
             done = ::submit)

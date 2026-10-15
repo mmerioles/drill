@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
@@ -143,16 +144,20 @@ public partial class AccountForm : UserControl
         {
             Check.Checking => StatusMark.Kind.Working,
             Check.Available => StatusMark.Kind.Done,
-            Check.Taken => StatusMark.Kind.Failed,
+            Check.Taken or Check.Rule => StatusMark.Kind.Failed,
             _ => StatusMark.Kind.None,
         };
-        Note(UsernameNote, check switch
+        // The cross alone says it on screen; the words are for hover and screen readers.
+        string? problem = check switch
         {
             Check.Rule => "3–20 letters, digits or _",
             Check.Taken => "taken",
             Check.Unknown => "can't check right now.",
-            _ => "",
-        });
+            _ => null,
+        };
+        UsernameMark.ToolTip = problem;
+        AutomationProperties.SetHelpText(Username, problem ?? "");
+        Note(UsernameNote, "");
         ShowReady();
     }
 

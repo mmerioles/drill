@@ -70,9 +70,12 @@ struct AccountForm: View {
                         .focused($focused, equals: .username)
                         .textContentType(.username)
                         .autocorrectionDisabled()
-                    if creating { StatusMark(status: mark) }
+                    if creating {
+                        StatusMark(status: mark)
+                            .help(usernameProblem ?? "")
+                            .accessibilityLabel(usernameProblem ?? "")
+                    }
                 }
-                hint(usernameHint)
                 Divider().overlay(Ink.ghost)
                 row("password") {
                     SecureField("", text: $password)
@@ -148,17 +151,18 @@ struct AccountForm: View {
 
     private var mark: StatusMark.Status {
         switch check {
-        case .none: .none
+        case .none: creating && !username.isEmpty && !Username.isValid(username) ? .failed : .none
         case .checking: .working
         case .available: .done
         case .taken: .failed
         }
     }
 
-    private var usernameHint: String? {
-        if username.isEmpty { return nil }
+    /// What the red cross means, for hover and VoiceOver; the cross alone says it on screen.
+    private var usernameProblem: String? {
+        guard creating, !username.isEmpty else { return nil }
         if !Username.isValid(username) { return Username.hint }
-        return creating && check == .taken ? "taken" : nil
+        return check == .taken ? "taken" : nil
     }
 
     private var confirmHint: String? {
