@@ -7,6 +7,7 @@ import { VIDEOS, markWatched, today as inspoToday, watched, watchedBefore } from
 import { SAMPLE_TAGS, sampleYear } from "./sample.js";
 import { chime, wakeAudio } from "./sound.js";
 import { Store } from "./store.js";
+import { USERNAME, cleanUsername, usernameAvailable } from "./supabase.js";
 
 const $ = (id) => document.getElementById(id);
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
@@ -528,60 +529,98 @@ function dayAt(event) {
 /** The header link, shown only while there's something to push, and the
  *  settings rows. Copy as in the mac's MainView and AccountRow. */
 function renderSync() {
-  const state = store.syncState, account = store.account, waiting = store.waiting;
+  const state = store.syncState, account = store.account;
   $("sync").hidden = !account || state === "syncing" || store.unpushed() === 0;
   $("sync").textContent = state === "offline" ? "offline" : "sync";
   $("auto-sync-row").hidden = !account;
-  $("account-line").textContent = account?.email ?? "sync";
-  $("account-action").textContent = waiting && !waiting.confirmed ? "cancel" : account ? "sign out" : "sign in";
-  $("sync-note").textContent = waiting
-    ? (waiting.confirmed ? "you're in." : "check your inbox for the link.")
-    : {
-      signedOut: "sign in to sync across devices.",
-      syncing: "syncing…",
-      synced: "synced.",
-      offline: "offline. your sessions are safe here.",
-      unconfirmed: "confirm your email to start syncing.",
-    }[state];
+  $("account-line").textContent = account?.username ?? "sync";
+  $("account-action").textContent = account ? "sign out" : "sign in";
+  $("sync-note").textContent = {
+    signedOut: "sign in to sync across devices.",
+    syncing: "syncing…",
+    synced: "synced.",
+    offline: "offline. your sessions are safe here.",
+  }[state];
   if ($("account").open) renderAccount();
   syncLoop();
 }
 
 // MARK: Account dialog (AccountSheet.swift)
 
-let creating = false, working = false, problem = "", sentNote = "";
+let creating = false, working = false, problem = "";
+/** The live check on the create form: { name, state } with state one of
+ *  checking | available | taken, or null when there's nothing to say. */
+let availability = null, checkTimer = null;
 
 function openAccount() {
   creating = false;
-  problem = sentNote = "";
+  problem = "";
+  availability = null;
+  clearTimeout(checkTimer);
   $("account-form").reset();
   renderAccount();
   $("account").showModal();
-  if (!store.waiting) $("email").focus();
+  $("username").focus();
   // Autofill can fill the fields without an input event (Safari): look again.
   requestAnimationFrame(() => renderAccount());
 }
 
+const username = () => $("username").value;
+const validName = () => USERNAME.test(username());
+
+/** Lowercases and drops spaces as you type, keeping the caret in place. */
+function tidyUsername() {
+  const field = $("username"), was = field.value, clean = cleanUsername(was);
+  if (clean === was) return;
+  const at = field.selectionStart ?? was.length;
+  const caret = cleanUsername(was.slice(0, at)).length;
+  field.value = clean;
+  field.setSelectionRange(caret, caret);
+}
+
+/** 300ms after the last keystroke on the create form, asks whether the name
+ *  is free. A reply for a name no longer in the field is ignored. */
+function scheduleCheck() {
+  clearTimeout(checkTimer);
+  const name = username();
+  if (!creating || !validName()) { availability = null; return; }
+  if (availability?.name === name) return;
+  availability = { name, state: "checking" };
+  checkTimer = setTimeout(async () => {
+    let state = null; // no answer: the mark clears, and "create" waits for the next try
+    try { state = (await usernameAvailable(name)) ? "available" : "taken"; } catch {}
+    if (username() !== name || !creating) return;
+    availability = state && { name, state };
+    renderAccount();
+  }, 300);
+}
+
 function renderAccount() {
-  const waiting = store.waiting;
-  $("account-form").hidden = !!waiting;
-  $("account-waiting").hidden = !waiting;
-  if (waiting) {
-    $("waiting-title").textContent = waiting.confirmed ? "you're in" : "check your inbox";
-    $("waiting-note").textContent = waiting.confirmed
-      ? "syncing now." : sentNote || `click the link we sent to ${waiting.email}.`;
-    $("waiting-error").textContent = problem || " ";
-    $("waiting-actions").classList.toggle("gone", waiting.confirmed);
-    $("resend").disabled = working;
-    return;
-  }
-  const ready = $("email").value.includes("@") && $("password").value.length >= 8;
+  const name = username(), password = $("password").value, confirm = $("confirm").value;
+  const state = creating && availability?.name === name ? availability.state : null;
+  const ready = creating
+    ? state === "available" && password.length >= 8 && confirm === password
+    : validName() && password.length >= 8;
   $("account-title").textContent = creating ? "make an account" : "sign in";
-  $("account-submit").textContent = creating ? "create" : "sign in";
+  $("account-submit").textContent = creating ? "create account" : "sign in";
   $("account-submit").disabled = !ready || working;
   $("account-switch").textContent = creating ? "have an account?" : "new here?";
   $("password").autocomplete = creating ? "new-password" : "current-password";
-  $("account-error").textContent = problem || (creating ? "password needs 8+ characters." : " ");
+  $("confirm").hidden = $("confirm-hint").hidden = !creating;
+  $("confirm-hint").textContent = creating && password && confirm && confirm !== password ? "passwords don't match" : "";
+  $("account-error").textContent = problem || (creating ? "password needs 8+ characters." : " ");
+  $("username-hint").textContent = creating && name && !validName() ? "3–20 letters, digits or _"
+    : state === "taken" ? "taken" : "";
+
+  // The mark at the field's edge: the working arc, a green check or a red cross.
+  const mark = $("username-mark");
+  mark.toggleAttribute("hidden", !state); // an <svg> has no .hidden
+  if (state && mark.dataset.state !== state) {
+    mark.dataset.state = state;
+    const [kind, className] = { checking: ["working", "checking"], available: ["check", "ok"], taken: ["cross", "taken"] }[state];
+    mark.setAttribute("class", `field-mark ${className}`);
+    mark.replaceChildren(...glyph(kind, 14, 0).map((d) => svgEl("path", { d })));
+  }
 }
 
 /** Runs one call at a time, and shows what went wrong. */
@@ -604,19 +643,10 @@ function submitAccount(e) {
   renderAccount(); // autofilled fields may not have said so yet
   if ($("account-submit").disabled) return;
   run(async () => {
-    sentNote = "";
-    await store.signIn($("email").value.trim(), $("password").value, creating);
-    if (!store.waiting) $("account").close();
+    await store.signIn(username(), $("password").value, creating);
+    $("account").close();
   });
 }
-
-// Once the link is clicked: a beat on "you're in", then out.
-let wasConfirmed = false;
-store.addEventListener("sync", () => {
-  const confirmed = store.waiting?.confirmed === true;
-  if (confirmed && !wasConfirmed) setTimeout(() => $("account").close(), 1400);
-  wasConfirmed = confirmed;
-});
 
 // MARK: Theme, notifications
 
@@ -872,25 +902,22 @@ $("theme").addEventListener("keydown", (e) => {
 });
 $("sync").addEventListener("click", () => store.sync());
 $("account-action").addEventListener("click", () => {
-  if (store.account) return store.signOut(); // also "cancel" while waiting on the link
+  if (store.account) return store.signOut();
   $("settings").close();
   openAccount();
 });
-$("account-switch").addEventListener("click", () => { creating = !creating; problem = ""; renderAccount(); });
-$("account-form").addEventListener("submit", submitAccount);
-$("account-form").addEventListener("input", () => renderAccount());
-$("account-form").addEventListener("change", () => renderAccount());
-$("wrong-email").addEventListener("click", () => {
-  store.signOut();
-  problem = sentNote = "";
+$("account-switch").addEventListener("click", () => {
+  creating = !creating;
+  problem = "";
+  scheduleCheck();
   renderAccount();
-  $("email").focus();
 });
-$("resend").addEventListener("click", () => run(async () => {
-  await store.resend();
-  sentNote = "sent another one.";
-}));
-// Closing while waiting keeps waiting; settings shows how it's going.
+$("account-form").addEventListener("submit", submitAccount);
+$("account-form").addEventListener("input", (e) => {
+  if (e.target.id === "username") { tidyUsername(); scheduleCheck(); }
+  renderAccount();
+});
+$("account-form").addEventListener("change", () => renderAccount());
 for (const b of $("account").querySelectorAll("[data-close]")) {
   b.addEventListener("click", () => $("account").close());
 }

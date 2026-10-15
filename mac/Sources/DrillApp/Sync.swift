@@ -11,7 +11,7 @@ import DrillCore
 @Observable @MainActor
 final class Sync {
     enum State: Equatable {
-        case signedOut, idle, syncing, offline, unconfirmed
+        case signedOut, idle, syncing, offline
     }
 
     private(set) var state: State
@@ -24,9 +24,8 @@ final class Sync {
             if autoSync { startLoop() } else { stopLoop() }
         }
     }
-    /// A self-hosted server from settings, or nil for ours.
-    private(set) var customServer: String?
 
+    private let api = SupabaseAPI.hosted
     private let store: SessionStore
     private let deviceID: String
     private let defaults: UserDefaults
@@ -46,7 +45,6 @@ final class Sync {
         self.onPulled = onPulled
         let account = defaults.data(forKey: Keys.account).flatMap { try? JSONDecoder().decode(Account.self, from: $0) }
         self.account = account
-        customServer = defaults.string(forKey: Keys.server)
         autoSync = defaults.object(forKey: Keys.auto) as? Bool ?? true
         state = account == nil ? .signedOut : .idle
         countUnpushed()
@@ -66,24 +64,6 @@ final class Sync {
     private func countUnpushed() {
         let since = defaults.object(forKey: Keys.pushedAt) as? Date ?? .distantPast
         unpushed = (try? store.changeCount(since: since)) ?? 0
-    }
-
-    var backend: any SyncBackend {
-        customServer.flatMap(URL.init(string:)).map { SyncAPI(server: $0) } ?? SupabaseAPI.hosted
-    }
-
-    /// Empty text means ours. Only while signed out: a token only works
-    /// where it was made.
-    func setServer(_ text: String) throws {
-        guard !isSignedIn else { throw Problem("sign out to change servers.") }
-        if text.trimmingCharacters(in: .whitespaces).isEmpty {
-            customServer = nil
-            defaults.removeObject(forKey: Keys.server)
-            return
-        }
-        guard let url = SyncAPI.serverURL(text) else { throw Problem("that address doesn't look right.") }
-        customServer = url.absoluteString
-        defaults.set(customServer, forKey: Keys.server)
     }
 
     func start() {
@@ -120,82 +100,19 @@ final class Sync {
 
     // MARK: Account
 
-    /// An account whose email link hasn't been clicked yet. Held in memory
-    /// only, password and all, to sign in by itself once it is.
-    struct Waiting: Equatable {
-        let email: String
-        fileprivate let password: String
-        /// Nil when sign-in found the email unconfirmed: then we retry sign-in.
-        fileprivate let userID: String?
-        /// True for a moment once the link is clicked.
-        var confirmed = false
-    }
-
-    private(set) var waiting: Waiting?
-    private var watching: Task<Void, Never>?
-
     // These throw `Problem`, a sentence fit to show.
 
-    func signIn(email: String, password: String) async throws {
-        stopWaiting()
-        do {
-            try await begin(attempt { try await backend.signIn(email: email, password: password) })
-        } catch is Unconfirmed {
-            watch(Waiting(email: email, password: password, userID: nil))
-        }
+    func signIn(username: String, password: String) async throws {
+        begin(try await attempt { try await api.signIn(username: username, password: password) })
     }
 
-    func createAccount(email: String, password: String) async throws {
-        stopWaiting()
-        switch try await attempt({ try await backend.createAccount(email: email, password: password) }) {
-        case .signedIn(let account): begin(account)
-        case .confirmByLink(let id): watch(Waiting(email: email, password: password, userID: id))
-        }
+    func createAccount(username: String, password: String) async throws {
+        begin(try await attempt { try await api.createAccount(username: username, password: password) })
     }
 
-    func resendLink() async throws {
-        guard let waiting else { return }
-        try await attempt { try await backend.resendLink(email: waiting.email) }
-    }
-
-    func stopWaiting() {
-        watching?.cancel()
-        watching = nil
-        waiting = nil
-    }
-
-    private func watch(_ start: Waiting) {
-        watching?.cancel()
-        waiting = start
-        let backend = backend
-        let began = Date()
-        watching = Task { [weak self] in
-            while !Task.isCancelled {
-                let quick = began.timeIntervalSinceNow > -30 * 60
-                try? await Task.sleep(for: .seconds(start.userID == nil ? 10 : quick ? 3 : 30))
-                guard !Task.isCancelled else { return }
-                do {
-                    if let id = start.userID, try await !backend.isConfirmed(userID: id) { continue }
-                    let account = try await backend.signIn(email: start.email, password: start.password)
-                    await self?.confirmed(account)
-                    return
-                } catch SyncError.rejected {
-                    self?.stopWaiting() // the password changed elsewhere: sign in by hand
-                    return
-                } catch {
-                    continue // not yet, or offline for a moment
-                }
-            }
-        }
-    }
-
-    private func confirmed(_ account: Account) async {
-        guard waiting != nil, !Task.isCancelled else { return }
-        waiting?.confirmed = true
-        begin(account)
-        try? await Task.sleep(for: .seconds(2.5))
-        if waiting?.confirmed == true { waiting = nil }
-        watching = nil
+    /// The live check on the create-account form. Throws on no answer.
+    func usernameAvailable(_ name: String) async throws -> Bool {
+        try await attempt { try await api.usernameAvailable(name) }
     }
 
     /// Uploads everything on this Mac and pulls from the start.
@@ -213,25 +130,21 @@ final class Sync {
             return try await call()
         } catch SyncError.rejected(let message) {
             throw Problem(message)
-        } catch SyncError.unconfirmed {
-            throw Unconfirmed()
         } catch {
             throw Problem("can't connect. try again in a bit.")
         }
     }
 
     func signOut() {
-        stopWaiting()
         if let account {
-            let backend = backend
-            Task { await backend.signOut(account) }
+            let api = api
+            Task { await api.signOut(account) }
         }
         running?.cancel()
         save(nil)
         state = .signedOut
     }
 
-    private struct Unconfirmed: Error {}
     struct Problem: Error { let message: String; init(_ m: String) { message = m } }
 
     // MARK: Syncing
@@ -239,47 +152,44 @@ final class Sync {
     func syncNow() {
         guard running == nil, let account else { return }
         lastStarted = Date()
-        let backend = backend
         running = Task { [weak self] in
-            await self?.run(backend, as: account)
+            await self?.run(as: account)
             self?.running = nil
             self?.countUnpushed()
         }
     }
 
-    private func run(_ api: any SyncBackend, as start: Account) async {
+    private func run(as start: Account) async {
         state = .syncing
         var token = start.token
         do {
             // Refresh a nearly-expired token, and once more if it's rejected anyway.
-            token = try await fresh(api, start, force: false)
+            token = try await fresh(start, force: false)
             do {
-                try await exchange(api, token: token)
+                try await exchange(token: token)
             } catch SyncError.signedOut where start.refreshToken != nil {
-                token = try await fresh(api, start, force: true)
-                try await exchange(api, token: token)
+                token = try await fresh(start, force: true)
+                try await exchange(token: token)
             }
             guard account?.token == token else { return } // signed out meanwhile
             state = .idle
         } catch SyncError.signedOut {
-            guard account?.email == start.email else { return }
+            guard account?.username == start.username else { return }
             save(nil)
             state = .signedOut
-        } catch SyncError.unconfirmed {
-            state = .unconfirmed
         } catch {
-            if account?.email == start.email { state = .offline }
+            if account?.username == start.username { state = .offline }
         }
     }
 
-    private func fresh(_ api: any SyncBackend, _ start: Account, force: Bool) async throws -> String {
+    private func fresh(_ start: Account, force: Bool) async throws -> String {
         let current = account ?? start
         let fresh = try await api.refreshed(current, force: force)
-        if fresh != current, account?.email == start.email { save(fresh) }
+        if fresh != current, account?.username == start.username { save(fresh) }
         return fresh.token
     }
 
-    private func exchange(_ api: any SyncBackend, token: String) async throws {
+    private func exchange(token: String) async throws {
         let mark = Date()
         let since = defaults.object(forKey: Keys.pushedAt) as? Date ?? .distantPast
         let changes = try store.changes(since: since)
@@ -313,7 +223,6 @@ final class Sync {
 
     private enum Keys {
         static let account = "drill.sync.account"
-        static let server = "drill.sync.server" // self-hosted only
         static let cursor = "drill.sync.cursor"
         static let pushedAt = "drill.sync.pushedAt"
         static let auto = "drill.sync.auto"

@@ -29,19 +29,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.mmerioles.drill.ink.LocalPalette
 
-private val Green = Color(0xFF3DA35D)
 private val Yellow = Color(0xFFE8B931)
 
-enum class Mark { None, Working, Pending, Done }
+enum class Mark { None, Working, Pending, Done, Failed }
 
-/** A spinner, a yellow dot, or a green check. [breathing] pulses the dot,
- *  for a wait that resolves by itself. */
+/** A spinner, a yellow dot, a green check or a red cross. [breathing] pulses
+ *  the dot, for a wait that resolves by itself. */
 @Composable
 fun StatusMark(status: Mark, modifier: Modifier = Modifier, breathing: Boolean = false, size: Dp = 14.dp) {
     val ink = LocalPalette.current
@@ -69,23 +69,33 @@ fun StatusMark(status: Mark, modifier: Modifier = Modifier, breathing: Boolean =
                     }
                 }
                 Mark.Done -> Canvas(Modifier.size(size)) {
-                    drawCircle(Green)
+                    drawCircle(ink.ok)
                     val w = this.size.width
-                    drawPath(
-                        Path().apply {
-                            moveTo(w * 0.28f, w * 0.52f)
-                            lineTo(w * 0.44f, w * 0.68f)
-                            lineTo(w * 0.73f, w * 0.36f)
-                        },
-                        Color.White,
-                        style = Stroke(w * 0.115f, cap = StrokeCap.Round, join = StrokeJoin.Round),
-                    )
+                    stroke(Color.White) {
+                        moveTo(w * 0.28f, w * 0.52f)
+                        lineTo(w * 0.44f, w * 0.68f)
+                        lineTo(w * 0.73f, w * 0.36f)
+                    }
+                }
+                Mark.Failed -> Canvas(Modifier.size(size)) {
+                    drawCircle(ink.accent)
+                    val w = this.size.width
+                    stroke(ink.paper) {
+                        moveTo(w * 0.34f, w * 0.34f)
+                        lineTo(w * 0.66f, w * 0.66f)
+                        moveTo(w * 0.66f, w * 0.34f)
+                        lineTo(w * 0.34f, w * 0.66f)
+                    }
                 }
                 Mark.Pending -> Dot(size * 0.71f, breathing)
                 Mark.None -> Unit
             }
         }
     }
+}
+
+private fun DrawScope.stroke(color: Color, path: Path.() -> Unit) {
+    drawPath(Path().apply(path), color, style = Stroke(size.width * 0.115f, cap = StrokeCap.Round, join = StrokeJoin.Round))
 }
 
 @Composable

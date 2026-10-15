@@ -1,8 +1,9 @@
+import InkKit
 import SwiftUI
 
-/// A spinner, a yellow dot, or a green check.
+/// A spinner, a yellow dot, a green check or a red cross.
 struct StatusMark: View {
-    enum Status: Equatable { case none, working, pending, done }
+    enum Status: Equatable { case none, working, pending, done, failed }
 
     let status: Status
     /// Pulses the yellow dot.
@@ -15,7 +16,11 @@ struct StatusMark: View {
                 Spinner()
             case .done:
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Ink.ok)
+                    .transition(.scale(scale: 0.4).combined(with: .opacity))
+            case .failed:
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(Ink.accent)
                     .transition(.scale(scale: 0.4).combined(with: .opacity))
             case .pending:
                 Dot(breathing: breathing)

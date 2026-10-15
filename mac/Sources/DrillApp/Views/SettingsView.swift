@@ -45,10 +45,12 @@ struct SettingsView: View {
                 if sync.isSignedIn {
                     Toggle("auto sync", isOn: $sync.autoSync)
                 }
-                ServerRow()
             }
             if updater.isEnabled {
                 Section { UpdateRow() }
+            }
+            Section("plugins") {
+                Text("coming soon.").foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -152,69 +154,26 @@ private struct AccountRow: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(sync.account?.email ?? sync.waiting?.email ?? "sync")
+                Text(sync.account?.username ?? "sync")
                 Text(note).font(.caption).foregroundStyle(.secondary)
                     .contentTransition(.opacity)
             }
             Spacer()
-            if let waiting = sync.waiting {
-                StatusMark(status: waiting.confirmed ? .done : .pending, breathing: true)
-            }
-            if sync.waiting?.confirmed == false {
-                Button("cancel", action: sync.stopWaiting)
-            } else if sync.isSignedIn {
+            if sync.isSignedIn {
                 Button("sign out", action: sync.signOut)
             } else {
                 Button("sign in") { signingIn = true }
             }
         }
         .sheet(isPresented: $signingIn) { AccountSheet() }
-        .animation(.easeInOut(duration: 0.25), value: sync.waiting)
     }
 
     private var note: String {
-        if let waiting = sync.waiting {
-            return waiting.confirmed ? "you're in." : "check your inbox for the link."
-        }
-        return switch sync.state {
+        switch sync.state {
         case .signedOut: "sign in to sync across devices."
         case .syncing: "syncing…"
         case .idle: "synced."
         case .offline: "offline. your sessions are safe here."
-        case .unconfirmed: "confirm your email to start syncing."
         }
-    }
-}
-
-private struct ServerRow: View {
-    @Environment(Sync.self) private var sync
-    @State private var text = ""
-    @State private var problem: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            TextField("server", text: $text, prompt: Text("drill's"))
-                .multilineTextAlignment(.trailing)
-                .disabled(sync.isSignedIn)
-                .onSubmit(save)
-            Text(note).font(.caption).foregroundStyle(.secondary)
-        }
-        .onAppear { text = sync.customServer ?? "" }
-    }
-
-    private var note: String {
-        if let problem { return problem }
-        if sync.isSignedIn { return "sign out to change servers." }
-        return "leave blank to use ours, or add your own."
-    }
-
-    private func save() {
-        do {
-            try sync.setServer(text)
-            text = sync.customServer ?? ""
-            problem = nil
-        } catch let error as Sync.Problem {
-            problem = error.message
-        } catch {}
     }
 }

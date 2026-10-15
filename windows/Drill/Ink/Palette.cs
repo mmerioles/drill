@@ -21,6 +21,8 @@ public sealed class Palette
     public required Color Raised { get; init; }
     /// <summary>The scrim behind dialogs.</summary>
     public required Color Smoke { get; init; }
+    /// <summary>The one green: a check for something that's fine.</summary>
+    public required Color Ok { get; init; }
 
     /// <summary>Secondary text and idle strokes.</summary>
     public Color Faint => WithAlpha(Ink, 0.45);
@@ -31,14 +33,14 @@ public sealed class Palette
     {
         Theme = Theme.Light,
         Paper = Hex(0xF2F0ED), Ink = Hex(0x2B2A2F), Accent = Hex(0xCF3A4F),
-        Raised = Hex(0xF2F0ED), Smoke = Color.FromArgb(0x4D, 0, 0, 0),
+        Raised = Hex(0xF2F0ED), Smoke = Color.FromArgb(0x4D, 0, 0, 0), Ok = Hex(0x3B9B5E),
     };
 
     public static readonly Palette Dark = new()
     {
         Theme = Theme.Dark,
         Paper = Hex(0x121211), Ink = Hex(0xF1F0EB), Accent = Hex(0xF1F0EB),
-        Raised = Hex(0x1C1C1B), Smoke = Color.FromArgb(0x80, 0, 0, 0),
+        Raised = Hex(0x1C1C1B), Smoke = Color.FromArgb(0x80, 0, 0, 0), Ok = Hex(0x5FBF80),
     };
 
     public static Palette Current { get; private set; } = Dark;
@@ -59,6 +61,7 @@ public sealed class Palette
         resources["Ghost"] = Brush(p.Ghost);
         resources["Raised"] = Brush(p.Raised);
         resources["Smoke"] = Brush(p.Smoke);
+        resources["Ok"] = Brush(p.Ok);
         // Placeholder text, quieter than faint.
         resources["Hint"] = Brush(WithAlpha(p.Ink, 0.28));
         // Settings cards: a tint of ink, and an outline lighter than ghost.

@@ -10,6 +10,8 @@
   --ghost: rgb(43 42 47 / .12);
   --wash: rgb(43 42 47 / .055);
   --raised: rgb(43 42 47 / .045);
+  --ok: #3B9B5E;
+  --bad: #CF3A4F;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -21,6 +23,7 @@
     --ghost: rgb(241 240 235 / .12);
     --wash: rgb(241 240 235 / .055);
     --raised: rgb(241 240 235 / .05);
+    --ok: #5FBF80;
     color-scheme: dark;
   }
 }
@@ -32,6 +35,7 @@
   --ghost: rgb(241 240 235 / .12);
   --wash: rgb(241 240 235 / .055);
   --raised: rgb(241 240 235 / .05);
+  --ok: #5FBF80;
   color-scheme: dark;
 }
 
@@ -229,16 +233,29 @@ button, input { font: inherit; color: inherit; }
 }
 .fields input:focus { box-shadow: inset 0 -2px var(--ink); }
 .fields input::placeholder { color: var(--faint); }
+.fields input[hidden] { display: none; }
+/* The username with its status mark at the trailing edge: a muted arc
+   while checking, a green check when free, a red cross when taken. */
+.field { position: relative; display: flex; }
+.field input { flex: 1; padding-right: 22px; }
+.field-mark {
+  position: absolute; right: 2px; top: 13px; overflow: visible;
+  fill: none; stroke: var(--faint); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round;
+}
+.field-mark[hidden] { display: none; }
+.field-mark.ok { stroke: var(--ok); }
+.field-mark.taken { stroke: var(--bad); }
+.field-mark.checking { animation: turn .8s linear infinite; transform-origin: center; }
+@keyframes turn { to { transform: rotate(360deg); } }
+.hint { color: var(--faint); font-size: 12px; min-height: 16px; margin: -2px 0 0; }
+.hint[hidden] { display: none; }
 .account .message { color: var(--faint); font-size: 13px; min-height: 18px; margin: 0 0 8px; }
-#account-waiting h2 { margin-bottom: 10px; }
 .account-actions { display: flex; align-items: center; gap: 16px; }
 .account-actions .link { font-size: 13px; }
 .account-actions .link:disabled { opacity: .5; cursor: default; }
 .account-actions .capsule { margin-left: -4px; }
 .account-actions .capsule:disabled { opacity: .5; cursor: default; }
 .account-actions .capsule:disabled:active { transform: none; }
-#waiting-actions { transition: opacity .25s ease-in-out; }
-#waiting-actions.gone { opacity: 0; pointer-events: none; }
 
 /* Inspo */
 

@@ -18,7 +18,6 @@ on:
       - "windows/README.md"
       - ".github/workflows/windows.yml"
       - ".github/workflows/pages.yml"
-      - ".github/workflows/web.yml"
   workflow_dispatch:
 
 concurrency:

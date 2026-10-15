@@ -1,116 +1,168 @@
-using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Threading;
+using Drill.Core.Sync;
 using Drill.Ink;
 using Drill.Services;
 
 namespace Drill.Views;
 
 /// <summary>
-/// Sign in, or make an account, as AccountSheet.swift: an email and a
-/// password, then a click on the link in the confirmation email, which the
-/// dialog notices by itself. The server is ours unless settings name a
-/// self-hosted one.
+/// Sign in, or make an account, as AccountSheet.swift: a username and a
+/// password. On the create form the name is checked as you type, 300ms after
+/// the last keystroke; the password is typed twice.
 /// </summary>
 public partial class AccountDialog : UserControl
 {
+    /// <summary>Where the username check stands.</summary>
+    private enum Check { None, Rule, Checking, Available, Taken, Unknown }
+
     private readonly Sync _sync;
     private readonly Action _dismiss;
+    private readonly DispatcherTimer _debounce = new() { Interval = TimeSpan.FromMilliseconds(300) };
+    private readonly Action[] _rest;
+    private CancellationTokenSource? _checking;
+    private Check _check;
     private bool _creating;
     private bool _working;
-    private string? _note;
 
     public AccountDialog(Sync sync, Action dismiss)
     {
         _sync = sync;
         _dismiss = dismiss;
         InitializeComponent();
-        WaitHeading.SetResourceReference(TextElement.FontFamilyProperty, "Display");
-        WaitHeading.SetValue(TextElement.FontWeightProperty, FontWeights.Bold);
-
-        Email.TextChanged += (_, _) => { EmailHint.Visibility = Email.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed; ShowReady(); };
-        Password.PasswordChanged += (_, _) => { PasswordHint.Visibility = Password.Password.Length == 0 ? Visibility.Visible : Visibility.Collapsed; ShowReady(); };
-        Underline(Email, EmailLine, "CardLine");
-        Underline(Password, PasswordLine, null);
-        // Sync outlives the dialog: listen only while it's showing.
-        Unloaded += (_, _) => sync.PropertyChanged -= OnSync;
+        _rest =
+        [
+            Underline(Username, UsernameLine, () => "CardLine"),
+            Underline(Password, PasswordLine, () => _creating ? "CardLine" : null),
+            Underline(Confirm, ConfirmLine, () => null),
+        ];
+        Username.TextChanged += (_, _) => OnUsername();
+        Password.PasswordChanged += (_, _) => { PasswordHint.Visibility = HintFor(Password.Password); ShowPasswords(); };
+        Confirm.PasswordChanged += (_, _) => { ConfirmHint.Visibility = HintFor(Confirm.Password); ShowPasswords(); };
+        _debounce.Tick += (_, _) => _ = CheckUsername();
+        Unloaded += (_, _) => _debounce.Stop();
         Loaded += (_, _) =>
         {
-            sync.PropertyChanged -= OnSync; // Loaded can come twice
-            sync.PropertyChanged += OnSync;
-            Show();
-            if (sync.WaitingFor is { } waiting) Email.Text = waiting.Email;
-            else Keyboard.Focus(Email);
+            if (_check == Check.Checking) _debounce.Start(); // Loaded can come twice
+            Keyboard.Focus(Username);
         };
         Show();
     }
 
-    /// <summary>The field you're typing in gets a 2px ink underline; otherwise a hairline (or none).</summary>
-    private static void Underline(Control field, System.Windows.Shapes.Rectangle line, string? rest)
+    /// <summary>The field you're typing in gets a 2px ink underline; otherwise a hairline (or none). Returns the way back to rest.</summary>
+    private static Action Underline(Control field, System.Windows.Shapes.Rectangle line, Func<string?> rest)
     {
         void Rest()
         {
+            if (field.IsKeyboardFocused) return;
             line.Height = 1;
-            if (rest is null) line.Fill = System.Windows.Media.Brushes.Transparent; else line.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, rest);
+            if (rest() is { } key) line.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, key);
+            else line.Fill = System.Windows.Media.Brushes.Transparent;
         }
         field.GotKeyboardFocus += (_, _) => { line.Height = 2; line.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "Ink"); };
         field.LostKeyboardFocus += (_, _) => Rest();
         Rest();
+        return Rest;
     }
 
-    private void OnSync(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName != nameof(Sync.WaitingFor)) return;
-        Show();
-        // Once the link is clicked: a beat on the check mark, then out.
-        if (_sync.WaitingFor?.Confirmed == true) _ = DismissSoon();
-    }
-
-    private async Task DismissSoon()
-    {
-        await Task.Delay(1400);
-        _dismiss();
-    }
+    private static Visibility HintFor(string text) => text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
 
     private void Show()
     {
-        var waiting = _sync.WaitingFor;
-        Details.Visibility = waiting is null ? Visibility.Visible : Visibility.Collapsed;
-        WaitingPanel.Visibility = waiting is null ? Visibility.Collapsed : Visibility.Visible;
-
         Heading.Text = _creating ? "make an account" : "sign in";
         SwitchMode.Content = _creating ? "have an account?" : "new here?";
-        Primary.Content = _creating ? "create" : "sign in";
-        if (Problem.Tag is not string) Problem.Text = _creating ? "password needs 8+ characters." : "";
-        Problem.Visibility = Problem.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
-        ShowReady();
+        Primary.Content = _creating ? "create account" : "sign in";
+        PasswordHint.Text = _creating ? "password (8+ characters)" : "password";
+        ConfirmRow.Visibility = _creating ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var rest in _rest) rest();
+        OnUsername();
+        ShowPasswords();
+    }
 
-        if (waiting is not null)
+    // The username, lowercased as you type, and checked on the create form.
+
+    private void OnUsername()
+    {
+        var tidy = SupabaseApi.TidyUsername(Username.Text);
+        if (tidy != Username.Text)
         {
-            WaitHeading.Text = waiting.Confirmed ? "you're in" : "check your inbox";
-            WaitNote.Text = waiting.Confirmed ? "syncing now." : _note ?? $"click the link we sent to {waiting.Email}.";
-            Mark.Status = waiting.Confirmed ? StatusMark.Kind.Done : StatusMark.Kind.Pending;
-            Animate.To(WaitActions, OpacityProperty, waiting.Confirmed ? 0 : 1, 250, BezierEase.InOut);
-            WaitActions.IsHitTestVisible = !waiting.Confirmed;
+            Username.Text = tidy; // comes back through here
+            Username.CaretIndex = tidy.Length;
+            return;
+        }
+        UsernameHint.Visibility = HintFor(tidy);
+        _checking?.Cancel();
+        _debounce.Stop();
+        if (!_creating || tidy.Length == 0) ShowCheck(Check.None);
+        else if (!SupabaseApi.IsUsername(tidy)) ShowCheck(Check.Rule);
+        else
+        {
+            ShowCheck(Check.Checking);
+            _debounce.Start();
         }
     }
 
-    private bool Ready => Email.Text.Contains('@') && Password.Password.Length >= 8;
+    /// <summary>300ms after the last keystroke: one call, dropped if the name changes meanwhile.</summary>
+    private async Task CheckUsername()
+    {
+        _debounce.Stop();
+        var cts = new CancellationTokenSource();
+        _checking = cts;
+        try
+        {
+            var free = await _sync.UsernameAvailable(Username.Text, cts.Token);
+            if (cts.IsCancellationRequested) return;
+            ShowCheck(free ? Check.Available : Check.Taken);
+        }
+        catch (Exception) when (!cts.IsCancellationRequested)
+        {
+            ShowCheck(Check.Unknown);
+        }
+        catch (Exception) { }
+    }
+
+    private void ShowCheck(Check check)
+    {
+        _check = check;
+        UsernameMark.Status = check switch
+        {
+            Check.Checking => StatusMark.Kind.Working,
+            Check.Available => StatusMark.Kind.Done,
+            Check.Taken => StatusMark.Kind.Failed,
+            _ => StatusMark.Kind.None,
+        };
+        Note(UsernameNote, check switch
+        {
+            Check.Rule => "3–20 letters, digits or _",
+            Check.Taken => "taken",
+            Check.Unknown => "can't check right now.",
+            _ => "",
+        });
+        ShowReady();
+    }
+
+    private void ShowPasswords()
+    {
+        var both = Password.Password.Length > 0 && Confirm.Password.Length > 0;
+        Note(ConfirmNote, _creating && both && Password.Password != Confirm.Password ? "passwords don't match" : "");
+        ShowReady();
+    }
+
+    private static void Note(TextBlock note, string text)
+    {
+        note.Text = text;
+        note.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private bool Ready => SupabaseApi.IsUsername(Username.Text) && (_creating
+        ? _check == Check.Available && Password.Password.Length >= 8 && Confirm.Password == Password.Password
+        : Password.Password.Length > 0);
 
     private void ShowReady() => Primary.IsEnabled = Ready && !_working;
 
-    private string TrimmedEmail => Email.Text.Trim();
-
-    private void SetProblem(string? text)
-    {
-        Problem.Tag = text;
-        WaitProblem.Text = text ?? "";
-        Problem.Text = text ?? (_creating ? "password needs 8+ characters." : "");
-        Problem.Visibility = Problem.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
-        WaitProblem.Visibility = WaitProblem.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
-    }
+    private void SetProblem(string? text) => Note(Problem, text ?? "");
 
     /// <summary>Runs one call at a time, and shows what went wrong.</summary>
     private async Task Run(Func<Task> work)
@@ -119,7 +171,6 @@ public partial class AccountDialog : UserControl
         _working = true;
         SetProblem(null);
         ShowReady();
-        Resend.IsEnabled = false;
         try
         {
             await work();
@@ -133,7 +184,6 @@ public partial class AccountDialog : UserControl
             SetProblem("something went wrong. try again.");
         }
         _working = false;
-        Resend.IsEnabled = true;
         ShowReady();
     }
 
@@ -142,10 +192,9 @@ public partial class AccountDialog : UserControl
         if (!Ready) return;
         await Run(async () =>
         {
-            _note = null;
-            if (_creating) await _sync.CreateAccount(TrimmedEmail, Password.Password);
-            else await _sync.SignIn(TrimmedEmail, Password.Password);
-            if (_sync.WaitingFor is null) _dismiss();
+            if (_creating) await _sync.CreateAccount(Username.Text, Password.Password);
+            else await _sync.SignIn(Username.Text, Password.Password);
+            _dismiss();
         });
     }
 
@@ -156,21 +205,17 @@ public partial class AccountDialog : UserControl
         Show();
     }
 
-    private void OnCancel(object sender, RoutedEventArgs e) => _dismiss(); // closing keeps waiting; settings shows how it's going
+    private void OnCancel(object sender, RoutedEventArgs e) => _dismiss();
 
-    private void OnWrongEmail(object sender, RoutedEventArgs e)
+    /// <summary>For --render: the create form with a name already checked, without asking a server.</summary>
+    internal void Pretend(string username, bool available)
     {
-        _sync.StopWaiting();
-        SetProblem(null);
+        _creating = true;
+        Username.Text = username;
+        if (available) Password.Password = Confirm.Password = "kasane-0401";
         Show();
-        Keyboard.Focus(Email);
+        _debounce.Stop();
+        _checking?.Cancel();
+        ShowCheck(available ? Check.Available : Check.Taken);
     }
-
-    private async void OnResend(object sender, RoutedEventArgs e) =>
-        await Run(async () =>
-        {
-            await _sync.ResendLink();
-            _note = "sent another one.";
-            Show();
-        });
 }

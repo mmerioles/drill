@@ -1,9 +1,9 @@
 import Foundation
 
-/// Hosted sync: Supabase Auth for accounts, and the RPCs in
+/// Drill's sync: Supabase Auth for accounts, and the RPCs in
 /// supabase/migrations for sessions. The publishable key is meant to ship in
 /// apps; row-level security keeps each account to its own rows.
-public struct SupabaseAPI: SyncBackend {
+public struct SupabaseAPI: Sendable {
     public var project: URL
     public var key: String
     private let session: URLSession
@@ -18,54 +18,47 @@ public struct SupabaseAPI: SyncBackend {
         project: URL(string: "https://fgqtpetuzseozttapzem.supabase.co")!,
         key: "sb_publishable_WeTl_T2-z_i1ycA7KSgCyQ_9a64WoAg")
 
-    /// Where the confirmation link lands. Must share a site with the
-    /// project's Site URL, or Supabase ignores it.
-    public static let confirmedPage = "https://mmerioles.github.io/drill/confirmed/"
+    /// Auth wants an email, so every username gets one here. Never shown,
+    /// and the domain can't receive mail.
+    public static let emailDomain = "users.mmerioles.github.io"
+
+    public static func email(for username: String) -> String {
+        "\(username)@\(emailDomain)"
+    }
+
+    /// The email with its domain stripped: works offline, no extra fetch.
+    public static func username(from email: String) -> String {
+        String(email.prefix { $0 != "@" })
+    }
 
     /// Tokens this close to running out are swapped before a sync.
     private static let margin: TimeInterval = 5 * 60
 
     // MARK: Accounts
 
-    public func signIn(email: String, password: String) async throws -> Account {
-        try await tokens("auth/v1/token?grant_type=password", ["email": email, "password": password])
+    public func signIn(username: String, password: String) async throws -> Account {
+        try await tokens("auth/v1/token?grant_type=password",
+                         ["email": Self.email(for: username), "password": password])
     }
 
-    /// Supabase answers a taken email like a new one (against probing),
-    /// except the returned user has no identities.
-    public func createAccount(email: String, password: String) async throws -> SignUp {
-        struct Reply: Decodable {
-            struct Identity: Decodable {}
-            var id: String?
-            var identities: [Identity]?
-            var access_token: String?
-        }
-        let body = try JSONEncoder().encode(["email": email, "password": password])
-        let data = try await call("auth/v1/signup?redirect_to=" + Self.redirect, body: body)
-        let reply = try? JSONDecoder().decode(Reply.self, from: data)
-        if reply?.access_token != nil {
-            return .signedIn(try account(from: data)) // confirmation is off
-        }
-        if reply?.identities?.isEmpty == true {
-            throw SyncError.rejected("that email already has an account")
-        }
-        guard let id = reply?.id else { throw SyncError.unreachable }
-        return .confirmByLink(userID: id)
+    /// The username rides along as metadata; a trigger makes the profile,
+    /// and a taken name fails the whole sign-up.
+    public func createAccount(username: String, password: String) async throws -> Account {
+        struct Body: Encodable { var email: String; var password: String; var data: [String: String] }
+        let body = try JSONEncoder().encode(
+            Body(email: Self.email(for: username), password: password, data: ["username": username]))
+        return try account(from: try await call("auth/v1/signup", body: body, signingUp: true))
     }
 
-    public func isConfirmed(userID: String) async throws -> Bool {
-        let body = try JSONEncoder().encode(["user_id": userID])
-        let data = try await call("rest/v1/rpc/email_confirmed", body: body)
+    /// The live check while typing. False for names failing the rule too.
+    public func usernameAvailable(_ name: String) async throws -> Bool {
+        let body = try JSONEncoder().encode(["name": name])
+        let data = try await call("rest/v1/rpc/username_available", body: body)
         return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) == "true"
     }
 
-    public func resendLink(email: String) async throws {
-        let body = try JSONEncoder().encode(["type": "signup", "email": email])
-        _ = try await call("auth/v1/resend?redirect_to=" + Self.redirect, body: body)
-    }
-
-    private static let redirect = confirmedPage.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
-
+    /// The same account unless its token is about to expire, or `force`
+    /// says the server turned it down.
     public func refreshed(_ account: Account, force: Bool) async throws -> Account {
         guard let refresh = account.refreshToken else { throw SyncError.signedOut }
         if !force, let expiresAt = account.expiresAt, expiresAt.timeIntervalSinceNow > Self.margin {
@@ -78,6 +71,7 @@ public struct SupabaseAPI: SyncBackend {
         }
     }
 
+    /// Best effort: signing out locally never waits on it.
     public func signOut(_ account: Account) async {
         _ = try? await call("auth/v1/logout?scope=local", token: account.token, body: Data("{}".utf8))
     }
@@ -104,27 +98,29 @@ public struct SupabaseAPI: SyncBackend {
 
     private func account(from data: Data) throws -> Account {
         struct Tokens: Decodable {
-            struct User: Decodable { var email: String?; var email_confirmed_at: String? }
+            struct User: Decodable { var email: String? }
             var access_token: String
             var refresh_token: String
             var expires_in: TimeInterval
             var user: User
         }
         guard let t = try? JSONDecoder().decode(Tokens.self, from: data) else { throw SyncError.unreachable }
-        return Account(email: t.user.email ?? "", token: t.access_token,
-                       confirmed: t.user.email_confirmed_at != nil, refreshToken: t.refresh_token,
-                       expiresAt: Date().addingTimeInterval(t.expires_in))
+        return Account(username: Self.username(from: t.user.email ?? ""), token: t.access_token,
+                       refreshToken: t.refresh_token, expiresAt: Date().addingTimeInterval(t.expires_in))
     }
 
     /// Auth errors come as `{ code: 400, error_code, msg }` (older ones as
     /// `{ error, error_description }`), database errors as `{ code: "42501",
     /// message }`.
-    private static func errorCode(_ data: Data) -> String? {
+    private static func failure(_ data: Data) -> (code: String?, message: String) {
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-        return json?["error_code"] as? String ?? json?["error"] as? String ?? json?["code"] as? String
+        let code = json?["error_code"] as? String ?? json?["error"] as? String ?? json?["code"] as? String
+        let message = json?["msg"] as? String ?? json?["message"] as? String
+            ?? json?["error_description"] as? String ?? ""
+        return (code, message)
     }
 
-    private func call(_ path: String, token: String? = nil, body: Data) async throws -> Data {
+    private func call(_ path: String, token: String? = nil, body: Data, signingUp: Bool = false) async throws -> Data {
         guard let url = URL(string: path, relativeTo: project.appending(path: "/")) else {
             throw SyncError.unreachable
         }
@@ -145,9 +141,10 @@ public struct SupabaseAPI: SyncBackend {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if 200..<300 ~= status { return data }
 
-        switch (status, Self.errorCode(data)) {
-        case (_, "email_not_confirmed"), (403, "42501"):
-            throw SyncError.unconfirmed
+        let (code, message) = Self.failure(data)
+        // The profile trigger rejecting a name (a race with the live check).
+        if signingUp, message.contains("Database error") { throw SyncError.rejected(Self.taken) }
+        switch (status, code) {
         case (401, _) where token != nil, (403, "28000"):
             throw SyncError.signedOut
         case (_, let code?):
@@ -160,20 +157,66 @@ public struct SupabaseAPI: SyncBackend {
         }
     }
 
+    private static let taken = "that username is taken"
     private static let tooMany = "too many tries. give it a minute."
 
     /// Supabase's error codes, in the apps' words.
     private static let sentences: [String: String] = [
-        "invalid_credentials": "wrong email or password",
-        "invalid_grant": "wrong email or password",
-        "user_already_exists": "that email already has an account",
-        "email_exists": "that email already has an account",
-        "weak_password": "password needs 8+ characters",
-        "email_address_invalid": "that email doesn't look right",
-        "validation_failed": "that email doesn't look right",
+        "invalid_credentials": "wrong username or password",
+        "invalid_grant": "wrong username or password",
+        "user_already_exists": taken,
+        "email_exists": taken,
+        "weak_password": "use at least 8 characters",
+        "email_address_invalid": "that username doesn't look right",
+        "validation_failed": "that username doesn't look right",
         "signup_disabled": "sign-ups are closed for now",
-        "over_email_send_rate_limit": "just sent one. try again in a minute.",
         "over_request_rate_limit": tooMany,
         "22023": "couldn't sync. try updating the app.",
     ]
+}
+
+/// Tokens expire after an hour; the refresh token gets the next one.
+public struct Account: Codable, Equatable, Sendable {
+    public var username: String
+    public var token: String
+    public var refreshToken: String?
+    public var expiresAt: Date?
+
+    public init(username: String, token: String, refreshToken: String? = nil, expiresAt: Date? = nil) {
+        self.username = username
+        self.token = token
+        self.refreshToken = refreshToken
+        self.expiresAt = expiresAt
+    }
+}
+
+public struct SyncPage: Decodable, Sendable {
+    public var sessions: [FocusSession]
+    public var cursor: String
+    public var more: Bool
+}
+
+public enum SyncError: Error, Equatable, Sendable {
+    case unreachable
+    /// The token was revoked: sign in again.
+    case signedOut
+    /// A sentence fit to show, like "wrong username or password".
+    case rejected(String)
+}
+
+extension JSONEncoder {
+    /// Dates as ISO 8601, as the RPCs expect.
+    static let iso8601: JSONEncoder = {
+        let e = JSONEncoder()
+        e.dateEncodingStrategy = .iso8601
+        return e
+    }()
+}
+
+extension JSONDecoder {
+    static let iso8601: JSONDecoder = {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .iso8601
+        return d
+    }()
 }

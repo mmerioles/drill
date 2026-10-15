@@ -1,12 +1,13 @@
 # sync contract
 
-Server: `web/server.py`. Clients: web (`web/static/store.js`), mac
-(`SyncAPI` in `mac/Sources/DrillCore`, driven by `DrillApp/Sync.swift`),
-android (`SyncApi.kt`, `Sync.kt` in `android/.../data`), windows
+Backend: drill's Supabase project, schema in `supabase/migrations/`. Clients:
+web (`web/static/supabase.js`, driven by `store.js`), mac (`SupabaseAPI` in
+`mac/Sources/DrillCore`, driven by `DrillApp/Sync.swift`), android
+(`SupabaseApi.kt`, `Sync.kt` in `android/.../data`), windows
 (`windows/Drill.Core/Sync`, driven by `windows/Drill/Services/Sync.cs`).
 
-The server keeps the union of every device's sessions and hands back what
-each device hasn't seen. Devices merge with one rule.
+Supabase keeps the union of every device's sessions and hands back what each
+device hasn't seen. Devices merge with one rule.
 
 ## Merge rule
 
@@ -18,55 +19,70 @@ pulled row is the whole merge.
 
 ## Accounts
 
-Email and password. Sign-in returns a token; every other call sends
-`Authorization: Bearer <token>`. Each account sees only its own sessions.
+A username and a password (`20261015024006_usernames.sql`). Usernames are
+3–20 characters of `a-z 0-9 _`; apps lowercase and trim as the user types.
+Passwords need at least 8 characters.
+
+Supabase Auth wants an email, so each app derives one and never shows it:
+`<username>@users.mmerioles.github.io`. The username shown in the app is the
+account's email with the domain stripped. Email confirmation is off.
 
 ```
-POST /v1/accounts   { "email": "…", "password": "…" }
-  → 201 { "token": "…", "email": "…", "confirmed": false }
-POST /v1/signin     { "email": "…", "password": "…" }
-  → 200 { "token": "…", "email": "…", "confirmed": true }
-POST /v1/signout    revokes the token it's sent with → 200 {}
-GET  /v1/account    → 200 { "email": "…", "confirmed": true }
-POST /v1/resend     sends the confirmation email again (until confirmed) → 200 {}
-GET  /confirm?token=…   the link in the confirmation email; a small page
+POST /rest/v1/rpc/username_available   { "name": "…" } → true | false
+  anon key, no auth; false for names that fail the rule too
+POST /auth/v1/signup
+  { "email": synthetic, "password": "…", "data": { "username": "…" } }
+  → tokens, same shape as sign-in. A trigger on auth.users makes
+    public.profiles (user_id, username unique); a taken or bad name fails
+    the sign-up.
+POST /auth/v1/token?grant_type=password   { "email": synthetic, "password" }
+POST /auth/v1/token?grant_type=refresh_token
+POST /auth/v1/logout
 ```
 
-Emails are trimmed and lowercased. Passwords need at least 8 characters and
-are stored as salted PBKDF2-SHA256. Errors come back as
-`{ "error": "…" }` with a lowercase sentence the apps show as-is:
-`400` bad input, `401` wrong email or password (or, on other calls, a dead
-token: sign in again), `409` email taken, `429` too many tries from one
-address.
+Every REST call sends the publishable key as `apikey`; signed-in calls add
+`Authorization: Bearer <access token>`. Access tokens last an hour; apps swap
+them with the refresh token before a sync, and once more if a call comes back
+`401`.
 
-Sign-up sends a confirmation email: the server POSTs JSON
-`{ "to", "subject", "text" }` to `DRILL_MAIL_URL` (e.g. a Cloudflare Worker)
-with `Authorization: Bearer $DRILL_MAIL_KEY`, or logs it if unset. Links use
-`DRILL_PUBLIC_URL`. Accounts can sync before confirming unless
-`DRILL_REQUIRE_CONFIRMED=1`, in which case sync calls answer
-`403 { "error": "confirm your email first" }`.
+Error mapping, from the Auth reply's `error_code`/`msg`:
+
+- sign-up: message containing `Database error`, or `user_already_exists` →
+  "that username is taken"; `weak_password` → "use at least 8 characters".
+- sign-in: `invalid_credentials` → "wrong username or password".
+- anything else: the generic unreachable/rejected copy.
 
 ## Sessions
 
+`20261006061038_sessions.sql`. Clients never touch `public.sessions`
+directly; they call two RPCs as the signed-in user:
+
 ```
-POST /v1/sessions/push
-  { "deviceID": "…", "sessions": [FocusSession, …] }
-  → 200 { "accepted": n }
+POST /rest/v1/rpc/push_sessions   { "sessions": [FocusSession, …] }
+  push_sessions(sessions jsonb) → integer    rows that won the merge
 
-GET  /v1/sessions/pull?cursor=<opaque>
-  → 200 { "sessions": [FocusSession, …], "cursor": "<opaque>", "more": false }
-
-GET  /healthz
-  → 200 ok
+POST /rest/v1/rpc/pull_sessions   { "after": <cursor> }
+  pull_sessions(after bigint default 0) → jsonb
+  → { "sessions": [FocusSession, …], "cursor": "<n>", "more": false }
 ```
 
-`accepted` counts rows that won the merge; older or equal rows are ignored.
-A bad row fails the whole push with `400 { "error": "…" }`. Pulls come in
-pages of 500; start with `cursor=0` and repeat while `more` is true.
+Push takes at most 500 rows; the newest copy of an id wins within a batch.
+Older or equal rows are ignored. A bad row fails the whole push (`22023`,
+message `bad session: …`); no session → `28000` "sign in again"; `42501` is
+a 403 (the function still requires `email_confirmed_at`, which Supabase sets
+at sign-up with confirmation off).
 
-`cursor` is a server-assigned sequence number stamped on each row as it
-arrives, not a device timestamp, so a wrong device clock can't make others
-skip rows.
+`cursor` is a server-assigned sequence number (`sessions_seq`) restamped on
+each row every time it's written, so `seq > cursor` is exactly what a device
+hasn't seen and a wrong device clock can't make others skip rows. Pulls come
+in pages of 500 ordered by `seq`; start with `after: 0`, save the returned
+`cursor` (a string; it equals `after` when nothing came back) and repeat
+while `more` is true.
+
+Row-level security: `sessions` and `profiles` are readable only by their own
+user (`user_id = auth.uid()`); nothing is writable from a client. Writes go
+through `push_sessions`, which runs as definer and stamps `auth.uid()` on
+every row. The publishable key is public by design.
 
 ## FocusSession JSON
 
@@ -86,33 +102,9 @@ skip rows.
 ```
 
 Dates are ISO-8601 with a zone; the server returns whole-second UTC (`Z`),
-which Swift's `.iso8601` strategy decodes. IDs come back uppercase. Each
-client buckets sessions into days in its own time zone.
-
-## Hosted sync (Supabase)
-
-With no server in settings, apps use drill's Supabase project
-(`SupabaseAPI.swift`, `SupabaseApi.kt`, `SupabaseApi.cs`). Same rows, merge
-rule and cursor; only the calls differ. Schema:
-`supabase/migrations/20261006061038_sessions.sql`.
-
-- **Accounts** are Supabase Auth users (email and password). Signing up
-  (`/auth/v1/signup`) emails a link that lands on `web/site/confirmed/`. The
-  app keeps the new user's id and asks
-  `POST /rest/v1/rpc/email_confirmed { user_id }` every few seconds; once
-  it says `true`, the app signs in by itself. `/auth/v1/resend` sends the
-  link again. Sign-in is
-  `/auth/v1/token?grant_type=password`. Access tokens last an hour; the apps
-  swap them with the refresh token before a sync, and once more if a call
-  comes back 401.
-- **Push** is `POST /rest/v1/rpc/push_sessions { sessions: [FocusSession] }`
-  → the number of rows that won. Accounts that haven't confirmed their email
-  get `403` (`42501`).
-- **Pull** is `POST /rest/v1/rpc/pull_sessions { after: <cursor> }` →
-  `{ sessions, cursor, more }`, as above.
-
-Clients send the publishable key as `apikey` (public by design: users read
-only their own rows, and only `push_sessions` writes).
+which Swift's `.iso8601` strategy decodes. IDs come back uppercase. An empty
+`tag` is stored as null. Each client buckets sessions into days in its own
+time zone.
 
 ## Client loop
 
@@ -127,6 +119,3 @@ Every client (`store.js`, `Sync.swift`, `Sync.kt`, `Sync.cs`):
 
 On sign-in a client resets its push mark and cursor, so local sessions join
 the account and the whole account comes down.
-
-Pre-accounts servers kept one shared history; on first start the server
-renames that table to `sessions_before_accounts` and leaves it.

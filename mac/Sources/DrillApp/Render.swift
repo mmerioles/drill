@@ -3,8 +3,9 @@ import DrillCore
 import InkKit
 import SwiftUI
 
-/// `Drill --render <folder>`: draws the main window, a day's popover and the
-/// marks to PNGs at 2×, light and dark, from a made-up year in memory.
+/// `Drill --render <folder>`: draws the main window, a day's popover, the
+/// account sheet and the marks to PNGs at 2×, light and dark, from a made-up
+/// year in memory.
 /// (Offscreen rendering draws the AppKit tag field as a placeholder box.)
 @MainActor
 enum Render {
@@ -38,6 +39,15 @@ enum Render {
             let view = DayDetail(day: Date(), sessions: model.sessions(on: Date()), preview: preview)
                 .environment(model)
             write(view, theme: theme, to: folder.appending(path: "day-\(preview)-\(theme.rawValue).png"))
+        }
+
+        for (theme, preview) in [(Theme.light, AccountSheet.Preview.available), (.dark, .available),
+                                 (.light, .taken), (.dark, .taken)] {
+            let model = demo(theme: theme)
+            let view = AccountSheet(preview: preview)
+                .environment(Sync(store: model.store, deviceID: model.deviceID,
+                                  defaults: UserDefaults(suiteName: "drill.render")!, onPulled: {}))
+            write(view, theme: theme, to: folder.appending(path: "account-\(preview)-\(theme.rawValue).png"))
         }
 
         let marks = HStack(spacing: 40) {

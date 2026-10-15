@@ -98,6 +98,10 @@
         <label class="row" id="auto-sync-row" hidden><span>auto sync</span><input type="checkbox" class="switch" id="autoSync"></label>
         <p class="row note" id="sync-note"></p>
       </div>
+      <div class="group">
+        <p class="row note">plugins</p>
+        <p class="row note">coming soon.</p>
+      </div>
       <div class="done"><button class="capsule small" value="done">done</button></div>
     </form>
   </dialog>
@@ -106,8 +110,14 @@
     <form id="account-form" novalidate>
       <h2 id="account-title">sign in</h2>
       <div class="fields">
-        <input type="email" id="email" placeholder="email" aria-label="email" autocomplete="email" spellcheck="false" autocapitalize="off">
+        <div class="field">
+          <input type="text" id="username" placeholder="username" aria-label="username" autocomplete="username" spellcheck="false" autocapitalize="off" maxlength="20">
+          <svg class="field-mark" id="username-mark" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" hidden></svg>
+        </div>
+        <p class="hint" id="username-hint" aria-live="polite"></p>
         <input type="password" id="password" placeholder="password" aria-label="password" autocomplete="current-password">
+        <input type="password" id="confirm" placeholder="confirm password" aria-label="confirm password" autocomplete="new-password" hidden>
+        <p class="hint" id="confirm-hint" aria-live="polite" hidden></p>
       </div>
       <p class="message" id="account-error" aria-live="polite"></p>
       <div class="account-actions">
@@ -117,17 +127,6 @@
         <button class="capsule small" id="account-submit" type="submit" disabled>sign in</button>
       </div>
     </form>
-    <div id="account-waiting" hidden>
-      <h2 id="waiting-title">check your inbox</h2>
-      <p class="message" id="waiting-note" aria-live="polite"></p>
-      <p class="message" id="waiting-error" aria-live="polite"></p>
-      <div class="account-actions" id="waiting-actions">
-        <button class="link" id="wrong-email" type="button">wrong email?</button>
-        <button class="link" id="resend" type="button">resend</button>
-        <span class="spacer"></span>
-        <button class="link" type="button" data-close>close</button>
-      </div>
-    </div>
   </dialog>
 
   <dialog class="settings inspo" id="inspo">

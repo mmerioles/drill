@@ -2,56 +2,57 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ink="clr-namespace:Drill.Ink">
-    <Grid>
-        <!-- Email and password -->
-        <StackPanel x:Name="Details">
-            <TextBlock x:Name="Heading" Style="{StaticResource Base}" FontFamily="{DynamicResource Display}" FontWeight="Bold"
-                       FontSize="20" TextOptions.TextFormattingMode="Ideal" Text="sign in" />
-            <!-- Windows 11 fields: text from the left, a placeholder, and an ink
-                 underline on the one you're typing in. -->
-            <Border Margin="0,16,0,0" CornerRadius="4" Background="{DynamicResource CardFill}" BorderBrush="{DynamicResource CardLine}"
-                    BorderThickness="1" ClipToBounds="True">
-                <StackPanel TextElement.FontSize="14">
-                    <Grid Height="40">
-                        <TextBlock x:Name="EmailHint" Text="email" FontSize="14" Foreground="{DynamicResource Hint}"
-                                   FontFamily="{DynamicResource Text}" VerticalAlignment="Center" Margin="12,0" IsHitTestVisible="False" />
-                        <TextBox x:Name="Email" AutomationProperties.Name="email" Style="{StaticResource Bare}" FontSize="14" VerticalAlignment="Center" Margin="12,0"
-                                 InputScope="EmailSmtpAddress" />
-                        <Rectangle x:Name="EmailLine" Height="1" VerticalAlignment="Bottom" Fill="{DynamicResource CardLine}" />
-                    </Grid>
-                    <Grid Height="40">
-                        <TextBlock x:Name="PasswordHint" Text="password" FontSize="14" Foreground="{DynamicResource Hint}"
-                                   FontFamily="{DynamicResource Text}" VerticalAlignment="Center" Margin="12,0" IsHitTestVisible="False" />
-                        <PasswordBox x:Name="Password" AutomationProperties.Name="password" Style="{StaticResource BarePassword}" FontSize="14" VerticalAlignment="Center" Margin="12,0" />
-                        <Rectangle x:Name="PasswordLine" Height="1" VerticalAlignment="Bottom" Fill="Transparent" />
-                    </Grid>
-                </StackPanel>
-            </Border>
-            <TextBlock x:Name="Problem" Style="{StaticResource Base}" FontSize="13" Opacity="0.52" Margin="0,10,0,0"
-                       TextWrapping="Wrap" Visibility="Collapsed" />
-            <DockPanel Margin="0,24,0,0">
-                <ink:InkLink x:Name="SwitchMode" FontSize="13" VerticalAlignment="Center" Click="OnSwitch" Margin="-2,0,0,0" />
-                <ink:Capsule x:Name="Primary" DockPanel.Dock="Right" FontSize="14" Padding="32,9" Click="OnSubmit" IsDefault="True" />
-                <ink:InkLink Content="cancel" DockPanel.Dock="Right" FontSize="13" VerticalAlignment="Center" Margin="0,0,14,0"
-                             Click="OnCancel" IsCancel="True" />
-                <Border />
-            </DockPanel>
-        </StackPanel>
-
-        <!-- Waiting on the email link -->
-        <StackPanel x:Name="WaitingPanel" Visibility="Collapsed">
-            <DockPanel>
-                <ink:StatusMark x:Name="Mark" DockPanel.Dock="Right" Breathing="True" Width="21" Height="21" VerticalAlignment="Center" />
-                <ink:FadingText x:Name="WaitHeading" FontSize="20" HorizontalAlignment="Left" Duration="250" />
-            </DockPanel>
-            <ink:FadingText x:Name="WaitNote" FontSize="13" Opacity="0.52" Margin="0,12,0,0" HorizontalAlignment="Left" Duration="250" />
-            <TextBlock x:Name="WaitProblem" Style="{StaticResource Base}" FontSize="13" Opacity="0.52" Margin="0,8,0,0"
-                       TextWrapping="Wrap" Visibility="Collapsed" />
-            <DockPanel x:Name="WaitActions" Margin="0,24,0,0">
-                <ink:InkLink Content="wrong email?" FontSize="13" Click="OnWrongEmail" Margin="-2,0,14,0" />
-                <ink:InkLink x:Name="Resend" Content="resend" FontSize="13" Click="OnResend" />
-                <ink:InkLink Content="close" DockPanel.Dock="Right" FontSize="13" HorizontalAlignment="Right" Click="OnCancel" />
-            </DockPanel>
-        </StackPanel>
-    </Grid>
+    <StackPanel>
+        <TextBlock x:Name="Heading" Style="{StaticResource Base}" FontFamily="{DynamicResource Display}" FontWeight="Bold"
+                   FontSize="20" TextOptions.TextFormattingMode="Ideal" Text="sign in" />
+        <!-- Windows 11 fields: text from the left, a placeholder, and an ink
+             underline on the one you're typing in. A note under a field sits
+             above its hairline. -->
+        <Border Margin="0,16,0,0" CornerRadius="4" Background="{DynamicResource CardFill}" BorderBrush="{DynamicResource CardLine}"
+                BorderThickness="1" ClipToBounds="True">
+            <StackPanel TextElement.FontSize="14">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="40" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock x:Name="UsernameHint" Text="username" FontSize="14" Foreground="{DynamicResource Hint}"
+                               FontFamily="{DynamicResource Text}" VerticalAlignment="Center" Margin="12,0" IsHitTestVisible="False" />
+                    <TextBox x:Name="Username" AutomationProperties.Name="username" Style="{StaticResource Bare}" FontSize="14" VerticalAlignment="Center"
+                             Margin="12,0,40,0" MaxLength="20" />
+                    <ink:StatusMark x:Name="UsernameMark" Width="16" Height="16" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0" />
+                    <TextBlock x:Name="UsernameNote" Grid.Row="1" Style="{StaticResource Base}" FontSize="12" Opacity="0.52"
+                               Margin="12,-6,12,8" Visibility="Collapsed" />
+                    <Rectangle x:Name="UsernameLine" Grid.RowSpan="2" Height="1" VerticalAlignment="Bottom" Fill="{DynamicResource CardLine}" />
+                </Grid>
+                <Grid Height="40">
+                    <TextBlock x:Name="PasswordHint" Text="password" FontSize="14" Foreground="{DynamicResource Hint}"
+                               FontFamily="{DynamicResource Text}" VerticalAlignment="Center" Margin="12,0" IsHitTestVisible="False" />
+                    <PasswordBox x:Name="Password" AutomationProperties.Name="password" Style="{StaticResource BarePassword}" FontSize="14" VerticalAlignment="Center" Margin="12,0" />
+                    <Rectangle x:Name="PasswordLine" Height="1" VerticalAlignment="Bottom" Fill="Transparent" />
+                </Grid>
+                <Grid x:Name="ConfirmRow" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="40" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock x:Name="ConfirmHint" Text="confirm password" FontSize="14" Foreground="{DynamicResource Hint}"
+                               FontFamily="{DynamicResource Text}" VerticalAlignment="Center" Margin="12,0" IsHitTestVisible="False" />
+                    <PasswordBox x:Name="Confirm" AutomationProperties.Name="confirm password" Style="{StaticResource BarePassword}" FontSize="14" VerticalAlignment="Center" Margin="12,0" />
+                    <TextBlock x:Name="ConfirmNote" Grid.Row="1" Style="{StaticResource Base}" FontSize="12" Opacity="0.52"
+                               Margin="12,-6,12,8" Visibility="Collapsed" />
+                    <Rectangle x:Name="ConfirmLine" Grid.RowSpan="2" Height="1" VerticalAlignment="Bottom" Fill="Transparent" />
+                </Grid>
+            </StackPanel>
+        </Border>
+        <TextBlock x:Name="Problem" Style="{StaticResource Base}" FontSize="13" Opacity="0.52" Margin="0,10,0,0"
+                   TextWrapping="Wrap" Visibility="Collapsed" />
+        <DockPanel Margin="0,24,0,0">
+            <ink:InkLink x:Name="SwitchMode" FontSize="13" VerticalAlignment="Center" Click="OnSwitch" Margin="-2,0,0,0" />
+            <ink:Capsule x:Name="Primary" DockPanel.Dock="Right" FontSize="14" Padding="32,9" Click="OnSubmit" IsDefault="True" />
+            <ink:InkLink Content="cancel" DockPanel.Dock="Right" FontSize="13" VerticalAlignment="Center" Margin="0,0,14,0"
+                         Click="OnCancel" IsCancel="True" />
+            <Border />
+        </DockPanel>
+    </StackPanel>
 </UserControl>

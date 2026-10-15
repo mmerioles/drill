@@ -390,12 +390,12 @@ public sealed class HeatGrid : FrameworkElement
 
 /// <summary>
 /// How something stands, in one small mark: a spinner while working, a
-/// yellow dot while it waits on you, a green check once it's done. Changes
-/// pop, with a little spring.
+/// yellow dot while it waits on you, a green check once it's done, a red
+/// cross when it failed. Changes pop, with a little spring.
 /// </summary>
 public sealed class StatusMark : FrameworkElement
 {
-    public enum Kind { None, Working, Pending, Done }
+    public enum Kind { None, Working, Pending, Done, Failed }
 
     public static readonly DependencyProperty StatusProperty = DependencyProperty.Register(
         nameof(Status), typeof(Kind), typeof(StatusMark), new PropertyMetadata(Kind.None, (d, _) => ((StatusMark)d).Pop()));
@@ -410,8 +410,9 @@ public sealed class StatusMark : FrameworkElement
     private static readonly DependencyProperty BreathProperty = DependencyProperty.Register(
         "Breath", typeof(double), typeof(StatusMark), new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
 
-    private static readonly Color Green = Color.FromRgb(0x2F, 0xA8, 0x4F);
     private static readonly Color Yellow = Color.FromRgb(0xF2, 0xC2, 0x1B);
+    /// <summary>The light palette's crimson: dark's accent is ink, and a cross should read as a no.</summary>
+    private static readonly Color Red = Palette.Light.Accent;
 
     /// <summary>Decorative: the note beside it says the same in words.</summary>
     protected override AutomationPeer OnCreateAutomationPeer() => new HiddenPeer(this);
@@ -431,8 +432,8 @@ public sealed class StatusMark : FrameworkElement
 
     private void Pop()
     {
-        if (Status is Kind.Done or Kind.Pending)
-            Animate.Settle(this, PopProperty, Status == Kind.Done ? 0.4 : 0.5, 1, 420,
+        if (Status is Kind.Done or Kind.Pending or Kind.Failed)
+            Animate.Settle(this, PopProperty, Status == Kind.Pending ? 0.5 : 0.4, 1, 420,
                            new ElasticLikeEase());
         Loop();
     }
@@ -477,7 +478,7 @@ public sealed class StatusMark : FrameworkElement
             case Kind.Done:
             {
                 var r = s / 2 * pop;
-                dc.DrawEllipse(Palette.Brush(Green), null, c, r, r);
+                dc.DrawEllipse(Palette.Brush(Palette.Current.Ok), null, c, r, r);
                 var check = new StreamGeometry();
                 using (var ctx = check.Open())
                 {
@@ -486,6 +487,16 @@ public sealed class StatusMark : FrameworkElement
                     ctx.LineTo(new Point(c.X + r * 0.45, c.Y - r * 0.3), true, true);
                 }
                 dc.DrawGeometry(null, Doodle.Pen(Colors.White, Math.Max(1.2, r * 0.26)), check);
+                break;
+            }
+            case Kind.Failed:
+            {
+                var r = s / 2 * pop;
+                dc.DrawEllipse(Palette.Brush(Red), null, c, r, r);
+                var pen = Doodle.Pen(Colors.White, Math.Max(1.2, r * 0.26));
+                var d = r * 0.36;
+                dc.DrawLine(pen, new Point(c.X - d, c.Y - d), new Point(c.X + d, c.Y + d));
+                dc.DrawLine(pen, new Point(c.X - d, c.Y + d), new Point(c.X + d, c.Y - d));
                 break;
             }
             case Kind.Pending:

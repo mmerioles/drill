@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
@@ -8,7 +7,7 @@ using Drill.Core.Sync;
 
 namespace Drill.Services;
 
-public enum SyncState { SignedOut, Idle, Syncing, Offline, Unconfirmed }
+public enum SyncState { SignedOut, Idle, Syncing, Offline }
 
 /// <summary>
 /// The account and the sync loop (docs/SYNC.md, as mac's Sync.swift): push
@@ -20,10 +19,8 @@ public sealed class Sync : Observable
     /// <summary>A sentence fit to show.</summary>
     public sealed class Problem(string message) : Exception(message);
 
-    /// <summary>An account awaiting its email link; in memory only, kept to sign in once it's clicked.</summary>
-    public sealed record Waiting(string Email, string Password, string? UserID, bool Confirmed = false);
-
     private static readonly TimeSpan Every = TimeSpan.FromMinutes(5);
+    private static readonly SupabaseApi Api = SupabaseApi.Hosted;
 
     private readonly ISessionStore _store;
     private readonly string _deviceID;
@@ -32,7 +29,6 @@ public sealed class Sync : Observable
     private readonly DispatcherTimer _loop;
     private Task? _running;
     private DateTimeOffset? _lastStarted;
-    private CancellationTokenSource? _watching;
     private bool _auto;
 
     public Sync(ISessionStore store, string deviceID, Prefs prefs, Action onPulled)
@@ -42,7 +38,6 @@ public sealed class Sync : Observable
         _prefs = prefs;
         _onPulled = onPulled;
         Account = LoadAccount();
-        CustomServer = prefs.Get<string>(Keys.Server);
         _auto = prefs.Get<bool?>(Keys.Auto) ?? true;
         State = Account is null ? SyncState.SignedOut : SyncState.Idle;
         _loop = new DispatcherTimer(DispatcherPriority.Background) { Interval = Every };
@@ -52,9 +47,6 @@ public sealed class Sync : Observable
 
     public SyncState State { get; private set { if (Set(ref field, value)) { Raise(nameof(Label)); Raise(nameof(ShowsLink)); } } }
     public Account? Account { get; private set { if (Set(ref field, value)) { Raise(nameof(IsSignedIn)); Raise(nameof(ShowsLink)); } } }
-    /// <summary>A self-hosted server from settings, or null for ours.</summary>
-    public string? CustomServer { get; private set => Set(ref field, value); }
-    public Waiting? WaitingFor { get; private set => Set(ref field, value); }
     /// <summary>Sessions logged here that haven't reached the server yet.</summary>
     public bool HasUnpushed { get; private set { if (Set(ref field, value)) Raise(nameof(ShowsLink)); } }
 
@@ -78,28 +70,6 @@ public sealed class Sync : Observable
 
     /// <summary>The header link's word.</summary>
     public string Label => State == SyncState.Offline ? "offline" : "sync";
-
-    /// <summary>The self-hosted server from settings, or ours on Supabase.</summary>
-    public ISyncBackend Backend =>
-        CustomServer is { } s && Uri.TryCreate(s, UriKind.Absolute, out var url) ? new SyncApi(url) : SupabaseApi.Hosted;
-
-    /// <summary>
-    /// Points sync at a self-hosted server, or back at ours with an empty
-    /// string. Only while signed out: a token only works where it was made.
-    /// </summary>
-    public void SetServer(string text)
-    {
-        if (IsSignedIn) throw new Problem("sign out to change servers.");
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            CustomServer = null;
-            _prefs.Remove(Keys.Server);
-            return;
-        }
-        var url = SyncApi.ServerUrl(text) ?? throw new Problem("that address doesn't look right.");
-        CustomServer = url.AbsoluteUri.TrimEnd('/');
-        _prefs.Set(Keys.Server, CustomServer);
-    }
 
     /// <summary>With auto sync on: syncs at launch, every few minutes, and whenever you come back to the app.</summary>
     public void Start()
@@ -132,98 +102,15 @@ public sealed class Sync : Observable
 
     // Account
 
-    public async Task SignIn(string email, string password)
-    {
-        StopWaiting();
-        try
-        {
-            var backend = Backend;
-            Begin(await Attempt(() => backend.SignIn(email, password)));
-        }
-        catch (SyncException e) when (e.Failure == SyncFailure.Unconfirmed)
-        {
-            Watch(new Waiting(email, password, null));
-        }
-    }
+    public async Task SignIn(string username, string password) =>
+        Begin(await Attempt(() => Api.SignIn(username, password)));
 
-    /// <summary>Makes the account, then signs in, or waits for the email link.</summary>
-    public async Task CreateAccount(string email, string password)
-    {
-        StopWaiting();
-        var backend = Backend;
-        switch (await Attempt(() => backend.CreateAccount(email, password)))
-        {
-            case SignUp.SignedIn s: Begin(s.Account); break;
-            case SignUp.ConfirmByLink c: Watch(new Waiting(email, password, c.UserID)); break;
-        }
-    }
+    /// <summary>Makes the account and signs in; confirmation is off, so there's nothing to wait for.</summary>
+    public async Task CreateAccount(string username, string password) =>
+        Begin(await Attempt(() => Api.CreateAccount(username, password)));
 
-    public async Task ResendLink()
-    {
-        if (WaitingFor is not { } waiting) return;
-        var backend = Backend;
-        await Attempt(async () => { await backend.ResendLink(waiting.Email); return true; });
-    }
-
-    /// <summary>Gives up waiting, for a wrong email or a change of mind.</summary>
-    public void StopWaiting()
-    {
-        _watching?.Cancel();
-        _watching = null;
-        WaitingFor = null;
-    }
-
-    /// <summary>Checks every few seconds whether the link was clicked, then signs in.</summary>
-    private void Watch(Waiting start)
-    {
-        _watching?.Cancel();
-        var cts = new CancellationTokenSource();
-        _watching = cts;
-        WaitingFor = start;
-        var backend = Backend;
-        var began = DateTimeOffset.UtcNow;
-        _ = Task.Run(async () =>
-        {
-            while (!cts.IsCancellationRequested)
-            {
-                // Quick at first, while they're likely at their inbox.
-                var quick = DateTimeOffset.UtcNow - began < TimeSpan.FromMinutes(30);
-                try { await Task.Delay(TimeSpan.FromSeconds(start.UserID is null ? 10 : quick ? 3 : 30), cts.Token); }
-                catch (TaskCanceledException) { return; }
-                try
-                {
-                    if (start.UserID is { } id && !await backend.IsConfirmed(id, cts.Token)) continue;
-                    var account = await backend.SignIn(start.Email, start.Password, cts.Token);
-                    await Application.Current.Dispatcher.InvokeAsync(() => Confirmed(account, cts));
-                    return;
-                }
-                catch (SyncException e) when (e.Failure == SyncFailure.Rejected)
-                {
-                    // The password changed elsewhere: sign in by hand.
-                    await Application.Current.Dispatcher.InvokeAsync(() => { if (_watching == cts) StopWaiting(); });
-                    return;
-                }
-                catch (Exception) when (!cts.IsCancellationRequested)
-                {
-                    // not yet, or offline for a moment
-                }
-                catch (Exception)
-                {
-                    return;
-                }
-            }
-        });
-    }
-
-    private async void Confirmed(Account account, CancellationTokenSource cts)
-    {
-        if (WaitingFor is null || _watching != cts) return;
-        WaitingFor = WaitingFor with { Confirmed = true };
-        Begin(account);
-        await Task.Delay(TimeSpan.FromSeconds(2.5));
-        if (WaitingFor?.Confirmed == true) WaitingFor = null;
-        if (_watching == cts) _watching = null;
-    }
+    /// <summary>The live check while typing a name on the create form.</summary>
+    public Task<bool> UsernameAvailable(string name, CancellationToken ct) => Api.UsernameAvailable(name, ct);
 
     /// <summary>Everything already on this PC joins the account.</summary>
     private void Begin(Account account)
@@ -246,10 +133,6 @@ public sealed class Sync : Observable
         {
             throw new Problem(e.Sentence ?? "something went wrong. try again.");
         }
-        catch (SyncException e) when (e.Failure == SyncFailure.Unconfirmed)
-        {
-            throw;
-        }
         catch (Exception)
         {
             throw new Problem("can't connect. try again in a bit.");
@@ -258,18 +141,10 @@ public sealed class Sync : Observable
 
     public void SignOut()
     {
-        StopWaiting();
-        if (Account is { } account)
-        {
-            var backend = Backend;
-            _ = Task.Run(() => backend.SignOut(account));
-        }
+        if (Account is { } account) _ = Task.Run(() => Api.SignOut(account));
         Save(null);
         State = SyncState.SignedOut;
     }
-
-    /// <summary>For --render: waiting on an email link, without asking a server.</summary>
-    internal void PretendWaiting(string email, bool confirmed = false) => WaitingFor = new Waiting(email, "", null, confirmed);
 
     // Syncing
 
@@ -278,25 +153,25 @@ public sealed class Sync : Observable
     {
         if (_running is not null || Account is not { } account) return;
         _lastStarted = DateTimeOffset.UtcNow;
-        _running = Run(Backend, account);
+        _running = Run(account);
     }
 
-    private async Task Run(ISyncBackend api, Account start)
+    private async Task Run(Account start)
     {
         State = SyncState.Syncing;
         try
         {
-            // Hosted tokens last an hour: swap one that's nearly out, and
-            // once more if the server turns it down anyway.
-            var token = await Fresh(api, start, force: false);
+            // Tokens last an hour: swap one that's nearly out, and once more
+            // if the server turns it down anyway.
+            var token = await Fresh(start, force: false);
             try
             {
-                await Exchange(api, token);
+                await Exchange(token);
             }
             catch (SyncException e) when (e.Failure == SyncFailure.SignedOut && start.RefreshToken is not null)
             {
-                token = await Fresh(api, start, force: true);
-                await Exchange(api, token);
+                token = await Fresh(start, force: true);
+                await Exchange(token);
             }
             if (Account?.Token != token) return; // signed out meanwhile
             State = SyncState.Idle;
@@ -306,10 +181,6 @@ public sealed class Sync : Observable
             if (Account?.Email != start.Email) return;
             Save(null);
             State = SyncState.SignedOut;
-        }
-        catch (SyncException e) when (e.Failure == SyncFailure.Unconfirmed)
-        {
-            State = SyncState.Unconfirmed;
         }
         catch (Exception)
         {
@@ -324,29 +195,29 @@ public sealed class Sync : Observable
     }
 
     /// <summary>A token good for a while, saved for next time.</summary>
-    private async Task<string> Fresh(ISyncBackend api, Account start, bool force)
+    private async Task<string> Fresh(Account start, bool force)
     {
         var current = Account ?? start;
-        var fresh = await api.Refreshed(current, force);
+        var fresh = await Api.Refreshed(current, force);
         if (fresh != current && Account?.Email == start.Email) Save(fresh);
         return fresh.Token;
     }
 
     /// <summary>Push what changed here, then pull what changed elsewhere.</summary>
-    private async Task Exchange(ISyncBackend api, string token)
+    private async Task Exchange(string token)
     {
         var mark = DateTimeOffset.UtcNow;
         var since = _prefs.Get<DateTimeOffset?>(Keys.PushedAt) ?? DateTimeOffset.MinValue;
         var changes = await Task.Run(() => _store.Changes(since));
         for (var i = 0; i < changes.Count; i += 200)
-            await api.Push(changes.Skip(i).Take(200).ToList(), _deviceID, token);
+            await Api.Push(changes.Skip(i).Take(200).ToList(), _deviceID, token);
         _prefs.Set(Keys.PushedAt, mark);
 
         var pulled = false;
         SyncPage page;
         do
         {
-            page = await api.Pull(_prefs.Get<string>(Keys.Cursor) ?? "0", token);
+            page = await Api.Pull(_prefs.Get<string>(Keys.Cursor) ?? "0", token);
             var rows = page.Sessions;
             await Task.Run(() => { foreach (var s in rows) _store.Save(s); });
             pulled |= rows.Count > 0;
@@ -388,7 +259,6 @@ public sealed class Sync : Observable
     private static class Keys
     {
         public const string Account = "drill.sync.account";
-        public const string Server = "drill.sync.server"; // self-hosted only
         public const string Cursor = "drill.sync.cursor";
         public const string PushedAt = "drill.sync.pushedAt";
         public const string Auto = "drill.sync.auto";

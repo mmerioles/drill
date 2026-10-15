@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using Drill.Core.Timer;
 using Drill.Ink;
 using Drill.Services;
@@ -40,11 +39,6 @@ public partial class SettingsPage : UserControl
         Toggled(Tray, on => Model.KeepInTray = on);
         Toggled(AutoSync, on => _shell.Sync.AutoSync = on);
 
-        Server.TextChanged += (_, _) => ServerHint.Visibility = Server.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-        Server.KeyDown += (_, e) => { if (e.Key == Key.Enter) SaveServer(); };
-        Server.LostKeyboardFocus += (_, _) => { SaveServer(); ServerLine.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "Ghost"); };
-        Server.GotKeyboardFocus += (_, _) => ServerLine.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "Faint");
-        Server.Text = shell.Sync.CustomServer ?? "";
         ShowAccount();
         ShowUpdate();
     }
@@ -120,47 +114,26 @@ public partial class SettingsPage : UserControl
     private void ShowAccount()
     {
         var sync = _shell.Sync;
-        AccountName.Text = sync.Account?.Email ?? sync.WaitingFor?.Email ?? "sync";
-        AccountMark.Status = sync.WaitingFor is { } w ? (w.Confirmed ? StatusMark.Kind.Done : StatusMark.Kind.Pending) : StatusMark.Kind.None;
-        AccountButton.Content = sync.WaitingFor is { Confirmed: false } ? "cancel" : sync.IsSignedIn ? "sign out" : "sign in";
-        AccountNote.Text = sync.WaitingFor is { } waiting
-            ? waiting.Confirmed ? "you're in." : "check your inbox for the link."
-            : sync.State switch
-            {
-                SyncState.SignedOut => "sign in to sync across devices.",
-                SyncState.Syncing => "syncing…",
-                SyncState.Idle => "synced.",
-                SyncState.Offline => "offline. your sessions are safe here.",
-                _ => "confirm your email to start syncing.",
-            };
+        AccountName.Text = sync.Account?.Username ?? "sync";
+        AccountButton.Content = sync.IsSignedIn ? "sign out" : "sign in";
+        AccountNote.Text = sync.State switch
+        {
+            SyncState.SignedOut => "sign in to sync across devices.",
+            SyncState.Syncing => "syncing…",
+            SyncState.Offline => "offline. your sessions are safe here.",
+            _ => "synced.",
+        };
         AutoSyncRow.Visibility = sync.IsSignedIn ? Visibility.Visible : Visibility.Collapsed;
         _showing = true;
         AutoSync.IsOn = sync.AutoSync;
         _showing = false;
-        Server.IsEnabled = !sync.IsSignedIn;
-        ServerNote.Text = sync.IsSignedIn ? "sign out to change servers." : "leave blank to use ours, or add your own.";
     }
 
     private void OnAccount(object sender, RoutedEventArgs e)
     {
         var sync = _shell.Sync;
-        if (sync.WaitingFor is { Confirmed: false }) sync.StopWaiting();
-        else if (sync.IsSignedIn) sync.SignOut();
+        if (sync.IsSignedIn) sync.SignOut();
         else _shell.ShowAccount(this);
-    }
-
-    private void SaveServer()
-    {
-        try
-        {
-            _shell.Sync.SetServer(Server.Text);
-            Server.Text = _shell.Sync.CustomServer ?? "";
-            ShowAccount();
-        }
-        catch (Sync.Problem p)
-        {
-            ServerNote.Text = p.Message;
-        }
     }
 
     // The version you're on, and one button that does the next sensible thing.

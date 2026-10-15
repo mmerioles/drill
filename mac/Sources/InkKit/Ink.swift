@@ -9,6 +9,8 @@ public enum Ink {
     public static let ink = Color(light: 0x2B2A2F, dark: 0xF1F0EB)
     /// Progress and identity marks. Teto crimson in light, plain ink in dark.
     public static let accent = Color(light: 0xCF3A4F, dark: 0xF1F0EB)
+    /// The one green: a check that something is fine.
+    public static let ok = Color(light: 0x3B9B5E, dark: 0x5FBF80)
     /// Secondary text and idle strokes.
     public static let faint = ink.opacity(0.45)
     /// Hairlines, empty cells, tracks.

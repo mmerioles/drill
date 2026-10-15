@@ -1,6 +1,5 @@
 package io.github.mmerioles.drill.core
 
-import io.github.mmerioles.drill.data.SyncApi
 import io.github.mmerioles.drill.data.Updater
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -126,13 +125,6 @@ class StatsTest {
         val b = FocusSession.from(r, "x", "android-1", 9)
         assertEquals(a.id, b.id)
         assertEquals(a.id, a.id.uppercase())
-    }
-
-    @Test fun serverAddresses() {
-        assertEquals("https://sync.example.com", SyncApi.serverUrl(" sync.example.com/ "))
-        assertEquals("http://192.168.1.4:8080", SyncApi.serverUrl("http://192.168.1.4:8080"))
-        assertNull(SyncApi.serverUrl("ftp://example.com"))
-        assertNull(SyncApi.serverUrl("   "))
     }
 
     @Test fun versions() {

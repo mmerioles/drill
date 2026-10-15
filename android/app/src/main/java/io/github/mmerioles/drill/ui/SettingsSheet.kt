@@ -13,20 +13,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.mmerioles.drill.AppModel
@@ -75,62 +66,33 @@ fun SettingsSheet(model: AppModel, close: () -> Unit, signIn: () -> Unit) {
         Group {
             AccountRow(sync) { sheet.close(signIn) }
             if (sync.isSignedIn) SwitchRow("auto sync", sync.auto, sync::updateAuto)
-            ServerRow(sync)
         }
         Group { UpdateRow(model) }
+        Group {
+            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                Words("plugins")
+                Words("coming soon.", size = 13.sp, color = ink.faint)
+            }
+        }
     }
 }
 
 @Composable
 private fun AccountRow(sync: Sync, signIn: () -> Unit) {
     val ink = LocalPalette.current
-    val waiting = sync.waiting
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1f)) {
-            Words(sync.account?.email ?: waiting?.email ?: "sync")
-            val note = if (waiting != null) {
-                if (waiting.confirmed) "you're in." else "check your inbox for the link."
-            } else when (sync.state) {
+            Words(sync.account?.username ?: "sync")
+            val note = when (sync.state) {
                 Sync.State.SignedOut -> "sign in to sync across devices."
                 Sync.State.Syncing -> "syncing…"
                 Sync.State.Idle -> "synced."
                 Sync.State.Offline -> "offline. your sessions are safe here."
-                Sync.State.Unconfirmed -> "confirm your email to start syncing."
             }
             Words(note, size = 13.sp, color = ink.faint)
         }
-        if (waiting != null) StatusMark(if (waiting.confirmed) Mark.Done else Mark.Pending, breathing = true)
-        when {
-            waiting?.confirmed == false -> Link("cancel", action = sync::stopWaiting)
-            sync.isSignedIn -> Link("sign out", action = sync::signOut)
-            else -> Link("sign in", primary = true, action = signIn)
-        }
-    }
-}
-
-/** A self-hosted server address; editable only while signed out. */
-@Composable
-private fun ServerRow(sync: Sync) {
-    val ink = LocalPalette.current
-    var server by rememberSaveable { mutableStateOf(sync.customServer.orEmpty()) }
-    var problem by remember { mutableStateOf<String?>(null) }
-    // Keep an address typed but not entered.
-    DisposableEffect(Unit) { onDispose { if (!sync.isSignedIn) sync.setServer(server) } }
-    Column(Modifier.padding(bottom = 10.dp)) {
-        SettingRow("server") {
-            Field(
-                server, { server = it; problem = null }, Modifier.weight(1.3f).widthIn(max = 170.dp),
-                placeholder = "drill's", keyboard = KeyboardType.Uri, weight = FontWeight.Normal,
-                enabled = !sync.isSignedIn, label = "server",
-                done = {
-                    problem = sync.setServer(server)
-                    if (problem == null) server = sync.customServer.orEmpty()
-                },
-            )
-        }
-        val note = problem ?: if (sync.isSignedIn) "sign out to change servers." else "leave blank to use ours, or add your own."
-        Words(note, size = 13.sp, color = if (problem != null) ink.accent else ink.faint)
+        if (sync.isSignedIn) Link("sign out", action = sync::signOut) else Link("sign in", primary = true, action = signIn)
     }
 }
 

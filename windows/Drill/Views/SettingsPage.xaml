@@ -68,7 +68,6 @@
                 <DockPanel MinHeight="60" Margin="16,0">
                     <Button x:Name="AccountButton" DockPanel.Dock="Right" Style="{StaticResource CardButton}" VerticalAlignment="Center"
                             Click="OnAccount" />
-                    <ink:StatusMark x:Name="AccountMark" DockPanel.Dock="Right" Breathing="True" Margin="0,0,10,0" VerticalAlignment="Center" />
                     <StackPanel VerticalAlignment="Center" Margin="0,8">
                         <TextBlock x:Name="AccountName" Style="{StaticResource RowLabel}" />
                         <ink:FadingText x:Name="AccountNote" CollapseWhenEmpty="True" FontSize="12" Opacity="0.55" HorizontalAlignment="Left" Duration="250" />
@@ -81,19 +80,6 @@
                         <ink:Toggle x:Name="AutoSync" AutomationProperties.Name="auto sync" HorizontalAlignment="Right" />
                     </DockPanel>
                 </StackPanel>
-                <Rectangle Style="{StaticResource Rule}" />
-                <DockPanel MinHeight="60" Margin="16,0">
-                    <Grid DockPanel.Dock="Right" Width="160" VerticalAlignment="Center">
-                        <TextBlock x:Name="ServerHint" Text="drill's" FontSize="14" Foreground="{DynamicResource Hint}"
-                                   FontFamily="{DynamicResource Text}" IsHitTestVisible="False" Margin="0,0,0,4" />
-                        <TextBox x:Name="Server" AutomationProperties.Name="server" Style="{StaticResource Bare}" FontSize="14" Margin="0,0,0,4" />
-                        <Rectangle x:Name="ServerLine" Height="1" VerticalAlignment="Bottom" Fill="{DynamicResource Ghost}" />
-                    </Grid>
-                    <StackPanel VerticalAlignment="Center" Margin="0,8,12,8">
-                        <TextBlock Text="server" Style="{StaticResource RowLabel}" />
-                        <TextBlock x:Name="ServerNote" Style="{StaticResource RowNote}" MaxWidth="200" HorizontalAlignment="Left" />
-                    </StackPanel>
-                </DockPanel>
             </StackPanel>
         </Border>
 
@@ -110,6 +96,13 @@
                     <ink:FadingText x:Name="UpdateNote" CollapseWhenEmpty="True" FontSize="12" Opacity="0.55" HorizontalAlignment="Left" Duration="250" />
                 </StackPanel>
             </DockPanel>
+        </Border>
+
+        <Border Style="{StaticResource Card}">
+            <StackPanel MinHeight="60" Margin="16,0" VerticalAlignment="Center">
+                <TextBlock Text="plugins" Style="{StaticResource RowLabel}" Margin="0,12,0,0" />
+                <TextBlock Text="coming soon." Style="{StaticResource RowNote}" Margin="0,1,0,12" />
+            </StackPanel>
         </Border>
     </StackPanel>
 </UserControl>

@@ -1,6 +1,8 @@
-// Sessions kept in localStorage, synced with the server by docs/SYNC.md.
+// Sessions kept in localStorage, synced with drill cloud by docs/SYNC.md.
 // The browser is just another device: it pushes rows it wrote, pulls rows
 // it hasn't seen, and merges with one rule — newer updatedAt wins.
+
+import * as cloud from "./supabase.js";
 
 const KEY = { sessions: "drill.sessions", dirty: "drill.dirty",
               cursor: "drill.cursor", account: "drill.account", device: "drill.deviceID" };
@@ -12,7 +14,7 @@ const write = (key, value) => {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* full or blocked */ }
 };
 
-// crypto.randomUUID needs a secure context; a home server is often plain http.
+// crypto.randomUUID needs a secure context; plain http on a LAN is not one.
 function randomUUID() {
   const b = crypto.getRandomValues(new Uint8Array(16));
   b[6] = (b[6] & 0x0f) | 0x40;
@@ -43,22 +45,22 @@ function formatUUID(b) {
 const iso = (ms) => new Date(Math.floor(ms / 1000) * 1000).toISOString().replace(".000Z", "Z");
 
 export class Store extends EventTarget {
-  /** With `offline` (the site's demo), it never talks to the server. */
+  /** With `offline` (the site's demo), it never talks to the network. */
   constructor({ offline = false } = {}) {
     super();
     this.offline = offline;
-    /** Off: only signing in and an explicit sync() talk to the server. */
+    /** Off: only signing in and an explicit sync() talk to the cloud. */
     this.autoSync = true;
     this.deviceID = localStorage.getItem(KEY.device) || `web-${randomUUID()}`;
     try { localStorage.setItem(KEY.device, this.deviceID); } catch {}
     this.sessions = read(KEY.sessions, {});
-    this.syncState = this.account ? "synced" : "signedOut"; // signedOut | syncing | synced | offline | unconfirmed
+    this.syncState = this.account ? "synced" : "signedOut"; // signedOut | syncing | synced | offline
     this.syncing = null;
     /** When the last sync started, so coming back doesn't sync twice. */
     this.lastStarted = 0;
-    /** { email, confirmed } while waiting on the email link, else null. */
-    this.waiting = null;
-    this.watching = null;
+    /** Bumped by every sign-in and sign-out: a sync run started before
+     *  belongs to an old account, and its answers are dropped. */
+    this.generation = 0;
 
     // Another tab wrote: pick up its sessions.
     addEventListener("storage", (e) => {
@@ -69,18 +71,15 @@ export class Store extends EventTarget {
     });
   }
 
-  /** { email, token, confirmed } once signed in, else null. */
+  /** { username, userID, token, refreshToken, expiresAt } once signed in, else null. */
   get account() { return read(KEY.account, null); }
 
   /** Signs in, or creates the account when `create` is set. Throws an Error
-   *  whose message is fit to show, like "wrong email or password". When the
-   *  server won't sync until the email is confirmed, it starts waiting on
-   *  the link (`waiting`). */
-  async signIn(email, password, create = false) {
-    this.stopWaiting();
-    const body = await this.#call(create ? "/v1/accounts" : "/v1/signin",
-                                  { method: "POST", body: JSON.stringify({ email, password }) });
-    write(KEY.account, { email: body.email, token: body.token, confirmed: body.confirmed });
+   *  whose message is fit to show, like "wrong username or password". */
+  async signIn(username, password, create = false) {
+    const account = await (create ? cloud.signUp(username, password) : cloud.signIn(username, password));
+    write(KEY.account, account);
+    this.generation++;
     // Everything on this device joins the account; then catch up from the top.
     write(KEY.dirty, Object.keys(this.sessions));
     write(KEY.cursor, "0");
@@ -88,78 +87,14 @@ export class Store extends EventTarget {
     // A sync for the account before this one may still be finishing.
     if (this.syncing) await this.syncing;
     await this.sync();
-    if (this.syncState === "unconfirmed") this.#watch();
-  }
-
-  /** Sends the confirmation email again. Throws a sentence fit to show. */
-  async resend() {
-    const token = this.account?.token;
-    if (!token) return;
-    await this.#call("/v1/resend", { method: "POST", body: "{}", token });
-  }
-
-  /** One account call. Throws an Error whose message is fit to show. */
-  async #call(path, { token, ...init }) {
-    let r;
-    try {
-      r = await fetch(path, {
-        ...init, cache: "no-store",
-        headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) },
-      });
-    } catch {
-      throw new Error("can't connect. try again in a bit.");
-    }
-    const body = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(body.error ? `${body.error}.`.replace(/\.\.$/, ".") : "something went wrong. try again.");
-    return body;
-  }
-
-  /** Checks every few seconds whether the link was clicked, then syncs. */
-  #watch() {
-    const account = this.account;
-    if (!account) return;
-    this.waiting = { email: account.email, confirmed: false };
-    this.#emit();
-    const began = Date.now();
-    const check = async () => {
-      if (this.waiting?.email !== account.email || this.account?.token !== account.token) return;
-      try {
-        // Not while nobody's looking; quick at first, while they're likely at their inbox.
-        if (document.visibilityState === "visible") {
-          const now = await this.#call("/v1/account", { token: account.token });
-          if (this.account?.token !== account.token || !this.waiting) return;
-          if (now.confirmed) {
-            write(KEY.account, { ...account, confirmed: true });
-            this.waiting = { ...this.waiting, confirmed: true };
-            this.#emit();
-            this.sync();
-            // A beat on "you're in", then back to the plain account row.
-            this.watching = setTimeout(() => { this.waiting = null; this.watching = null; this.#emit(); }, 2500);
-            return;
-          }
-        }
-      } catch { /* not yet, or offline for a moment */ }
-      this.watching = setTimeout(check, Date.now() - began < 30 * 60_000 ? 3000 : 30_000);
-    };
-    this.watching = setTimeout(check, 3000);
-  }
-
-  /** Gives up waiting, for a wrong email or a change of mind. */
-  stopWaiting() {
-    clearTimeout(this.watching);
-    this.watching = null;
-    if (this.waiting) { this.waiting = null; this.#emit(); }
   }
 
   async signOut() {
-    const token = this.account?.token;
-    this.stopWaiting();
+    const account = this.account;
     try { localStorage.removeItem(KEY.account); } catch {}
+    this.generation++;
     this.#setState("signedOut");
-    if (token) {
-      fetch("/v1/signout", { method: "POST", headers: { Authorization: `Bearer ${token}` },
-                             body: "{}" }).catch(() => {});
-    }
+    if (account && !this.offline) cloud.signOut(account);
   }
 
   /** How many local changes haven't been pushed yet. */
@@ -241,32 +176,42 @@ export class Store extends EventTarget {
   }
 
   async #sync() {
-    const account = this.account;
+    let account = this.account;
     if (!account) return this.#setState("signedOut");
     // Signing out, or into another account, partway through: this run's
-    // answers belong to the old token, so they're dropped from then on.
-    const current = () => this.account?.token === account.token;
-    const headers = { "Content-Type": "application/json", Authorization: `Bearer ${account.token}` };
-    const call = async (path, init = {}) => {
-      const r = await fetch(path, { ...init, headers, cache: "no-store" });
-      if (!current()) throw Object.assign(new Error("stale"), { stale: true });
-      if (r.status === 401) throw Object.assign(new Error("signed out"), { signedOut: true });
-      if (r.status === 403) throw Object.assign(new Error("unconfirmed"), { unconfirmed: true });
-      if (!r.ok) throw new Error(`${r.status}`);
-      const body = await r.json();
-      if (!current()) throw Object.assign(new Error("stale"), { stale: true });
+    // answers belong to the old account, so they're dropped from then on.
+    const generation = this.generation;
+    const current = () => this.generation === generation;
+    const stale = () => Object.assign(new Error("stale"), { stale: true });
+    const refresh = async (force) => {
+      const fresh = await cloud.refreshed(account, force);
+      if (!current()) throw stale();
+      if (fresh !== account) write(KEY.account, account = fresh);
+    };
+    // One try with the token in hand; a 401 swaps it for a fresh one and tries once more.
+    const call = async (work) => {
+      let body;
+      try {
+        body = await work(account.token);
+      } catch (e) {
+        if (!current()) throw stale();
+        if (!e.signedOut) throw e;
+        await refresh(true);
+        body = await work(account.token);
+      }
+      if (!current()) throw stale();
       return body;
     };
     this.#setState("syncing");
 
     try {
+      await refresh(false);
+
       const dirty = read(KEY.dirty, []);
       for (let i = 0; i < dirty.length; i += 200) {
         const ids = dirty.slice(i, i + 200);
         const sessions = ids.map((id) => this.sessions[id]).filter(Boolean);
-        await call("/v1/sessions/push", {
-          method: "POST", body: JSON.stringify({ deviceID: this.deviceID, sessions }),
-        });
+        if (sessions.length) await call((token) => cloud.push(sessions, token));
         // Only clear what was sent; a block logged meanwhile stays queued.
         const left = new Set(read(KEY.dirty, []));
         ids.forEach((id) => left.delete(id));
@@ -276,7 +221,7 @@ export class Store extends EventTarget {
       let more = true;
       while (more) {
         const cursor = read(KEY.cursor, "0");
-        const page = await call(`/v1/sessions/pull?cursor=${encodeURIComponent(cursor)}`);
+        const page = await call((token) => cloud.pull(cursor, token));
         this.#merge(page.sessions, false);
         write(KEY.cursor, page.cursor);
         more = page.more;
@@ -285,10 +230,10 @@ export class Store extends EventTarget {
     } catch (e) {
       if (e.stale || !current()) return;
       if (e.signedOut) {
-        this.stopWaiting();
         try { localStorage.removeItem(KEY.account); } catch {}
+        this.generation++;
       }
-      this.#setState(e.signedOut ? "signedOut" : e.unconfirmed ? "unconfirmed" : "offline");
+      this.#setState(e.signedOut ? "signedOut" : "offline");
     }
   }
 }

@@ -8,8 +8,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -21,7 +19,7 @@ class Sync(
     private val scope: CoroutineScope,
     private val onPulled: () -> Unit,
 ) {
-    enum class State { SignedOut, Idle, Syncing, Offline, Unconfirmed }
+    enum class State { SignedOut, Idle, Syncing, Offline }
 
     var account by mutableStateOf(loadAccount())
         private set
@@ -33,10 +31,8 @@ class Sync(
     /** Off: only signing in and the sync link sync. */
     var auto by mutableStateOf(prefs.getBoolean(Keys.AUTO, true))
         private set
-    /** A self-hosted server from settings, or null for ours. */
-    var customServer by mutableStateOf(prefs.getString(Keys.SERVER, null))
-        private set
 
+    private val api = SupabaseApi.hosted
     private var running: Job? = null
     private var lastStarted = 0L
 
@@ -60,102 +56,23 @@ class Sync(
         if (auto) syncNow()
     }
 
-    val backend: SyncBackend get() = customServer?.let(::SyncApi) ?: SupabaseApi.hosted
-
-    /** Points sync at a self-hosted server, or ours when blank. Signed out
-     *  only, since a token only works where it was made. Returns an error to show. */
-    fun setServer(text: String): String? {
-        if (isSignedIn) return "sign out to change servers."
-        if (text.isBlank()) {
-            customServer = null
-            prefs.edit().remove(Keys.SERVER).apply()
-            return null
-        }
-        val url = SyncApi.serverUrl(text) ?: return "that address doesn't look right."
-        customServer = url
-        prefs.edit().putString(Keys.SERVER, url).apply()
-        return null
-    }
-
-    /** An account waiting on its email link; [confirmed] flips true briefly once clicked. */
-    data class Waiting(val email: String, val confirmed: Boolean = false)
-
-    var waiting by mutableStateOf<Waiting?>(null)
-        private set
-
-    /** Kept in memory only, to sign in once the link is clicked. A null
-     *  [userID] means the only way to tell is to retry signing in. */
-    private class Pending(val email: String, val password: String, val userID: String?)
-
-    private var watching: Job? = null
-
     // Each returns null, or a sentence to show.
 
-    suspend fun signIn(email: String, password: String): String? = problem {
-        stopWaiting()
-        val to = email.trim()
-        try {
-            begin(attempt { backend.signIn(to, password) })
-        } catch (e: SyncBackend.Unconfirmed) {
-            watch(Pending(to, password, null))
-        }
+    suspend fun signIn(username: String, password: String): String? = problem {
+        begin(attempt { api.signIn(username, password) })
     }
 
-    suspend fun createAccount(email: String, password: String): String? = problem {
-        stopWaiting()
-        val to = email.trim()
-        when (val made = attempt { backend.createAccount(to, password) }) {
-            is SignUp.SignedIn -> begin(made.account)
-            is SignUp.ConfirmByLink -> watch(Pending(to, password, made.userID))
-        }
+    suspend fun createAccount(username: String, password: String): String? = problem {
+        begin(attempt { api.createAccount(username, password) })
     }
 
-    suspend fun resendLink(): String? = problem {
-        val email = waiting?.email ?: return@problem
-        attempt { backend.resendLink(email) }
-    }
-
-    fun stopWaiting() {
-        watching?.cancel()
-        watching = null
-        waiting = null
-    }
-
-    /** Polls until the link is clicked, then signs in. */
-    private fun watch(pending: Pending) {
-        watching?.cancel()
-        waiting = Waiting(pending.email)
-        val backend = backend
-        val began = System.currentTimeMillis()
-        watching = scope.launch {
-            while (isActive) {
-                val quick = System.currentTimeMillis() - began < 30 * 60_000L
-                delay(if (pending.userID == null) 10_000L else if (quick) 3_000L else 30_000L)
-                try {
-                    val account = withContext(Dispatchers.IO) {
-                        if (pending.userID != null && !backend.isConfirmed(pending.userID)) null
-                        else backend.signIn(pending.email, pending.password)
-                    } ?: continue
-                    confirmed(account)
-                    return@launch
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: SyncBackend.Rejected) {
-                    waiting = null // the password changed elsewhere: sign in by hand
-                    return@launch
-                } catch (e: Exception) {
-                    // not yet, or offline for a moment
-                }
-            }
-        }
-    }
-
-    private suspend fun confirmed(account: Account) {
-        if (waiting == null) return
-        waiting = waiting?.copy(confirmed = true)
-        begin(account)
-        delay(2500)
-        if (waiting?.confirmed == true) waiting = null
+    /** Null when the server couldn't be asked. */
+    suspend fun usernameAvailable(name: String): Boolean? = try {
+        withContext(Dispatchers.IO) { api.usernameAvailable(name) }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
     }
 
     /** Everything already on this phone joins the account. */
@@ -169,14 +86,12 @@ class Sync(
 
     private class Problem(message: String) : Exception(message)
 
-    /** Runs [call] on IO, turning failures into [Problem]s; [SyncBackend.Unconfirmed] passes through. */
+    /** Runs [call] on IO, turning failures into [Problem]s. */
     private suspend fun <T> attempt(call: () -> T): T = try {
         withContext(Dispatchers.IO) { call() }
     } catch (e: CancellationException) {
         throw e
-    } catch (e: SyncBackend.Unconfirmed) {
-        throw e
-    } catch (e: SyncBackend.Rejected) {
+    } catch (e: SupabaseApi.Rejected) {
         throw Problem(e.message ?: "something went wrong. try again.")
     } catch (e: Exception) {
         throw Problem("can't connect. try again in a bit.")
@@ -187,16 +102,12 @@ class Sync(
         null
     } catch (e: Problem) {
         e.message
-    } catch (e: SyncBackend.Unconfirmed) {
-        "confirm your email first."
     }
 
     fun signOut() {
-        stopWaiting()
         val account = account
-        val backend = backend
         if (account != null) {
-            scope.launch(Dispatchers.IO) { backend.signOut(account) }
+            scope.launch(Dispatchers.IO) { api.signOut(account) }
         }
         running?.cancel()
         running = null
@@ -207,9 +118,8 @@ class Sync(
     fun syncNow() {
         val account = account ?: return
         if (running?.isActive == true) return
-        val backend = backend
         lastStarted = System.currentTimeMillis()
-        running = scope.launch { run(backend, account) }
+        running = scope.launch { run(account) }
     }
 
     fun cameBack() {
@@ -220,51 +130,48 @@ class Sync(
         running?.join()
     }
 
-    private suspend fun run(api: SyncBackend, start: Account) {
+    private suspend fun run(start: Account) {
         state = State.Syncing
         var token = start.token
         try {
             val pulled = withContext(Dispatchers.IO) {
-                // Hosted tokens last an hour: swap one that's nearly out, and
-                // once more if the server turns it down anyway.
-                token = fresh(api, start, force = false)
+                // Tokens last an hour: swap one that's nearly out, and once
+                // more if the server turns it down anyway.
+                token = fresh(start, force = false)
                 try {
-                    exchange(api, token)
-                } catch (e: SyncBackend.SignedOut) {
-                    if (start.refreshToken == null) throw e
-                    token = fresh(api, start, force = true)
-                    exchange(api, token)
+                    exchange(token)
+                } catch (e: SupabaseApi.SignedOut) {
+                    token = fresh(start, force = true)
+                    exchange(token)
                 }
             }
             if (pulled) onPulled()
             if (account?.token != token) return // signed out meanwhile
             state = State.Idle
-        } catch (e: SyncBackend.SignedOut) {
-            if (account?.email != start.email) return
+        } catch (e: SupabaseApi.SignedOut) {
+            if (account?.username != start.username) return
             save(null)
             state = State.SignedOut
-        } catch (e: SyncBackend.Unconfirmed) {
-            state = State.Unconfirmed
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             // A bad page, an unparseable date, the disk: call it offline and retry next time.
-            if (account?.email == start.email) state = State.Offline
+            if (account?.username == start.username) state = State.Offline
         }
         recount()
     }
 
-    private suspend fun fresh(api: SyncBackend, start: Account, force: Boolean): String {
+    private suspend fun fresh(start: Account, force: Boolean): String {
         val current = account ?: start
         val fresh = api.refreshed(current, force)
-        if (fresh != current) withContext(Dispatchers.Main) { if (account?.email == start.email) save(fresh) }
+        if (fresh != current) withContext(Dispatchers.Main) { if (account?.username == start.username) save(fresh) }
         return fresh.token
     }
 
     /** Returns true when the pull brought anything down. */
-    private fun exchange(api: SyncBackend, token: String): Boolean {
+    private fun exchange(token: String): Boolean {
         store.dirty().chunked(200).forEach { batch ->
-            api.push(batch, deviceID, token)
+            api.push(batch, token)
             store.pushed(batch)
         }
         var pulled = false
@@ -277,38 +184,31 @@ class Sync(
     }
 
     private fun loadAccount(): Account? {
-        val email = prefs.getString(Keys.EMAIL, null) ?: return null
+        val username = prefs.getString(Keys.USERNAME, null) ?: return null
         val token = prefs.getString(Keys.TOKEN, null) ?: return null
-        return Account(
-            email, token, prefs.getBoolean(Keys.CONFIRMED, false),
-            refreshToken = prefs.getString(Keys.REFRESH, null),
-            expiresAt = prefs.getLong(Keys.EXPIRES, 0L).takeIf { it > 0 },
-        )
+        val refresh = prefs.getString(Keys.REFRESH, null) ?: return null
+        return Account(username, token, refresh, prefs.getLong(Keys.EXPIRES, 0L))
     }
 
     private fun save(account: Account?) {
         this.account = account
         prefs.edit().apply {
             if (account == null) {
-                remove(Keys.EMAIL); remove(Keys.TOKEN); remove(Keys.CONFIRMED)
-                remove(Keys.REFRESH); remove(Keys.EXPIRES)
+                remove(Keys.USERNAME); remove(Keys.TOKEN); remove(Keys.REFRESH); remove(Keys.EXPIRES)
             } else {
-                putString(Keys.EMAIL, account.email)
+                putString(Keys.USERNAME, account.username)
                 putString(Keys.TOKEN, account.token)
-                putBoolean(Keys.CONFIRMED, account.confirmed)
                 putString(Keys.REFRESH, account.refreshToken)
-                putLong(Keys.EXPIRES, account.expiresAt ?: 0L)
+                putLong(Keys.EXPIRES, account.expiresAt)
             }
         }.apply()
     }
 
     private object Keys {
-        const val EMAIL = "sync.email"
+        const val USERNAME = "sync.username"
         const val TOKEN = "sync.token"
-        const val CONFIRMED = "sync.confirmed"
-        const val REFRESH = "sync.refreshToken" // hosted only
-        const val EXPIRES = "sync.expiresAt" // hosted only, epoch millis
-        const val SERVER = "sync.server" // self-hosted only
+        const val REFRESH = "sync.refreshToken"
+        const val EXPIRES = "sync.expiresAt" // epoch millis
         const val CURSOR = "sync.cursor"
         const val AUTO = "sync.auto"
     }

@@ -60,21 +60,9 @@ internal static class Render
                                       theme == Theme.Light ? new AppVersion(1, 5, 0) : null);
                 return new InkFrame(new SettingsPage(shell), minimizable: false);
             });
-            Shot($"account-{t}", () =>
-            {
-                var shell = new Demo(theme);
-                var frame = new InkFrame(new MainPage(shell), underCaption: true);
-                frame.Dialogs.Show(new AccountDialog(shell.Sync, () => { }));
-                return frame;
-            });
-            Shot($"account-{t}-waiting", () =>
-            {
-                var shell = new Demo(theme);
-                shell.Sync.PretendWaiting("teto@example.com");
-                var frame = new InkFrame(new MainPage(shell), underCaption: true);
-                frame.Dialogs.Show(new AccountDialog(shell.Sync, () => { }));
-                return frame;
-            });
+            Shot($"account-{t}", () => AccountScreen(theme, _ => { }));
+            Shot($"account-{t}-available", () => AccountScreen(theme, d => d.Pretend("teto", available: true)));
+            Shot($"account-{t}-taken", () => AccountScreen(theme, d => d.Pretend("miku", available: false)));
             Shot($"inspo-{t}-today", () => { _ = new Demo(theme); return new InkFrame(new InspoPage(Watched()), minimizable: false); });
             Shot($"inspo-{t}-all", () =>
             {
@@ -105,6 +93,17 @@ internal static class Render
         var shell = new Demo(theme);
         if (running) Run(shell, paused);
         return new InkFrame(new MainPage(shell), underCaption: true);
+    }
+
+    /// <summary>The account dialog over the main screen, put in whatever state `drive` wants before it shows.</summary>
+    private static FrameworkElement AccountScreen(Theme theme, Action<AccountDialog> drive)
+    {
+        var shell = new Demo(theme);
+        var frame = new InkFrame(new MainPage(shell), underCaption: true);
+        var dialog = new AccountDialog(shell.Sync, () => { });
+        drive(dialog);
+        frame.Dialogs.Show(dialog);
+        return frame;
     }
 
     /// <summary>Fourteen and a bit minutes into a focus block on "15-213".</summary>

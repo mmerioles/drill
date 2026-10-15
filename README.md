@@ -32,17 +32,11 @@ updates install themselves.
 
 ## sync
 
-press sync and sign in. to use your own server instead:
-
-```sh
-docker run -d -p 8080:8080 -v drill-data:/data ghcr.io/mmerioles/drill:latest
-```
-
-then put its address under server in settings. details in [docs/SYNC.md](docs/SYNC.md).
+sign in with a username from settings. sessions sync on their own. details in [docs/SYNC.md](docs/SYNC.md).
 
 ## repo
 
-`mac/` · `windows/` · `android/` · `ios/` · `web/` (web app, sync server, site) · `shared/` · `docs/` · `supabase/`
+`mac/` · `windows/` · `android/` · `ios/` · `web/` (web app, site) · `shared/` · `docs/` · `supabase/`
 
 ## shortcuts
 

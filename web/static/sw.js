@@ -5,7 +5,8 @@
 const CACHE = "drill-v1";
 const SHELL = [
   "./", "index.html", "style.css", "theme.js", "app.js", "engine.js", "intervals.js", "heatmap.js", "ink.js",
-  "inspo.js", "inspo-videos.js", "fuzzy.js", "palette.js", "sample.js", "sound.js", "store.js", "manifest.webmanifest",
+  "inspo.js", "inspo-videos.js", "fuzzy.js", "palette.js", "sample.js", "sound.js", "store.js", "supabase.js",
+  "manifest.webmanifest",
   "icon.png", "icon-192.png", "icon-512.png",
 ];
 
@@ -20,11 +21,12 @@ self.addEventListener("activate", (e) => {
 });
 
 // Network first, so an update shows up on the next load; the cache is only
-// for when the network isn't there. Sync calls are never cached.
+// for when the network isn't there. Sync calls go to another origin, so
+// they're never cached.
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== location.origin ||
-      !url.href.startsWith(self.registration.scope) || url.pathname.includes("/v1/")) return;
+      !url.href.startsWith(self.registration.scope)) return;
   e.respondWith(fetch(e.request).then((response) => {
     if (response.ok && url.search === "") {
       const copy = response.clone();

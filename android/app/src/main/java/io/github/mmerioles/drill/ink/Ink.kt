@@ -22,6 +22,8 @@ data class Palette(val paper: Color, val ink: Color, val accent: Color, val dark
     val ghost get() = ink.copy(alpha = 0.12f)
     /** Empty heatmap days. */
     val wash get() = ink.copy(alpha = 0.055f)
+    /** The one green: a check that something's fine. */
+    val ok get() = if (dark) Color(0xFF5FBF80) else Color(0xFF3B9B5E)
 
     companion object {
         val light = Palette(Color(0xFFF2F0ED), Color(0xFF2B2A2F), Color(0xFFCF3A4F), dark = false)
